@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes - SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Reportes</h1>
+    <p class="page-subtitle">Tablero de indicadores y exportables.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-primary" href="{% url 'reports:inventario_pdf' %}">
+      <i class="bi bi-filetype-pdf"></i>Exportar PDF Inventario
+    </a>
+    <a class="btn btn-primary" href="{% url 'reports:usuarios_pdf' %}">
+      <i class="bi bi-filetype-pdf"></i>Exportar PDF Usuarios
+    </a>
+    <a class="btn btn-primary" href="{% url 'reports:inventario_excel' %}">
+      <i class="bi bi-file-earmark-excel"></i>Exportar Excel Inventario
+    </a>
+    <a class="btn btn-primary" href="{% url 'reports:usuarios_excel' %}">
+      <i class="bi bi-people"></i>Exportar Excel Usuarios
+    </a>
+    <a class="btn btn-primary" href="{% url 'reports:costos_excel' %}">
+      <i class="bi bi-cash-coin"></i>Exportar Excel Costos
+    </a>
+    <a class="btn btn-primary" href="{% url 'reports:mantenimiento_excel' %}?inicio={{ rango_inicio|date:'Y-m-d' }}&fin={{ rango_fin|date:'Y-m-d' }}">
+      <i class="bi bi-wrench-adjustable"></i>Exportar Excel Mantenimiento
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-people"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ usuarios_activos }}</div>
+        <div class="stat-label">Usuarios activos</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-secondary bg-opacity-10 text-secondary">
+        <i class="bi bi-person-dash"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ usuarios_inactivos }}</div>
+        <div class="stat-label">Usuarios inactivos</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-laptop"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ activos_total }}</div>
+        <div class="stat-label">Total activos</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-arrow-repeat"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ movimientos_total }}</div>
+        <div class="stat-label">Movimientos (rango)</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">Inventario por estado</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in activos_por_estado %}
+            <tr>
+              <td>{{ item.label }}</td>
+              <td class="text-end fw-semibold">{{ item.total }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="2" class="text-muted">Sin datos</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">Inventario por tipo</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in activos_por_tipo %}
+            <tr>
+              <td>{{ item.label }}</td>
+              <td class="text-end fw-semibold">{{ item.total }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="2" class="text-muted">Sin datos</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">Usuarios por area</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in usuarios_por_area %}
+            <tr>
+              <td>{{ item.area }}</td>
+              <td class="text-end fw-semibold">{{ item.total }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="2" class="text-muted">Sin datos</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+        <h5 class="fw-semibold mb-0">Movimientos recientes</h5>
+        <form class="d-flex flex-wrap gap-2" method="get">
+          <input class="form-control form-control-sm" type="date" name="inicio" value="{{ rango_inicio|date:'Y-m-d' }}">
+          <input class="form-control form-control-sm" type="date" name="fin" value="{{ rango_fin|date:'Y-m-d' }}">
+          <button class="btn btn-sm btn-primary" type="submit">Filtrar</button>
+          <a class="btn btn-sm btn-outline-success" href="{% url 'reports:movimientos_excel' %}?inicio={{ rango_inicio|date:'Y-m-d' }}&fin={{ rango_fin|date:'Y-m-d' }}">
+            Excel
+          </a>
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Activo</th>
+              <th>Usuario destino</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mov in movimientos %}
+            <tr>
+              <td>{{ mov.fecha|date:"d/m/Y" }}</td>
+              <td>{{ mov.get_tipo_display }}</td>
+              <td>{{ mov.activo.serial }}</td>
+              <td>{{ mov.usuario_destino.nombre_completo|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="text-muted">Sin movimientos en el rango</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted mt-3 mb-0" style="font-size:.82rem;">
+        Mostrando los ultimos 50 registros dentro del rango seleccionado.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">Costos y amortizacion</h5>
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <div class="text-muted" style="font-size:.8rem;">Valor compra total</div>
+          <div class="fw-semibold">$ {{ costos_total|floatformat:0 }}</div>
+        </div>
+        <div class="col-6">
+          <div class="text-muted" style="font-size:.8rem;">Depreciacion acumulada</div>
+          <div class="fw-semibold text-danger">$ {{ costos_depreciacion|floatformat:0 }}</div>
+        </div>
+        <div class="col-12">
+          <div class="text-muted" style="font-size:.8rem;">Valor actual estimado</div>
+          <div class="fw-semibold text-success">$ {{ costos_valor_actual|floatformat:0 }}</div>
+          <div class="text-muted" style="font-size:.75rem;">Vida util: {{ costos_vida_util }} meses</div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Activo</th>
+              <th class="text-end">Valor actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in costos_items %}
+            <tr>
+              <td>{{ item.activo.serial }}</td>
+              <td class="text-end">$ {{ item.valor_actual|floatformat:0 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="2" class="text-muted">Sin activos con valor de compra</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">KPI mensual movimientos (12 meses)</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in movimientos_mensuales %}
+            <tr>
+              <td>{{ item.mes|date:"m/Y" }}</td>
+              <td class="text-end fw-semibold">{{ item.total }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

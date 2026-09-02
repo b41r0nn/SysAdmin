@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Equipos sin Match — Inventario{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="bi bi-exclamation-circle me-2" style="color: #f59e0b;"></i>Equipos sin Match</h1>
+                <p class="text-muted">Equipos OCS no vinculados a activos locales</p>
+            </div>
+            <a href="{% url 'yule:index' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-2"></i>Atrás
+            </a>
+        </div>
+    </div>
+
+    {% if equipos %}
+    <div class="alert alert-warning mb-4">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>{{ total }} equipos</strong> detectados en OCS pero sin vincular a ningún activo en el inventario local.
+        Revisa si necesitan ser añadidos manualmente o si hay un problema de identificación.
+    </div>
+
+    <div class="row g-4">
+        {% for equipo in equipos %}
+        <div class="col-12 col-lg-6">
+            <div class="card sa-card">
+                <div class="card-header d-flex justify-content-between align-items-start">
+                    <div>
+                        <h5 class="mb-0">{{ equipo.nombre_host }}</h5>
+                        <small class="text-muted">ID: {{ equipo.id_ocs }}</small>
+                    </div>
+                    <a href="{% url 'yule:equipo_detalle' equipo.id %}" class="btn btn-sm btn-outline-primary">
+                        Ver detalle
+                    </a>
+                </div>
+                <div class="card-body">
+                    <dl class="row small mb-0">
+                        <dt class="col-sm-5">Tipo</dt>
+                        <dd class="col-sm-7">
+                            <span class="badge bg-light text-dark">{{ equipo.get_tipo_dispositivo_display }}</span>
+                        </dd>
+                        
+                        <dt class="col-sm-5">Usuario</dt>
+                        <dd class="col-sm-7">{{ equipo.usuario_dominio|default:"—" }}</dd>
+                        
+                        <dt class="col-sm-5">MAC Address</dt>
+                        <dd class="col-sm-7">
+                            {% if equipo.mac_address %}
+                                <code>{{ equipo.mac_address }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">Serial BIOS</dt>
+                        <dd class="col-sm-7">
+                            {% if equipo.serial_bios %}
+                                <code>{{ equipo.serial_bios|truncatechars:25 }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">IP Address</dt>
+                        <dd class="col-sm-7">
+                            {% if equipo.ip_address %}
+                                <code>{{ equipo.ip_address }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">SO</dt>
+                        <dd class="col-sm-7">{{ equipo.so_nombre|truncatechars:30|default:"—" }}</dd>
+                        
+                        <dt class="col-sm-5">Procesador</dt>
+                        <dd class="col-sm-7">{{ equipo.procesador|truncatechars:35|default:"—" }}</dd>
+                        
+                        <dt class="col-sm-5">RAM</dt>
+                        <dd class="col-sm-7">
+                            {% if equipo.memoria_ram_mb %}
+                                {{ equipo.memoria_ram_mb|floatformat:0 }} MB
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">Último reporte</dt>
+                        <dd class="col-sm-7">
+                            {% if equipo.ultimo_reporte_ocs %}
+                                <small>{{ equipo.ultimo_reporte_ocs|timesince }} atrás</small>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="/admin/inventario/activo/add/" class="btn btn-sm btn-outline-success w-100">
+                                <i class="bi bi-plus me-1"></i>Crear activo
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{% url 'yule:equipo_detalle' equipo.id %}" class="btn btn-sm btn-outline-primary w-100">
+                                <i class="bi bi-arrow-right me-1"></i>Detalles
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- INFORMACIÓN DE AYUDA -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card sa-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>¿Qué hacer?</h5>
+                </div>
+                <div class="card-body">
+                    <ol class="mb-0">
+                        <li>
+                            <strong>Revisar identidad:</strong> Verifica serial, MAC o hostname del equipo.
+                            ¿Existe en el inventario local con otro serial o identificador?
+                        </li>
+                        <li>
+                            <strong>Crear activo:</strong> Si el equipo no existe en el inventario, 
+                            crea un nuevo activo usando el botón "Crear activo".
+                        </li>
+                        <li>
+                            <strong>Vincular manualmente:</strong> Si el equipo existe pero no se detectó automáticamente,
+                            edita el equipo OCS desde el admin (Django) y asigna el activo local.
+                        </li>
+                        <li>
+                            <strong>Mejorar matching:</strong> Contacta al admin para ajustar las reglas de coincidencia
+                            por serial/MAC/hostname.
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle me-2"></i>
+        <strong>¡Excelente!</strong> Todos los equipos detectados en OCS están vinculados a activos en el inventario local.
+    </div>
+
+    <div class="text-center py-5">
+        <a href="{% url 'yule:equipos_lista' %}" class="btn btn-primary">
+            <i class="bi bi-laptop me-2"></i>Ver todos los equipos
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

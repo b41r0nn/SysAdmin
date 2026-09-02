@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Logs — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Logs</h1>
+    <p class="page-subtitle">Vault: {{ vault.nombre }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'passwords:index' %}">
+      <i class="bi bi-arrow-left"></i> Volver
+    </a>
+  </div>
+</div>
+
+<div class="sa-card mb-4 p-3">
+  <form class="row g-2 align-items-end" method="get">
+    <div class="col-12 col-md-5">
+      <label class="form-label">Buscar</label>
+      <div class="search-input-group">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" value="{{ filtro_q }}" placeholder="Credencial, usuario o detalle...">
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label small fw-semibold mb-1">Accion</label>
+      <select name="accion" class="form-select">
+        <option value="">Todas</option>
+        {% for item in acciones %}
+          <option value="{{ item }}" {% if item == filtro_accion %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2 d-flex gap-2">
+      <button type="submit" class="btn btn-outline-secondary w-100">
+        <i class="bi bi-funnel"></i> Filtrar
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="sa-card p-3">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Accion</th>
+          <th>Credencial</th>
+          <th>Usuario</th>
+          <th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td>{{ log.fecha|date:"d/m/Y H:i" }}</td>
+          <td class="fw-semibold">{{ log.accion }}</td>
+          <td>{{ log.credencial.titulo|default:"—" }}</td>
+          <td>{{ log.usuario.username|default:"—" }}</td>
+          <td>{{ log.detalle|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="text-muted">Sin registros.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+
+  # ─── Base de datos PostgreSQL ───────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: sysadmin_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sysadmin_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend Django ──────────────────────────────────────────────────────────
+  django:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sysadmin_django
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sysadmin_net
+    expose:
+      - "8000"
+
+  # ─── Proxy inverso Nginx ─────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: sysadmin_nginx
+    restart: always
+    ports:
+      - "6000:80"
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      - django
+    networks:
+      - sysadmin_net
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+
+networks:
+  sysadmin_net:
+    driver: bridge

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Equipos OCS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="bi bi-laptop me-2"></i>Equipos OCS</h1>
+                <p class="text-muted">Total: <strong>{{ total_items }}</strong> equipos detectados</p>
+            </div>
+            <a href="{% url 'yule:index' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-2"></i>Atrás
+            </a>
+        </div>
+    </div>
+
+    <!-- FILTROS Y BÚSQUEDA -->
+    <div class="card sa-card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <label for="q" class="form-label">Buscar</label>
+                    <input type="text" name="q" id="q" class="form-control" 
+                           placeholder="Hostname, MAC, ID OCS..." value="{{ q }}">
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label for="filtro" class="form-label">Filtro</label>
+                    <select name="filtro" id="filtro" class="form-select">
+                        <option value="todos" {% if filtro == "todos" %}selected{% endif %}>Todos</option>
+                        <option value="vinculados" {% if filtro == "vinculados" %}selected{% endif %}>Vinculados ✓</option>
+                        <option value="sin_match" {% if filtro == "sin_match" %}selected{% endif %}>Sin match ⚠</option>
+                        <option value="sin_reporte" {% if filtro == "sin_reporte" %}selected{% endif %}>Sin reporte reciente</option>
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search me-2"></i>Buscar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TABLA DE EQUIPOS -->
+    <div class="card sa-card">
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Hostname</th>
+                        <th>Tipo</th>
+                        <th>MAC / Serial</th>
+                        <th>IP</th>
+                        <th>Usuario</th>
+                        <th>Estado</th>
+                        <th>Último reporte</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for equipo in equipos %}
+                    <tr>
+                        <td>
+                            <strong>{{ equipo.nombre_host|truncatechars:30 }}</strong><br>
+                            <small class="text-muted">ID: {{ equipo.id_ocs }}</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ equipo.get_tipo_dispositivo_display }}</span>
+                        </td>
+                        <td>
+                            {% if equipo.mac_address %}
+                                <code>{{ equipo.mac_address }}</code>
+                            {% elif equipo.serial_bios %}
+                                <code>{{ equipo.serial_bios|truncatechars:20 }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if equipo.ip_address %}
+                                <code>{{ equipo.ip_address }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ equipo.usuario_dominio|truncatechars:20|default:"—" }}</small>
+                        </td>
+                        <td>
+                            {% if equipo.activo_local %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle me-1"></i>Vinculado
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-exclamation-circle me-1"></i>Sin match
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>
+                                {% if equipo.ultimo_reporte_ocs %}
+                                    {{ equipo.ultimo_reporte_ocs|timesince }} atrás
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'yule:equipo_detalle' equipo.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-arrow-right"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox me-2" style="font-size: 2rem;"></i><br>
+                            No hay equipos que coincidan con los filtros
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PAGINACIÓN -->
+    {% if total_paginas > 1 %}
+    <nav class="mt-4" aria-label="Paginación">
+        <ul class="pagination justify-content-center">
+            {% if tiene_pagina_anterior %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% if q %}&q={{ q }}{% endif %}{% if filtro != 'todos' %}&filtro={{ filtro }}{% endif %}">Primera</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ pagina_actual|add:'-1' }}{% if q %}&q={{ q }}{% endif %}{% if filtro != 'todos' %}&filtro={{ filtro }}{% endif %}">Anterior</a>
+            </li>
+            {% endif %}
+            
+            <li class="page-item active">
+                <span class="page-link">{{ pagina_actual }} de {{ total_paginas }}</span>
+            </li>
+            
+            {% if tiene_pagina_siguiente %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ pagina_actual|add:'1' }}{% if q %}&q={{ q }}{% endif %}{% if filtro != 'todos' %}&filtro={{ filtro }}{% endif %}">Siguiente</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ total_paginas }}{% if q %}&q={{ q }}{% endif %}{% if filtro != 'todos' %}&filtro={{ filtro }}{% endif %}">Última</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

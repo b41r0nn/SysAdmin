@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ titulo }} — SysAdmin{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'usuarios:lista' %}" class="text-decoration-none">Usuarios</a>
+    </li>
+    {% if usuario %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'usuarios:detalle' usuario.pk %}" class="text-decoration-none">
+          {{ usuario.nombre_completo }}
+        </a>
+      </li>
+    {% endif %}
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-8">
+
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-person-vcard-fill"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">{{ titulo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Los campos marcados con <span class="text-danger">*</span> son obligatorios.
+          </p>
+        </div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        <!-- Datos personales -->
+        <fieldset class="sa-fieldset">
+          <legend>Datos personales</legend>
+          <div class="row g-3">
+          <div class="col-12 col-md-8">
+            <label class="form-label fw-semibold">
+              Nombre completo <span class="text-danger">*</span>
+            </label>
+            {{ form.nombre_completo }}
+            {% if form.nombre_completo.errors %}
+              <div class="invalid-feedback d-block">{{ form.nombre_completo.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">
+              Documento de identidad <span class="text-danger">*</span>
+            </label>
+            {{ form.documento_identidad }}
+            {% if form.documento_identidad.errors %}
+              <div class="invalid-feedback d-block">{{ form.documento_identidad.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">
+              Cargo <span class="text-danger">*</span>
+            </label>
+            {{ form.cargo }}
+            {% if form.cargo.errors %}
+              <div class="invalid-feedback d-block">{{ form.cargo.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">
+              Área <span class="text-danger">*</span>
+            </label>
+            {{ form.area }}
+            {% if form.area.errors %}
+              <div class="invalid-feedback d-block">{{ form.area.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          </div>
+        </fieldset>
+
+        <!-- Contacto -->
+        <fieldset class="sa-fieldset">
+          <legend>Contacto</legend>
+          <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">
+              Correo electrónico <span class="text-danger">*</span>
+            </label>
+            {{ form.correo }}
+            {% if form.correo.errors %}
+              <div class="invalid-feedback d-block">{{ form.correo.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Teléfono / extensión</label>
+            {{ form.telefono }}
+          </div>
+          </div>
+        </fieldset>
+
+        <!-- Estado y foto -->
+        <fieldset class="sa-fieldset">
+          <legend>Estado y foto</legend>
+          <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Estado</label>
+            {{ form.estado }}
+          </div>
+
+          <div class="col-12 col-md-8">
+            <label class="form-label fw-semibold">
+              Foto <span class="text-muted fw-normal">(opcional)</span>
+            </label>
+            {{ form.foto }}
+            <div class="form-text">JPG, PNG, WEBP — máx. 2 MB.</div>
+            {% if usuario and usuario.foto %}
+              <div class="mt-2 d-flex align-items-center gap-2">
+                <img src="{{ usuario.foto.url }}" alt="Foto actual"
+                     class="rounded-circle object-fit-cover"
+                     style="width:40px;height:40px;">
+                <small class="text-muted">Foto actual. Subir una nueva la reemplazará.</small>
+              </div>
+            {% endif %}
+          </div>
+          </div>
+        </fieldset>
+
+        <!-- Botones -->
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          {% if usuario %}
+            <a href="{% url 'usuarios:detalle' usuario.pk %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          {% else %}
+            <a href="{% url 'usuarios:lista' %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          {% endif %}
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2-circle me-2"></i>Guardar
+          </button>
+        </div>
+
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

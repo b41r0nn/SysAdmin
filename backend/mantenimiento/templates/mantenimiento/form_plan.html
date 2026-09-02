@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — Mantenimiento{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:lista_planes' %}" class="text-decoration-none">Planes</a>
+    </li>
+    {% if plan %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'mantenimiento:detalle_plan' plan.pk %}" class="text-decoration-none">Plan #{{ plan.id }}</a>
+      </li>
+    {% endif %}
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-calendar2-check"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">{{ titulo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">Completa la programacion del plan.</p>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Activo</label>
+            {{ form.activo }}
+            {% if form.activo.errors %}<div class="invalid-feedback d-block">{{ form.activo.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label fw-semibold">Tipo</label>
+            {{ form.tipo }}
+            {% if form.tipo.errors %}<div class="invalid-feedback d-block">{{ form.tipo.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label fw-semibold">Estado</label>
+            {{ form.estado }}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Frecuencia (dias)</label>
+            {{ form.frecuencia_dias }}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Fecha inicio</label>
+            {{ form.fecha_inicio }}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Proxima ejecucion</label>
+            {{ form.proxima_ejecucion }}
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Responsable</label>
+            {{ form.responsable }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Observaciones</label>
+            {{ form.observaciones }}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle me-2"></i>Guardar
+          </button>
+          <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

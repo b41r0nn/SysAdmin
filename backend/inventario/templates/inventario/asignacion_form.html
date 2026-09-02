@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ titulo }} — SysAdmin{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'inventario:lista' %}" class="text-decoration-none">Inventario</a>
+    </li>
+    {% if activo %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'inventario:detalle' activo.pk %}" class="text-decoration-none">
+          {{ activo.marca }} {{ activo.modelo }}
+        </a>
+      </li>
+    {% endif %}
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 col-lg-6">
+
+    <!-- Info del activo involucrado -->
+    {% if activo %}
+    <div class="sa-card p-3 mb-4 d-flex align-items-center gap-3">
+      <div class="rounded d-flex align-items-center justify-content-center flex-shrink-0"
+           style="width:48px;height:48px;background:var(--sa-primary-light);color:var(--sa-primary);font-size:1.4rem;">
+        {% if activo.tipo_dispositivo == "celular" %}<i class="bi bi-phone"></i>
+        {% elif activo.tipo_dispositivo == "escritorio" %}<i class="bi bi-pc-display"></i>
+        {% elif activo.tipo_dispositivo == "portatil" %}<i class="bi bi-laptop"></i>
+        {% elif activo.tipo_dispositivo == "telefono_fijo" %}<i class="bi bi-telephone"></i>
+        {% elif activo.tipo_dispositivo == "monitor" %}<i class="bi bi-display"></i>
+        {% else %}<i class="bi bi-hdd"></i>{% endif %}
+      </div>
+      <div>
+        <div class="fw-semibold">{{ activo.marca }} {{ activo.modelo }}</div>
+        <div class="text-muted" style="font-size:.8rem;">
+          {{ activo.get_tipo_dispositivo_display }} ·
+          <span style="font-family:var(--sa-font-mono);">{{ activo.serial }}</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Card del formulario -->
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          {% if accion == "Asignar" %}
+            <i class="bi bi-person-plus-fill"></i>
+          {% elif accion == "Devolver" %}
+            <i class="bi bi-arrow-return-left"></i>
+          {% elif accion == "Trasladar" %}
+            <i class="bi bi-arrow-left-right"></i>
+          {% else %}
+            <i class="bi bi-upload"></i>
+          {% endif %}
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">{{ titulo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            {% if accion == "Asignar" %}
+              Selecciona el usuario al que se asignará este activo.
+            {% elif accion == "Devolver" %}
+              Registra la devolución del activo.
+            {% elif accion == "Trasladar" %}
+              Selecciona el usuario destino para el traslado.
+            {% else %}
+              Sube la copia firmada del acta de asignación.
+            {% endif %}
+          </p>
+        </div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% for field in form %}
+          <div class="form-group mb-3">
+            <label class="form-label fw-semibold">
+              {{ field.label }}
+              {% if field.field.required %}
+                <span class="text-danger">*</span>
+              {% endif %}
+            </label>
+            {{ field }}
+            {% if field.help_text %}
+              <div class="form-text">{{ field.help_text }}</div>
+            {% endif %}
+            {% if field.errors %}
+              <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <!-- Botones -->
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          {% if activo %}
+            <a href="{% url 'inventario:detalle' activo.pk %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          {% else %}
+            <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          {% endif %}
+          <button type="submit" class="btn btn-primary px-4">
+            {% if accion == "Asignar" %}
+              <i class="bi bi-person-check me-2"></i>Confirmar asignación
+            {% elif accion == "Devolver" %}
+              <i class="bi bi-arrow-return-left me-2"></i>Confirmar devolución
+            {% elif accion == "Trasladar" %}
+              <i class="bi bi-arrow-left-right me-2"></i>Confirmar traslado
+            {% else %}
+              <i class="bi bi-upload me-2"></i>Subir acta
+            {% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

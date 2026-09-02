@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Inventario — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inventario</h1>
+    <p class="page-subtitle">Gestion de activos tecnologicos.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'inventario:catalogo_lista' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-journal-bookmark-fill"></i> Catalogo
+    </a>
+    <a href="{% url 'inventario:crear' %}" class="btn btn-primary">
+      <i class="bi bi-plus-circle-fill"></i> Nuevo activo
+    </a>
+  </div>
+</div>
+
+<!-- Stats rápidas -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-laptop"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-person-check-fill"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.asignados }}</div>
+        <div class="stat-label">Asignados</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-success bg-opacity-10 text-success">
+        <i class="bi bi-check-circle-fill"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.disponibles }}</div>
+        <div class="stat-label">Disponibles</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="sa-card sa-stat-card">
+      <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+        <i class="bi bi-x-octagon-fill"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ stats.baja }}</div>
+        <div class="stat-label">Dados de baja</div>
+      </div>
+      <div class="stat-trend">OK</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filtros + búsqueda HTMX -->
+<div class="sa-card mb-4 p-3">
+  <form id="form-filtros-inv"
+        hx-get="{% url 'inventario:lista' %}"
+        hx-target="#tabla-wrapper"
+        hx-trigger="input delay:350ms from:#q_inv, change from:#tipo_sel, change from:#estado_sel"
+        hx-push-url="true"
+        class="row g-2 align-items-end">
+
+    <div class="col-12 col-md-4">
+      <label class="form-label">Buscar</label>
+      <div class="search-input-group">
+        <i class="bi bi-search"></i>
+        <input type="text" id="q_inv" name="q" value="{{ filtro_q }}"
+               placeholder="Serial, marca o modelo...">
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label small fw-semibold mb-1">Tipo dispositivo</label>
+      <select id="tipo_sel" name="tipo" class="form-select">
+        <option value="">Todos los tipos</option>
+        {% for valor, etiqueta in tipos %}
+          <option value="{{ valor }}" {% if valor == filtro_tipo %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label small fw-semibold mb-1">Estado</label>
+      <select id="estado_sel" name="estado" class="form-select">
+        <option value="">Todos</option>
+        {% for valor, etiqueta in estados %}
+          <option value="{{ valor }}" {% if valor == filtro_estado %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12 col-md-2 d-flex gap-2">
+      <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary w-100">
+        <i class="bi bi-x-lg"></i> Limpiar
+      </a>
+    </div>
+  </form>
+</div>
+
+<!-- Tabla target HTMX -->
+<div id="tabla-wrapper">
+  {% include "inventario/partials/tabla.html" %}
+</div>
+{% endblock %}

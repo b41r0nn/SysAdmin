@@ -1,0 +1,83 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SysAdmin{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/sysadmin.css' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon_32.png' %}">
+    <link rel="icon" type="image/png" sizes="64x64" href="{% static 'img/favicon_64.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'img/favicon_512.png' %}">
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <script src="{% static 'js/sysadmin.js' %}" defer></script>
+</head>
+<body class="{% if user.is_authenticated %}sa-auth{% else %}sa-guest{% endif %}">
+    <div class="sa-shell{% if not user.is_authenticated %} sa-shell-auth{% endif %}">
+        {% if user.is_authenticated %}
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <img src="{% static 'img/logo_redihos_mark.png' %}" alt="REDIHOS" class="brand-logo">
+            </div>
+            <nav class="nav flex-column">
+                <a class="nav-link {% if request.resolver_match.app_name == 'core' %}active{% endif %}" href="{% url 'core:dashboard' %}">
+                    <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'usuarios' %}active{% endif %}" href="{% url 'usuarios:lista' %}">
+                    <i class="bi bi-people me-2"></i>Usuarios
+                </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'inventario' %}active{% endif %}" href="{% url 'inventario:lista' %}">
+                    <i class="bi bi-laptop me-2"></i>Inventario
+                </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}">
+                    <i class="bi bi-file-earmark-bar-graph me-2"></i>Reportes
+                </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'mantenimiento' %}active{% endif %}" href="{% url 'mantenimiento:lista_planes' %}">
+                    <i class="bi bi-tools me-2"></i>Mantenimiento
+                </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'yule' %}active{% endif %}" href="{% url 'yule:index' %}">
+                    <i class="bi bi-diagram-3 me-2"></i>Yule (OCS)
+                </a>
+                {% if user.is_staff or user.is_superuser %}
+                <a class="nav-link {% if request.resolver_match.app_name == 'passwords' %}active{% endif %}" href="{% url 'passwords:index' %}">
+                    <i class="bi bi-key me-2"></i>Passwords
+                </a>
+                {% endif %}
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="user-chip">
+                        <i class="bi bi-person-circle me-2"></i>{{ user.username }}
+                    </div>
+                </div>
+                <form method="post" action="{% url 'accounts:logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger w-100">Cerrar Sesion</button>
+                </form>
+            </div>
+        </aside>
+        {% endif %}
+
+        <main class="sa-content{% if not user.is_authenticated %} auth-shell{% endif %}">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

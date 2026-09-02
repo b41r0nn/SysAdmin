@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ titulo }}</h1>
+    <p class="page-subtitle">Vault: {{ vault.nombre }}</p>
+  </div>
+</div>
+
+<div class="sa-card p-4">
+  <form method="post" class="row g-3">
+    {% csrf_token %}
+    <div class="col-12 col-md-6">
+      <label class="form-label">Titulo</label>
+      {{ form.titulo }}
+      {% if form.titulo.errors %}
+        <div class="text-danger small">{{ form.titulo.errors|striptags }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label">Usuario</label>
+      {{ form.usuario }}
+      {% if form.usuario.errors %}
+        <div class="text-danger small">{{ form.usuario.errors|striptags }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12">
+      <label class="form-label">URL</label>
+      {{ form.url }}
+      {% if form.url.errors %}
+        <div class="text-danger small">{{ form.url.errors|striptags }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label">Secreto</label>
+      {{ form.secreto }}
+      {% if form.secreto.errors %}
+        <div class="text-danger small">{{ form.secreto.errors|striptags }}</div>
+      {% endif %}
+      {% if form.secreto.help_text %}
+        <div class="text-muted small">{{ form.secreto.help_text }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label">Estado</label>
+      {{ form.estado }}
+      {% if form.estado.errors %}
+        <div class="text-danger small">{{ form.estado.errors|striptags }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label">Expiracion</label>
+      {{ form.fecha_expiracion }}
+      {% if form.fecha_expiracion.errors %}
+        <div class="text-danger small">{{ form.fecha_expiracion.errors|striptags }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12">
+      <label class="form-label">Notas</label>
+      {{ form.notas }}
+      {% if form.notas.errors %}
+        <div class="text-danger small">{{ form.notas.errors|striptags }}</div>
+      {% endif %}
+    </div>
+    <div class="col-12 d-flex gap-2">
+      <a href="{% url 'passwords:credenciales_lista' vault_id=vault.id %}" class="btn btn-outline-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

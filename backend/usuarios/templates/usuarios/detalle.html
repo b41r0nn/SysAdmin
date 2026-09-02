@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ usuario.nombre_completo }} — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'usuarios:lista' %}" class="text-decoration-none">Usuarios</a>
+    </li>
+    <li class="breadcrumb-item active">Detalle</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-4">
+  <h1 class="page-title">{{ usuario.nombre_completo }}</h1>
+  <p class="text-muted">ID: {{ usuario.id }}</p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-laptop"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ count_laptops }}</div>
+        <div class="stat-label">Laptops asignadas</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-phone"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ count_celulares }}</div>
+        <div class="stat-label">Celulares asignados</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+        <i class="bi bi-headset"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ count_accesorios }}</div>
+        <div class="stat-label">Accesorios asignados</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sa-card mb-4">
+  <h5 class="mb-3">Historial de asignaciones</h5>
+  <table class="sa-table">
+    <thead>
+      <tr>
+        <th>FECHA</th>
+        <th>ACTIVO</th>
+        <th>ESTADO</th>
+        <th>OBSERVACIONES</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if movimientos %}
+        {% for mov in movimientos %}
+        <tr>
+          <td>{{ mov.fecha|date:"d/m/Y" }}</td>
+          <td>{{ mov.activo.nombre|default:mov.activo }}</td>
+          <td><span class="sa-badge success"><i class="bi bi-check-circle"></i> Asignado</span></td>
+          <td>{{ mov.observaciones|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="4" class="text-center text-muted">Sin movimientos registrados.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="sa-card mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0">Activos asignados</h5>
+    <span class="sa-badge primary">
+      {{ activos|length }} activo{% if activos|length != 1 %}s{% endif %}
+    </span>
+  </div>
+
+  {% if activos %}
+    <div class="row g-3">
+      {% for activo in activos %}
+      <div class="col-md-4">
+        <a href="{% url 'inventario:detalle' activo.id %}" class="sa-card d-block p-3 text-decoration-none h-100">
+          <div class="fw-semibold">{{ activo.marca }} {{ activo.modelo }}</div>
+          <div class="text-muted" style="font-size:.85rem;">{{ activo.tipo_dispositivo }}</div>
+          <div class="text-muted" style="font-size:.8rem;">
+            Serial: <span style="font-family:var(--sa-font-mono);">{{ activo.serial }}</span>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-center text-muted py-4">
+      <i class="bi bi-laptop display-6 d-block mb-2 opacity-25"></i>
+      <p class="mb-0">Sin activos asignados actualmente.</p>
+    </div>
+  {% endif %}
+</div>
+
+<div class="mt-4 d-flex gap-2">
+  <a href="{% url 'usuarios:editar' usuario.id %}" class="btn btn-primary">
+    <i class="bi bi-pencil-square"></i> Editar
+  </a>
+  <button class="btn btn-danger" type="button" disabled title="Eliminacion no disponible">
+    <i class="bi bi-trash"></i> Eliminar
+  </button>
+</div>
+{% endblock %}

@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ titulo }} — SysAdmin{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'inventario:lista' %}" class="text-decoration-none">Inventario</a>
+    </li>
+    {% if activo %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'inventario:detalle' activo.pk %}" class="text-decoration-none">
+          {{ activo.marca }} {{ activo.modelo }}
+        </a>
+      </li>
+    {% endif %}
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    <div class="sa-card p-4">
+
+      <!-- Encabezado del form -->
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-hdd-rack-fill"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">{{ titulo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Los campos marcados con <span class="text-danger">*</span> son obligatorios.
+          </p>
+        </div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate id="form-activo">
+        {% csrf_token %}
+
+        <!-- ── Datos comunes ──────────────────────────────────────────────── -->
+        <fieldset class="sa-fieldset">
+        <legend>Informacion general</legend>
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">
+              Tipo de dispositivo <span class="text-danger">*</span>
+            </label>
+            {{ form.tipo_dispositivo }}
+            {% if form.tipo_dispositivo.errors %}
+              <div class="invalid-feedback d-block">{{ form.tipo_dispositivo.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Marca <span class="text-danger">*</span></label>
+            {{ form.marca }}
+            {% if form.marca.errors %}
+              <div class="invalid-feedback d-block">{{ form.marca.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Modelo <span class="text-danger">*</span></label>
+            {{ form.modelo }}
+            {% if form.modelo.errors %}
+              <div class="invalid-feedback d-block">{{ form.modelo.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Serial <span class="text-danger">*</span></label>
+            {{ form.serial }}
+            {% if form.serial.errors %}
+              <div class="invalid-feedback d-block">{{ form.serial.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Estado</label>
+            {{ form.estado }}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Ubicación física</label>
+            {{ form.ubicacion_fisica }}
+          </div>
+        </div>
+        </fieldset>
+
+        <!-- ── Compra y garantía ─────────────────────────────────────────── -->
+        <fieldset class="sa-fieldset">
+        <legend>Compra y garantia</legend>
+        <div class="row g-3">
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Fecha de compra</label>
+            {{ form.fecha_compra }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Proveedor</label>
+            {{ form.proveedor }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Valor de compra</label>
+            {{ form.valor_compra }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Garantía fábrica (meses)</label>
+            {{ form.garantia_fabrica_meses }}
+          </div>
+          <div class="col-12 col-md-6">
+            <div class="d-flex align-items-center gap-2 mt-2">
+              {{ form.garantia_extendida }}
+              <label class="form-check-label fw-semibold" for="{{ form.garantia_extendida.id_for_label }}">
+                Tiene garantía extendida
+              </label>
+            </div>
+          </div>
+          <div class="col-12 col-md-6" id="sec-garantia-ext" style="display:none;">
+            <label class="form-label fw-semibold">Años de garantía extendida</label>
+            {{ form.anios_garantia_extendida }}
+          </div>
+        </div>
+        </fieldset>
+
+        <!-- ── Foto y observaciones ─────────────────────────────────────── -->
+        <fieldset class="sa-fieldset">
+        <legend>Foto y observaciones</legend>
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Foto del activo <span class="text-muted fw-normal">(opcional)</span></label>
+            {{ form.foto_activo }}
+            <div class="form-text">JPG, PNG — máx. 5 MB.</div>
+            {% if activo and activo.foto_activo %}
+              <div class="mt-2 d-flex align-items-center gap-2">
+                <img src="{{ activo.foto_activo.url }}" alt="Foto actual"
+                     class="rounded object-fit-cover" style="width:40px;height:40px;">
+                <small class="text-muted">Foto actual. Subir una nueva la reemplazará.</small>
+              </div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Observaciones</label>
+            {{ form.observaciones }}
+          </div>
+        </div>
+        </fieldset>
+
+        <!-- ══════════════════════════════════════════════════════════════ -->
+        <!-- ── Sección: Celular ────────────────────────────────────────── -->
+        <fieldset id="sec-celular" class="tipo-section sa-fieldset" style="display:none;">
+          <legend>Datos del celular</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">IMEI</label>
+              {{ form.imei }}
+              {% if form.imei.errors %}
+                <div class="invalid-feedback d-block">{{ form.imei.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Almacenamiento</label>
+              {{ form.almacenamiento }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">RAM</label>
+              {{ form.ram_celular }}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Procesador</label>
+              {{ form.procesador_celular }}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Cuenta correo dispositivo</label>
+              {{ form.cuenta_correo_dispositivo }}
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label fw-semibold">Número de línea</label>
+              {{ form.numero_linea }}
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label fw-semibold">Operador</label>
+              {{ form.operador }}
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ── Sección: Escritorio / Portátil ──────────────────────────── -->
+        <fieldset id="sec-pc" class="tipo-section sa-fieldset" style="display:none;">
+          <legend>Especificaciones del equipo</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Procesador</label>
+              {{ form.procesador }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">RAM</label>
+              {{ form.ram }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Capacidad disco</label>
+              {{ form.disco_capacidad }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Tipo disco</label>
+              {{ form.tipo_disco }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Sistema operativo</label>
+              {{ form.sistema_operativo }}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Licencia SO</label>
+              {{ form.licencia_so }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Usuario de red</label>
+              {{ form.usuario_red }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Admin local</label>
+              {{ form.usuario_admin_local }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">IP del equipo</label>
+              {{ form.ip_equipo }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">MAC del equipo</label>
+              {{ form.mac_equipo }}
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ── Sección: Teléfono Fijo ──────────────────────────────────── -->
+        <fieldset id="sec-telefono" class="tipo-section sa-fieldset" style="display:none;">
+          <legend>Datos del telefono fijo</legend>
+          <div class="row g-3">
+            <div class="col-6 col-md-4">
+              <label class="form-label fw-semibold">Extensión</label>
+              {{ form.extension }}
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label fw-semibold">Puerto / Jack</label>
+              {{ form.puerto_jack }}
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-semibold">Línea asignada</label>
+              {{ form.linea_asignada }}
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ── Sección: Monitor ────────────────────────────────────────── -->
+        <fieldset id="sec-monitor" class="tipo-section sa-fieldset" style="display:none;">
+          <legend>Datos del monitor</legend>
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Pulgadas</label>
+              {{ form.pulgadas }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Resolución</label>
+              {{ form.resolucion }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Tipo de panel</label>
+              {{ form.tipo_panel }}
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold">Conectores</label>
+              {{ form.conectores }}
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- ── Botones ─────────────────────────────────────────────────── -->
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          {% if activo %}
+            <a href="{% url 'inventario:detalle' activo.pk %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          {% else %}
+            <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+          {% endif %}
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2-circle me-2"></i>Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const TIPO_MAP = {
+    celular:       ['sec-celular'],
+    escritorio:    ['sec-pc'],
+    portatil:      ['sec-pc'],
+    telefono_fijo: ['sec-telefono'],
+    monitor:       ['sec-monitor'],
+  };
+
+  const select = document.getElementById('id_tipo_dispositivo');
+  const sections = document.querySelectorAll('.tipo-section');
+  const chkExt = document.querySelector('[name="garantia_extendida"]');
+  const secExt = document.getElementById('sec-garantia-ext');
+
+  function toggleSecciones() {
+    const tipo = select ? select.value : '';
+    sections.forEach(function(s) { s.style.display = 'none'; });
+    const activas = TIPO_MAP[tipo] || [];
+    activas.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
+  }
+
+  function toggleGarantiaExt() {
+    if (secExt) secExt.style.display = (chkExt && chkExt.checked) ? '' : 'none';
+  }
+
+  if (select) {
+    select.addEventListener('change', toggleSecciones);
+    toggleSecciones(); // dispara en carga (modo editar)
+  }
+  if (chkExt) {
+    chkExt.addEventListener('change', toggleGarantiaExt);
+    toggleGarantiaExt();
+  }
+})();
+</script>
+{% endblock %}
