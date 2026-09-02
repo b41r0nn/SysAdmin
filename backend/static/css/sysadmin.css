@@ -343,11 +343,16 @@ body {
   font-size: 1.3rem;
 }
 
+.sa-stat-card .stat-content {
+  min-width: 0;
+}
+
 .sa-stat-card .stat-value {
   font-family: var(--sa-font-mono);
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--sa-primary);
+  overflow-wrap: break-word;
 }
 
 .sa-stat-card .stat-label {

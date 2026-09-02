@@ -13,7 +13,7 @@
 </nav>
 
 <div class="page-header">
-  <h1 class="page-title">Plan: {{ plan.nombre|default:plan.get_tipo_display }}</h1>
+  <h1 class="page-title">Plan: {{ plan.get_tipo_display }} · {{ plan.activo.serial }}</h1>
 </div>
 
 <div class="row g-3 mb-4">

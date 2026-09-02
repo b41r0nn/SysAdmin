@@ -43,8 +43,10 @@
             </span>
           </td>
           <td>
-            {% if activo.asignaciones_activas and activo.asignaciones_activas.0 %}
-              {{ activo.asignaciones_activas.0.usuario.nombre_completo }}
+            {% if activo.asignaciones_activas %}
+              {% with asignacion=activo.asignaciones_activas.0 %}
+                {% if asignacion.usuario %}{{ asignacion.usuario.nombre_completo }}{% else %}N/A{% endif %}
+              {% endwith %}
             {% else %}
               N/A
             {% endif %}
