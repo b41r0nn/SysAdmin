@@ -42,9 +42,9 @@ INSTALLED_APPS = [
     'core',
     'usuarios',
     'inventario',
-    'reports',
     'mantenimiento',
     'passwords',
+    'reports',
     'yule',
 ]
 

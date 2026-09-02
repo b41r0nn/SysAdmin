@@ -41,6 +41,12 @@ services:
       - sysadmin_net
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/accounts/login/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # ─── Proxy inverso Nginx ─────────────────────────────────────────────────────
   nginx:
@@ -50,12 +56,13 @@ services:
     container_name: sysadmin_nginx
     restart: always
     ports:
-      - "6000:80"
+      - "6060:80"
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     depends_on:
-      - django
+      django:
+        condition: service_healthy
     networks:
       - sysadmin_net
 

@@ -46,6 +46,24 @@ class ConfiguracionYuleAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class VinculadoFilter(admin.SimpleListFilter):
+    title = "vinculado a activo"
+    parameter_name = "vinculado"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("si", "Vinculado"),
+            ("no", "Sin vincular"),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == "si":
+            return queryset.filter(activo_local__isnull=False)
+        if self.value() == "no":
+            return queryset.filter(activo_local__isnull=True)
+        return queryset
+
+
 @admin.register(EquipoOCS)
 class EquipoOCSAdmin(admin.ModelAdmin):
     list_display = (
@@ -61,7 +79,7 @@ class EquipoOCSAdmin(admin.ModelAdmin):
     list_filter = (
         "tipo_dispositivo",
         "visto_en_ultima_sync",
-        "activo_local__isnull",
+        VinculadoFilter,
         "fecha_creacion",
     )
     search_fields = ("nombre_host", "id_ocs", "mac_address", "usuario_dominio", "serial_bios")

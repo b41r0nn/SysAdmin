@@ -159,7 +159,7 @@ def asignar_activo(request, pk):
                 activo=activo,
                 tipo="asignacion",
                 fecha=timezone.now().date(),
-                descripcion=f"Asignado a {asignacion.usuario.nombre_completo}. {asignacion.observaciones}",
+                descripcion=f"Asignado a {asignacion.usuario.nombre_completo}. {asignacion.observaciones or ''}",
                 realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
                 usuario_destino=asignacion.usuario
             )
@@ -195,7 +195,7 @@ def devolver_activo(request, pk):
             asignacion.activa = False
             asignacion.fecha_devolucion = timezone.now().date()
             if observaciones:
-                asignacion.observaciones += f"\n[Devolución]: {observaciones}"
+                asignacion.observaciones = (asignacion.observaciones or "") + f"\n[Devolución]: {observaciones}"
             asignacion.save()
             
             Movimiento.objects.create(
@@ -243,7 +243,7 @@ def trasladar_activo(request, pk):
             asignacion_actual.activa = False
             asignacion_actual.fecha_devolucion = timezone.now().date()
             if observaciones:
-                asignacion_actual.observaciones += f"\n[Traslado a {usuario_destino.nombre_completo}]: {observaciones}"
+                asignacion_actual.observaciones = (asignacion_actual.observaciones or "") + f"\n[Traslado a {usuario_destino.nombre_completo}]: {observaciones}"
             asignacion_actual.save()
             
             # 2. Crear nueva asignación

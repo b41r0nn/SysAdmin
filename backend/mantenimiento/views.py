@@ -3,7 +3,7 @@ from datetime import timedelta
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import F, Q, Sum
+from django.db.models import DecimalField, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -187,7 +187,9 @@ def lista_ordenes(request):
 def detalle_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
     repuestos = orden.repuestos.all().order_by("nombre")
-    repuestos_total = repuestos.aggregate(total=Sum(F("costo_unitario") * F("cantidad")))
+    repuestos_total = repuestos.aggregate(
+        total=Sum(F("costo_unitario") * F("cantidad"), output_field=DecimalField())
+    )
 
     return render(request, "mantenimiento/detalle_orden.html", {
         "orden": orden,

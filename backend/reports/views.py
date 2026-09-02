@@ -73,7 +73,13 @@ def _build_movimientos_mensuales(rango_fin):
         .annotate(total=Count("id"))
         .order_by("mes")
     )
-    totales = {row["mes"].date(): row["total"] for row in qs}
+    totales = {}
+    for row in qs:
+        mes = row["mes"]
+        if hasattr(mes, "date"):
+            mes = mes.date()
+        totales[mes] = row["total"]
+
     meses = []
     for offset in range(12):
         mes = _shift_months(rango_inicio, offset)
