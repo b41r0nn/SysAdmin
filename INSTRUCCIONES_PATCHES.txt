@@ -1,0 +1,80 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# ARCHIVO 1: backend/sysadmin/settings/base.py
+# ══════════════════════════════════════════════════════════════════════════════
+
+# 1A) En INSTALLED_APPS — agregar 'usuarios':
+INSTALLED_APPS = [
+    # ... apps existentes ...
+    "accounts",
+    "core",
+    "usuarios",          # ← AGREGAR
+    # "inventario",
+    # "mantenimiento",
+    # "passwords",
+    # "reports",
+    # "yule",
+]
+
+# 1B) Al FINAL del archivo — agregar si no existen:
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+# 1C) En requirements.txt — agregar si no está:
+# Pillow>=10.0.0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ARCHIVO 2: backend/sysadmin/urls.py
+# ══════════════════════════════════════════════════════════════════════════════
+from django.contrib import admin
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("", include("core.urls")),
+    path("accounts/", include("accounts.urls")),
+    path("usuarios/", include("usuarios.urls", namespace="usuarios")),  # ← AGREGAR
+    # path("inventario/", include("inventario.urls", namespace="inventario")),
+    # path("mantenimiento/", include("mantenimiento.urls", namespace="mantenimiento")),
+    # path("passwords/", include("passwords.urls", namespace="passwords")),
+    # path("reports/", include("reports.urls", namespace="reports")),
+    # path("yule/", include("yule.urls", namespace="yule")),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)  # ← AGREGAR
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ARCHIVO 3: backend/core/views.py
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Agregar import al inicio:
+from usuarios.models import Usuario
+
+# En el contexto del dashboard agregar:
+"total_usuarios": Usuario.objects.filter(estado="activo").count(),
+
+# Ejemplo completo de la vista:
+# @login_required
+# def dashboard(request):
+#     context = {
+#         "total_usuarios": Usuario.objects.filter(estado="activo").count(),
+#         # ... resto del contexto ...
+#     }
+#     return render(request, "core/dashboard.html", context)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ARCHIVO 4: backend/templates/base.html  — link sidebar Usuarios
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Buscar el <a> de Usuarios y reemplazar por esto:
+
+<a class="nav-link {% if request.resolver_match.app_name == 'usuarios' %}active{% endif %}"
+   href="{% url 'usuarios:lista' %}">
+  <i class="bi bi-people-fill"></i>
+  <span>Usuarios</span>
+</a>
+
+# Quitar: clase "disabled-module", atributo disabled, href="#", o cualquier
+# mecanismo que lo bloqueaba.
