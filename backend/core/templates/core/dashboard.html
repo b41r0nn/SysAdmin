@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SysAdmin{% endblock %}
+
+{% block content %}
+<div class="sa-topbar">
+    <div class="sa-topbar-greeting">
+        <h2>Hola, {{ user.first_name|default:user.username }} 👋</h2>
+        <p>Resumen operativo y control de activos.</p>
+    </div>
+    <span class="sa-live-badge"><span class="dot"></span>Sesión activa</span>
+</div>
+
+<div class="row g-3">
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-people"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ total_usuarios }}</div>
+                <div class="stat-label">Usuarios activos</div>
+            </div>
+            <div class="stat-trend">OK</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-laptop"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ total_activos }}</div>
+                <div class="stat-label">Total activos</div>
+            </div>
+            <div class="stat-trend">OK</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-info bg-opacity-10 text-info">
+                <i class="bi bi-person-check"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ activos_asignados }}</div>
+                <div class="stat-label">Asignados</div>
+            </div>
+            <div class="stat-trend">OK</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-success bg-opacity-10 text-success">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ activos_disponibles }}</div>
+                <div class="stat-label">Disponibles</div>
+            </div>
+            <div class="stat-trend">OK</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                <i class="bi bi-x-octagon"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ activos_baja }}</div>
+                <div class="stat-label">Dados de baja</div>
+            </div>
+            <div class="stat-trend">OK</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                <i class="bi bi-clipboard"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ ordenes_abiertas }}</div>
+                <div class="stat-label">Ordenes abiertas</div>
+            </div>
+            <div class="stat-trend">OK</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="sa-card sa-stat-card">
+            <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                <i class="bi bi-exclamation-triangle"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ ordenes_atrasadas }}</div>
+                <div class="stat-label">Ordenes atrasadas</div>
+            </div>
+            <div class="stat-trend">ALERTA</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

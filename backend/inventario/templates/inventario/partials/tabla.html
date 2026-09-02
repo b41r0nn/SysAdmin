@@ -1,0 +1,109 @@
+{% load static %}
+
+{% if activos %}
+<div class="sa-card overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover sa-table mb-0">
+      <thead>
+        <tr>
+          <th>Activo</th>
+          <th>Serial</th>
+          <th>Tipo</th>
+          <th class="text-center">Estado</th>
+          <th>Ubicación</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in activos %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-3">
+              {% if a.foto_activo %}
+                <img src="{{ a.foto_activo.url }}" alt="{{ a.marca }} {{ a.modelo }}"
+                     class="rounded object-fit-cover"
+                     style="width:38px;height:38px;">
+              {% else %}
+                <div class="rounded d-flex align-items-center justify-content-center"
+                     style="width:38px;height:38px;background:var(--sa-primary-light);color:var(--sa-primary);font-weight:700;font-size:.875rem;flex-shrink:0;">
+                  {% if a.tipo_dispositivo == "celular" %}
+                    <i class="bi bi-phone"></i>
+                  {% elif a.tipo_dispositivo == "escritorio" %}
+                    <i class="bi bi-pc-display"></i>
+                  {% elif a.tipo_dispositivo == "portatil" %}
+                    <i class="bi bi-laptop"></i>
+                  {% elif a.tipo_dispositivo == "telefono_fijo" %}
+                    <i class="bi bi-telephone"></i>
+                  {% elif a.tipo_dispositivo == "monitor" %}
+                    <i class="bi bi-display"></i>
+                  {% else %}
+                    <i class="bi bi-hdd"></i>
+                  {% endif %}
+                </div>
+              {% endif %}
+              <div>
+                <div class="fw-semibold" style="font-size:.9rem;">{{ a.marca }} {{ a.modelo }}</div>
+                {% if a.en_garantia %}
+                  <span class="text-success" style="font-size:.72rem;">
+                    <i class="bi bi-shield-check me-1"></i>En garantía
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td>
+            <span style="font-family:var(--sa-font-mono);font-size:.82rem;">
+              {{ a.serial }}
+            </span>
+          </td>
+          <td style="font-size:.875rem;">
+            <span class="sa-badge primary">{{ a.get_tipo_dispositivo_display }}</span>
+          </td>
+          <td class="text-center">
+            {% if a.estado == "disponible" %}
+              <span class="sa-badge success">
+                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Disponible
+              </span>
+            {% elif a.estado == "asignado" %}
+              <span class="sa-badge primary">
+                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Asignado
+              </span>
+            {% elif a.estado == "en_mantenimiento" %}
+              <span class="sa-badge warning">
+                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Mantenimiento
+              </span>
+            {% elif a.estado == "en_reparacion" %}
+              <span class="sa-badge warning">
+                <i class="bi bi-wrench" style="font-size:.65rem;"></i>Reparacion
+              </span>
+            {% elif a.estado == "dado_de_baja" %}
+              <span class="sa-badge danger">
+                <i class="bi bi-x-circle" style="font-size:.65rem;"></i>Baja
+              </span>
+            {% endif %}
+          </td>
+          <td style="font-size:.875rem;">{{ a.ubicacion_fisica|default:"—" }}</td>
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+              <a href="{% url 'inventario:detalle' a.pk %}"
+                 class="btn btn-sm btn-outline-primary" title="Ver ficha">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'inventario:editar' a.pk %}"
+                 class="btn btn-sm btn-outline-secondary" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="sa-card p-5 text-center text-muted">
+  <i class="bi bi-laptop display-4 d-block mb-3 opacity-25"></i>
+  <p class="mb-0">No se encontraron activos con los filtros aplicados.</p>
+</div>
+{% endif %}

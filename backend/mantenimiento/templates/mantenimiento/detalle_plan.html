@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Plan de mantenimiento — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:lista_planes' %}" class="text-decoration-none">Planes</a>
+    </li>
+    <li class="breadcrumb-item active">Detalle</li>
+  </ol>
+</nav>
+
+<div class="page-header">
+  <h1 class="page-title">Plan: {{ plan.nombre|default:plan.get_tipo_display }}</h1>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-success bg-opacity-10 text-success">
+        <i class="bi bi-calendar-check"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ plan.frecuencia_dias }}d</div>
+        <div class="stat-label">Cada {{ plan.frecuencia_dias }} dias</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-clock-history"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ plan.proxima_ejecucion|date:"d/m" }}</div>
+        <div class="stat-label">Proximo mantenimiento</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="sa-stat-card">
+      <div class="stat-icon {% if plan.estado == 'activo' %}bg-success{% else %}bg-danger{% endif %} bg-opacity-10 text-{% if plan.estado == 'activo' %}success{% else %}danger{% endif %}">
+        <i class="bi bi-{% if plan.estado == 'activo' %}check-circle-fill{% else %}x-circle-fill{% endif %}"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ plan.get_estado_display }}</div>
+        <div class="stat-label">Estado</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sa-card">
+  <h5 class="mb-3">Ordenes de mantenimiento</h5>
+  <table class="sa-table">
+    <thead>
+      <tr>
+        <th>FECHA</th>
+        <th>DISPOSITIVO</th>
+        <th>ESTADO</th>
+        <th>TECNICO</th>
+        <th>NOTAS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if ordenes %}
+        {% for orden in ordenes %}
+        <tr>
+          <td>{{ orden.fecha_apertura|date:"d/m/Y" }}</td>
+          <td>{{ orden.activo }}</td>
+          <td>
+            {% if orden.estado == 'cerrada' %}
+            <span class="sa-badge success"><i class="bi bi-check-circle"></i> Completada</span>
+            {% elif orden.estado == 'en_proceso' %}
+            <span class="sa-badge warning"><i class="bi bi-clock"></i> Pendiente</span>
+            {% else %}
+            <span class="sa-badge danger"><i class="bi bi-exclamation-circle"></i> Abierta</span>
+            {% endif %}
+          </td>
+          <td>{{ orden.tecnico_asignado|default:"—" }}</td>
+          <td>{{ orden.descripcion|truncatewords:5|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted">No hay ordenes asociadas a este plan.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-4 d-flex gap-2">
+  <a href="{% url 'mantenimiento:crear_orden' %}" class="btn btn-primary">
+    <i class="bi bi-plus-circle"></i> Nueva orden
+  </a>
+  <a href="{% url 'mantenimiento:editar_plan' plan.id %}" class="btn btn-outline-secondary">
+    <i class="bi bi-pencil-square"></i> Editar
+  </a>
+  <form method="post" action="{% url 'mantenimiento:eliminar_plan' plan.id %}">
+    {% csrf_token %}
+    <button class="btn btn-danger" type="submit"
+            onclick="return confirm('¿Eliminar este plan?')">
+      <i class="bi bi-trash"></i> Eliminar
+    </button>
+  </form>
+</div>
+{% endblock %}

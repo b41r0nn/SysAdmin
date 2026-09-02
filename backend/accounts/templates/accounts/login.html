@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Login - SysAdmin{% endblock %}
+
+{% block content %}
+<div class="auth-layout">
+    <div class="auth-panel">
+        <div class="auth-badge">
+            <i class="bi bi-shield-lock"></i>
+        </div>
+        <h1 class="auth-title">Ingreso a SysAdmin</h1>
+        <p class="auth-subtitle">Gestion IT centralizada y segura.</p>
+        <div class="auth-points">
+            <div class="auth-point">
+                <i class="bi bi-check2-circle"></i>
+                <span>Inventario, usuarios y mantenimiento en un solo lugar.</span>
+            </div>
+            <div class="auth-point">
+                <i class="bi bi-check2-circle"></i>
+                <span>Reportes PDF/Excel listos para auditoria.</span>
+            </div>
+            <div class="auth-point">
+                <i class="bi bi-check2-circle"></i>
+                <span>Alertas de mantenimiento y control de activos.</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sa-card auth-card">
+        <div class="text-center mb-4">
+            <div class="mb-2 auth-icon">
+                <i class="bi bi-key"></i>
+            </div>
+            <h2 class="h5 fw-bold mb-1">Accede con tus credenciales</h2>
+            <p class="text-muted mb-0">Tu sesion quedara protegida.</p>
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            {% for field in form %}
+                <div class="form-group mb-3">
+                    <label class="form-label fw-semibold">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}
+                        <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

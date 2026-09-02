@@ -1,0 +1,79 @@
+{% if ordenes %}
+<div class="sa-card overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover sa-table mb-0">
+      <thead>
+        <tr>
+          <th>Activo</th>
+          <th>Tipo</th>
+          <th class="text-center">Estado</th>
+          <th class="text-center">Prioridad</th>
+          <th>Fecha apertura</th>
+          <th>Tecnico</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for orden in ordenes %}
+        <tr>
+          <td>
+            <div class="fw-semibold" style="font-size:.9rem;">{{ orden.activo.marca }} {{ orden.activo.modelo }}</div>
+            <div class="text-muted" style="font-size:.75rem;font-family:var(--sa-font-mono);">{{ orden.activo.serial }}</div>
+          </td>
+          <td>
+            <span class="sa-badge primary">{{ orden.get_tipo_display }}</span>
+          </td>
+          <td class="text-center">
+            {% if orden.estado == "abierta" %}
+              <span class="sa-badge warning">
+                <i class="bi bi-exclamation-circle" style="font-size:.65rem;"></i>Abierta
+              </span>
+            {% elif orden.estado == "en_proceso" %}
+              <span class="sa-badge primary">
+                <i class="bi bi-arrow-repeat" style="font-size:.65rem;"></i>En proceso
+              </span>
+            {% elif orden.estado == "cerrada" %}
+              <span class="sa-badge success">
+                <i class="bi bi-check-circle" style="font-size:.65rem;"></i>Cerrada
+              </span>
+            {% else %}
+              <span class="sa-badge secondary">
+                <i class="bi bi-x-circle" style="font-size:.65rem;"></i>Cancelada
+              </span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if orden.prioridad == "alta" %}
+              <span class="sa-badge danger">Alta</span>
+            {% elif orden.prioridad == "media" %}
+              <span class="sa-badge warning">Media</span>
+            {% else %}
+              <span class="sa-badge success">Baja</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.85rem;">{{ orden.fecha_apertura|date:"d/m/Y" }}</td>
+          <td style="font-size:.85rem;">{{ orden.tecnico_asignado|default:"—" }}</td>
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+              <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}"
+                 class="btn btn-sm btn-outline-primary" title="Ver orden">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'mantenimiento:editar_orden' orden.pk %}"
+                 class="btn btn-sm btn-outline-secondary" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="sa-card p-5 text-center text-muted">
+  <i class="bi bi-clipboard-x display-4 d-block mb-3 opacity-25"></i>
+  <p class="mb-0">No se encontraron ordenes con los filtros aplicados.</p>
+</div>
+{% endif %}

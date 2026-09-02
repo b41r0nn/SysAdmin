@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Credenciales — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Credenciales</h1>
+    <p class="page-subtitle">Vault: {{ vault.nombre }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'passwords:index' %}">
+      <i class="bi bi-arrow-left"></i> Volver
+    </a>
+    <a class="btn btn-outline-secondary" href="{% url 'passwords:logs' vault_id=vault.id %}">
+      <i class="bi bi-activity"></i> Logs
+    </a>
+    <a class="btn btn-outline-success" href="{% url 'passwords:credenciales_export' vault_id=vault.id %}">
+      <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+    </a>
+    <a class="btn btn-primary" href="{% url 'passwords:credencial_crear' vault_id=vault.id %}">
+      <i class="bi bi-plus-circle-fill"></i> Nueva credencial
+    </a>
+  </div>
+</div>
+
+<div class="sa-card mb-4 p-3">
+  <form class="row g-2 align-items-end" method="get">
+    <div class="col-12 col-md-5">
+      <label class="form-label">Buscar</label>
+      <div class="search-input-group">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" value="{{ filtro_q }}" placeholder="Titulo, usuario o URL...">
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label small fw-semibold mb-1">Estado</label>
+      <select name="estado" class="form-select">
+        <option value="">Todos</option>
+        {% for valor, etiqueta in estados %}
+          <option value="{{ valor }}" {% if valor == filtro_estado %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2 d-flex gap-2">
+      <button type="submit" class="btn btn-outline-secondary w-100">
+        <i class="bi bi-funnel"></i> Filtrar
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="sa-card p-3">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Titulo</th>
+          <th>Usuario</th>
+          <th>URL</th>
+          <th>Estado</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cred in credenciales %}
+        <tr>
+          <td class="fw-semibold">{{ cred.titulo }}</td>
+          <td>{{ cred.usuario|default:"—" }}</td>
+          <td>{{ cred.url|default:"—" }}</td>
+          <td>
+            <span class="badge text-bg-{% if cred.estado == 'activa' %}success{% elif cred.estado == 'expirada' %}warning{% else %}secondary{% endif %}">
+              {{ cred.get_estado_display }}
+            </span>
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'passwords:credencial_secreto' vault_id=vault.id pk=cred.id %}">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'passwords:credencial_editar' vault_id=vault.id pk=cred.id %}">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <a class="btn btn-sm btn-outline-danger" href="{% url 'passwords:credencial_eliminar' vault_id=vault.id pk=cred.id %}">
+              <i class="bi bi-trash"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="text-muted">Sin credenciales registradas.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

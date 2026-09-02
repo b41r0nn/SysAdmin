@@ -1,0 +1,74 @@
+{% if planes %}
+<div class="sa-card overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover sa-table mb-0">
+      <thead>
+        <tr>
+          <th>Activo</th>
+          <th>Tipo</th>
+          <th>Frecuencia</th>
+          <th>Proxima ejecucion</th>
+          <th class="text-center">Estado</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in planes %}
+        <tr>
+          <td>
+            <div class="fw-semibold" style="font-size:.9rem;">{{ plan.activo.marca }} {{ plan.activo.modelo }}</div>
+            <div class="text-muted" style="font-size:.75rem;font-family:var(--sa-font-mono);">{{ plan.activo.serial }}</div>
+          </td>
+          <td>
+            <span class="sa-badge primary">{{ plan.get_tipo_display }}</span>
+          </td>
+          <td style="font-size:.85rem;">
+            {% if plan.frecuencia_dias %}Cada {{ plan.frecuencia_dias }} dias{% else %}—{% endif %}
+          </td>
+          <td style="font-size:.85rem;">
+            <div class="d-flex align-items-center gap-2">
+              <span>{{ plan.proxima_ejecucion|date:"d/m/Y"|default:"—" }}</span>
+              {% if plan.proxima_ejecucion %}
+                {% if plan.proxima_ejecucion < hoy %}
+                  <span class="sa-badge danger">Atrasado</span>
+                {% elif plan.proxima_ejecucion <= limite_alerta %}
+                  <span class="sa-badge warning">Proximo</span>
+                {% endif %}
+              {% endif %}
+            </div>
+          </td>
+          <td class="text-center">
+            {% if plan.estado == "activo" %}
+              <span class="sa-badge success">
+                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Activo
+              </span>
+            {% else %}
+              <span class="sa-badge warning">
+                <i class="bi bi-pause-circle" style="font-size:.65rem;"></i>Pausado
+              </span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+              <a href="{% url 'mantenimiento:detalle_plan' plan.pk %}"
+                 class="btn btn-sm btn-outline-primary" title="Ver plan">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'mantenimiento:editar_plan' plan.pk %}"
+                 class="btn btn-sm btn-outline-secondary" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="sa-card p-5 text-center text-muted">
+  <i class="bi bi-calendar2-x display-4 d-block mb-3 opacity-25"></i>
+  <p class="mb-0">No se encontraron planes con los filtros aplicados.</p>
+</div>
+{% endif %}

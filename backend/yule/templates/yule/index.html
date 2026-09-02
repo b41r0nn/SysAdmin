@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Yule (OCS) — Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="bi bi-diagram-3 me-2"></i>Yule — Conector OCS</h1>
+                <p class="text-muted">Sincronización de equipos desde OCS Inventory NG</p>
+            </div>
+            {% if user.is_staff or user.is_superuser %}
+            <form method="post" action="{% url 'yule:sincronizar' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Sincronizar ahora
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- CONFIGURACIÓN OCS -->
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-6">
+            <div class="card sa-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Configuración OCS</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">URL Base</dt>
+                        <dd class="col-sm-7"><code>{{ ocs_base_url|truncatechars:50|default:"—" }}</code></dd>
+                        
+                        <dt class="col-sm-5">Usuario</dt>
+                        <dd class="col-sm-7"><code>{{ ocs_user|default:"—" }}</code></dd>
+                        
+                        <dt class="col-sm-5">Token</dt>
+                        <dd class="col-sm-7"><code>{{ ocs_token }}</code></dd>
+                        
+                        <dt class="col-sm-5">Verificar SSL</dt>
+                        <dd class="col-sm-7">
+                            {% if ocs_verify_ssl %}
+                                <span class="badge bg-success">Sí</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">No</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-5">Estado</dt>
+                        <dd class="col-sm-7">
+                            {% if ocs_configured and conexion_ok %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Conectado</span>
+                            {% elif ocs_configured %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-circle me-1"></i>Error conexión</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Sin configurar</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                    
+                    {% if error_conexion %}
+                    <div class="alert alert-danger alert-sm mt-3 mb-0">
+                        <small>{{ error_conexion }}</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTADÍSTICAS -->
+        <div class="col-12 col-lg-6">
+            <div class="card sa-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Estadísticas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 text-center">
+                        <div class="col-6 col-sm-4">
+                            <div class="stat-box">
+                                <div class="stat-value" style="color: var(--sa-primary);">{{ total_equipos }}</div>
+                                <div class="stat-label">Total equipos</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4">
+                            <div class="stat-box">
+                                <div class="stat-value" style="color: #10b981;">{{ equipos_vinculados }}</div>
+                                <div class="stat-label">Vinculados</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-4">
+                            <div class="stat-box">
+                                <div class="stat-value" style="color: #f59e0b;">{{ equipos_sin_match }}</div>
+                                <div class="stat-label">Sin match</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ÚLTIMAS SINCRONIZACIONES -->
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card sa-card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Últimas sincronizaciones</h5>
+                        <a href="{% url 'yule:historial' %}" class="btn btn-sm btn-outline-primary">Ver todas</a>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fecha/Hora</th>
+                                <th>Estado</th>
+                                <th>Detectados</th>
+                                <th>Nuevos</th>
+                                <th>Actualizados</th>
+                                <th>Duración</th>
+                                <th>Realizado por</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in ultimas_syncs %}
+                            <tr>
+                                <td>
+                                    <small>{{ log.fecha_inicio|date:"Y-m-d H:i:s" }}</small>
+                                </td>
+                                <td>
+                                    {% if log.estado == "exitosa" %}
+                                        <span class="badge bg-success">Exitosa</span>
+                                    {% elif log.estado == "fallo" %}
+                                        <span class="badge bg-danger">Fallo</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Parcial</span>
+                                    {% endif %}
+                                </td>
+                                <td><strong>{{ log.equipos_detectados }}</strong></td>
+                                <td>
+                                    {% if log.equipos_nuevos > 0 %}
+                                        <span class="badge bg-info">+{{ log.equipos_nuevos }}</span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ log.equipos_actualizados }}</td>
+                                <td><small>{{ log.duracion_segundos }}s</small></td>
+                                <td><small>{{ log.realizado_por.username }}</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    No hay sincronizaciones registradas
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACCESOS RÁPIDOS -->
+        <div class="col-12 col-lg-6">
+            <div class="card sa-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Accesos rápidos</h5>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="{% url 'yule:equipos_lista' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-laptop me-2"></i>Ver todos los equipos</span>
+                        <span class="badge bg-primary">{{ total_equipos }}</span>
+                    </a>
+                    <a href="{% url 'yule:equipos_lista' %}?filtro=sin_match" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-exclamation-circle me-2" style="color: #f59e0b;"></i>Equipos sin match</span>
+                        <span class="badge bg-warning text-dark">{{ equipos_sin_match }}</span>
+                    </a>
+                    <a href="{% url 'yule:equipos_lista' %}?filtro=vinculados" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-check-circle me-2" style="color: #10b981;"></i>Equipos vinculados</span>
+                        <span class="badge bg-success">{{ equipos_vinculados }}</span>
+                    </a>
+                    <a href="{% url 'yule:historial' %}" class="list-group-item list-group-item-action">
+                        <span><i class="bi bi-clock-history me-2"></i>Historial de sincronizaciones</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- INFORMACIÓN -->
+        <div class="col-12 col-lg-6">
+            <div class="card sa-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Información</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info alert-sm mb-3">
+                        <strong>Etapa 7B — Sincronización OCS</strong><br>
+                        Módulo de conector para OCS Inventory NG.
+                    </div>
+                    
+                    <h6>Características:</h6>
+                    <ul class="list-unstyled small">
+                        <li><i class="bi bi-check text-success me-2"></i>Sincronización manual con reintentos</li>
+                        <li><i class="bi bi-check text-success me-2"></i>Detección automática de equipos</li>
+                        <li><i class="bi bi-check text-success me-2"></i>Vinculación con inventario local</li>
+                        <li><i class="bi bi-check text-success me-2"></i>Auditoría de sincronizaciones</li>
+                        <li><i class="bi bi-check text-success me-2"></i>Búsqueda de coincidencias por serial/MAC</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stat-box {
+    padding: 1rem 0;
+}
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+}
+.stat-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.alert-sm {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0;
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}
