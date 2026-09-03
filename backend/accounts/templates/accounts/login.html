@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Login - SysAdmin{% endblock %}
+{% block title %}Ingreso — SysAdmin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/login-animation.css' %}">
@@ -13,56 +13,69 @@
 </div>
 
 <div class="auth-layout">
-    <div class="auth-panel">
-        <div class="auth-badge">
-            <i class="bi bi-shield-lock"></i>
-        </div>
-        <h1 class="auth-title">Ingreso a SysAdmin</h1>
-        <p class="auth-subtitle">Gestion IT centralizada y segura.</p>
-        <div class="auth-points">
-            <div class="auth-point">
-                <i class="bi bi-check2-circle"></i>
-                <span>Inventario, usuarios y mantenimiento en un solo lugar.</span>
-            </div>
-            <div class="auth-point">
-                <i class="bi bi-check2-circle"></i>
-                <span>Reportes PDF/Excel listos para auditoria.</span>
-            </div>
-            <div class="auth-point">
-                <i class="bi bi-check2-circle"></i>
-                <span>Alertas de mantenimiento y control de activos.</span>
-            </div>
-        </div>
+  <div class="auth-panel">
+    <img src="{% static 'img/logo_redihos_full.png' %}" alt="REDIHOS" class="auth-brand-logo">
+
+    <h1 class="auth-title">Gestión IT centralizada y segura</h1>
+    <p class="auth-subtitle">
+      Bienvenido a <strong>SysAdmin</strong>. Administra inventario, usuarios, mantenimiento,
+      reportes y documentos desde un solo lugar.
+    </p>
+
+    <div class="auth-points">
+      <div class="auth-point">
+        <i class="bi bi-laptop"></i>
+        <span>Control total de activos y asignaciones.</span>
+      </div>
+      <div class="auth-point">
+        <i class="bi bi-file-earmark-bar-graph"></i>
+        <span>Reportes PDF/Excel listos para auditoría.</span>
+      </div>
+      <div class="auth-point">
+        <i class="bi bi-tools"></i>
+        <span>Alertas de mantenimiento y seguimiento de activos.</span>
+      </div>
+      <div class="auth-point">
+        <i class="bi bi-folder"></i>
+        <span>Repositorio de manuales, procedimientos y políticas.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sa-card auth-card">
+    <div class="text-center mb-4">
+      <div class="mb-3 auth-icon">
+        <i class="bi bi-shield-lock"></i>
+      </div>
+      <h2 class="h4 fw-bold mb-1">Accede con tus credenciales</h2>
+      <p class="text-muted mb-0">Tu sesión quedará protegida.</p>
     </div>
 
-    <div class="sa-card auth-card">
-        <div class="text-center mb-4">
-            <div class="mb-2 auth-icon">
-                <i class="bi bi-key"></i>
-            </div>
-            <h2 class="h5 fw-bold mb-1">Accede con tus credenciales</h2>
-            <p class="text-muted mb-0">Tu sesion quedara protegida.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      {% for field in form %}
+        <div class="form-group mb-3">
+          <label class="form-label fw-semibold">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}
+            <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
+          {% endif %}
         </div>
+      {% endfor %}
 
-        <form method="post" novalidate>
-            {% csrf_token %}
-            {% if form.non_field_errors %}
-                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-            {% endif %}
+      <button type="submit" class="btn btn-primary w-100 mt-2">
+        <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar
+      </button>
+    </form>
 
-            {% for field in form %}
-                <div class="form-group mb-3">
-                    <label class="form-label fw-semibold">{{ field.label }}</label>
-                    {{ field }}
-                    {% if field.errors %}
-                        <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
-                    {% endif %}
-                </div>
-            {% endfor %}
-
-            <button type="submit" class="btn btn-primary w-100">Ingresar</button>
-        </form>
+    <div class="text-center mt-3">
+      <small class="text-muted">&copy; {% now "Y" %} REDIHOS · SysAdmin v1.1.0</small>
     </div>
+  </div>
 </div>
 {% endblock %}
 
