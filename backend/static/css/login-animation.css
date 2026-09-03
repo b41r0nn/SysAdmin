@@ -1,0 +1,42 @@
+.login-animation-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 20% 20%, #e8effe 0%, #f8fafc 45%, #eef2ff 100%);
+}
+
+.login-animation-bg::before {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: radial-gradient(circle at 80% 80%, rgba(1, 86, 166, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 30% 70%, rgba(241, 128, 32, 0.06) 0%, transparent 45%);
+  animation: loginGradientMove 24s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+@keyframes loginGradientMove {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(5%, 5%) rotate(6deg); }
+}
+
+#login-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0.55;
+}
+
+.auth-layout {
+  position: relative;
+  z-index: 2;
+}
+
+.auth-panel,
+.auth-card {
+  position: relative;
+  z-index: 2;
+}

@@ -1,8 +1,17 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Login - SysAdmin{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/login-animation.css' %}">
+{% endblock %}
+
 {% block content %}
+<div class="login-animation-bg">
+  <canvas id="login-canvas"></canvas>
+</div>
+
 <div class="auth-layout">
     <div class="auth-panel">
         <div class="auth-badge">
@@ -55,4 +64,8 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/login-animation.js' %}"></script>
 {% endblock %}

@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/sysadmin.css' %}">
+    {% block extra_css %}{% endblock %}
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon_32.png' %}">
     <link rel="icon" type="image/png" sizes="64x64" href="{% static 'img/favicon_64.png' %}">
     <link rel="apple-touch-icon" href="{% static 'img/favicon_512.png' %}">
