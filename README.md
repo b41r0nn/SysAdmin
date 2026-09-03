@@ -1,7 +1,7 @@
 # SysAdmin · Sistema de Gestión IT
 
-> **Versión:** 1.0 · **Fecha:** 2026-06-05 · **Estado:** Etapas 0-7B Completas  
-> Sistema integral de gestión de inventario IT, usuarios, mantenimiento y sincronización con OCS Inventory NG
+> **Versión:** 1.1.0 · **Fecha:** 2026-09-03 · **Estado:** Etapas 0-7B + Documentos Completas  
+> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG y repositorio de documentos
 
 ---
 
@@ -17,6 +17,7 @@
 | 🔧 Mantenimiento | `mantenimiento` | ✅ Completa | 5 |
 | 🔑 Contraseñas | `passwords` | ✅ Completa | 6 |
 | 🔄 Yule (OCS) | `yule` | ✅ Completa | 7B |
+| 📁 Documentos | `documentos` | ✅ Completa | 8 |
 
 ---
 
@@ -71,7 +72,8 @@ SysAdmin/
     ├── reports/                    ← Reportes y exportes (PDF/Excel)
     ├── mantenimiento/              ← Órdenes de mantenimiento
     ├── passwords/                  ← Vault de contraseñas cifradas
-    └── yule/                       ← Sincronización OCS Inventory NG
+    ├── yule/                       ← Sincronización OCS Inventory NG
+    └── documentos/                 ← Manuales, procedimientos y documentos
 ```
 
 ---
@@ -335,7 +337,24 @@ Vault seguro de credenciales con cifrado.
 
 ---
 
-### 6. Yule - OCS Inventory (Etapa 7B)
+### 6. Documentos (Etapa 8)
+
+Repositorio centralizado de manuales, procedimientos, políticas y documentos generales.
+
+**Características:**
+- ✅ CRUD de documentos con archivo adjunto
+- ✅ Categorías personalizables
+- ✅ Tipos de documento: manual, procedimiento, política, general
+- ✅ Control de versión y fecha de versión
+- ✅ Filtros por tipo, categoría y texto
+- ✅ Descarga directa de archivos
+- ✅ Iconos por tipo de archivo (PDF, Word, Excel, etc.)
+
+**Acceso:** `http://192.168.1.250/documentos/`
+
+---
+
+### 7. Yule - OCS Inventory (Etapa 7B)
 
 Sincronización automática con OCS Inventory NG para detección de equipos.
 
@@ -394,16 +413,12 @@ OCS_VERIFY_SSL=True
 
 ## 📋 Tareas Críticas Pendientes
 
-1. **Inventario (Etapa 3F)**: Patches en servidor
-   - Descomentar `'inventario'` en INSTALLED_APPS
-   - Ejecutar `makemigrations` + `migrate`
+1. **Deploy v1.1.0 en servidor**
+   - Ejecutar `migrate` para aplicar migraciones de inventario y documentos
+   - Reiniciar contenedor Django
+   - Verificar módulo Documentos y catálogo de activos
 
-2. **Yule (Etapa 7B)**: Deploy en servidor
-   - Ejecutar `migrate yule`
-   - Configurar `.env` con credenciales OCS reales
-   - Testear sincronización
-
-3. **Tests**: Suite de tests automatizados (TODO futuro)
+2. **Tests**: Suite de tests automatizados (TODO futuro)
 
 ---
 
@@ -458,6 +473,19 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
+### 2026-09-03 — v1.1.0: Catálogo en activos, fixes y módulo Documentos
+
+- ✅ Nuevo módulo `documentos`: repositorio de manuales, procedimientos, políticas y documentos generales
+- ✅ Campo `Activo.catalogo` (FK a `CatalogoModelo`) con autocompletado de marca/modelo en el formulario
+- ✅ Campo `Activo.nombre_equipo` para equipos de escritorio/portátil
+- ✅ Fix de errores 500 en mantenimiento, asignaciones, reportes y exportación PDF
+- ✅ Fix visual de stat-cards en detalle de activo
+- ✅ Mejoras en exportación Excel de inventario (48 columnas con estilo)
+- ✅ PDFs de actas y reportes abren en nueva pestaña
+- ✅ Puerto de acceso cambiado a `6060` (evita `ERR_UNSAFE_PORT`)
+- ✅ Healthcheck en contenedor Django y dependencia `condition: service_healthy` para Nginx
+- ✅ Commit `d9ee7cd` tag `v1.1.0`
+
 ### 2026-06-05 — Yule 7B Completada
 
 - ✅ Sincronización OCS Inventory implementada (~1900 líneas)
@@ -492,5 +520,5 @@ Para documentación técnica completa, ver **SYSADMIN_HANDOFF.md**
 
 ---
 
-**Última actualización:** 2026-06-05  
+**Última actualización:** 2026-09-03  
 **Proyecto:** 100% Funcional · Listo para producción
