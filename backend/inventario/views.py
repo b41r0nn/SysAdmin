@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -329,6 +329,25 @@ def subir_acta_firmada(request, asignacion_pk):
 # ══════════════════════════════════════════════════════════════════════════════
 # CRUD — CatalogoModelo
 # ══════════════════════════════════════════════════════════════════════════════
+
+@login_required
+def catalogo_json(request):
+    """Devuelve modelos de catálogo filtrados por tipo_dispositivo (JSON)."""
+    tipo = request.GET.get("tipo", "").strip()
+    qs = CatalogoModelo.objects.all()
+    if tipo:
+        qs = qs.filter(tipo_dispositivo=tipo)
+    data = [
+        {
+            "id": item.pk,
+            "text": str(item),
+            "marca": item.marca,
+            "modelo": item.modelo,
+        }
+        for item in qs
+    ]
+    return JsonResponse({"catalogo": data})
+
 
 @login_required
 def lista_catalogo(request):

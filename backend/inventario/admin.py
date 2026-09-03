@@ -12,7 +12,7 @@ class CatalogoModeloAdmin(admin.ModelAdmin):
 
 @admin.register(Activo)
 class ActivoAdmin(admin.ModelAdmin):
-    list_display = ("serial", "tipo_dispositivo", "marca", "modelo", "estado", "ubicacion_fisica")
+    list_display = ("serial", "tipo_dispositivo", "catalogo", "marca", "modelo", "estado", "ubicacion_fisica")
     list_filter = ("tipo_dispositivo", "estado")
     search_fields = ("serial", "marca", "modelo", "imei")
 

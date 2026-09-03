@@ -82,6 +82,18 @@
         <dt class="col-sm-4">Serial:</dt>
         <dd class="col-sm-8"><code>{{ activo.serial }}</code></dd>
 
+        {% if activo.catalogo %}
+        <dt class="col-sm-4">Catálogo / Modelo:</dt>
+        <dd class="col-sm-8">
+          <a href="{% url 'inventario:catalogo_editar' activo.catalogo.pk %}" class="text-decoration-none">
+            {{ activo.catalogo }}
+          </a>
+        </dd>
+        {% endif %}
+
+        <dt class="col-sm-4">Nombre equipo:</dt>
+        <dd class="col-sm-8">{{ activo.nombre_equipo|default:"—" }}</dd>
+
         <dt class="col-sm-4">Modelo:</dt>
         <dd class="col-sm-8">{{ activo.modelo }}</dd>
 
@@ -115,7 +127,7 @@
       {% if movimientos %}
         {% for mov in movimientos %}
         <tr>
-          <td>{{ mov.fecha|date:"d/m/Y H:i" }}</td>
+          <td>{{ mov.fecha|date:"d/m/Y" }}</td>
           <td>
             {% if mov.tipo == 'ingreso' %}
             <span class="sa-badge success"><i class="bi bi-arrow-down-circle"></i> Ingreso</span>

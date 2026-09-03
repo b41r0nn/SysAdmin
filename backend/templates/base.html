@@ -40,6 +40,9 @@
                 <a class="nav-link {% if request.resolver_match.app_name == 'mantenimiento' %}active{% endif %}" href="{% url 'mantenimiento:lista_planes' %}">
                     <i class="bi bi-tools me-2"></i>Mantenimiento
                 </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'documentos' %}active{% endif %}" href="{% url 'documentos:lista' %}">
+                    <i class="bi bi-folder me-2"></i>Documentos
+                </a>
                 <a class="nav-link {% if request.resolver_match.app_name == 'yule' %}active{% endif %}" href="{% url 'yule:index' %}">
                     <i class="bi bi-diagram-3 me-2"></i>Yule (OCS)
                 </a>

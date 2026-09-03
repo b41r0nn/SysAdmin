@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'passwords',
     'reports',
     'yule',
+    'documentos',
 ]
 
 MIDDLEWARE = [

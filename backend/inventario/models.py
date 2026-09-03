@@ -52,6 +52,14 @@ class CatalogoModelo(models.Model):
 class Activo(models.Model):
     # ── Comunes ──────────────────────────────────────────────────────────────
     tipo_dispositivo = models.CharField(max_length=50, choices=TIPOS)
+    catalogo = models.ForeignKey(
+        CatalogoModelo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="activos",
+        verbose_name="Catálogo / Modelo",
+    )
     marca = models.CharField(max_length=100)
     modelo = models.CharField(max_length=100)
     serial = models.CharField(max_length=150, unique=True)
@@ -79,6 +87,7 @@ class Activo(models.Model):
     operador = models.CharField(max_length=100, blank=True)
 
     # ── Escritorio / Portátil ─────────────────────────────────────────────────
+    nombre_equipo = models.CharField(max_length=150, blank=True)
     disco_capacidad = models.CharField(max_length=50, blank=True)
     tipo_disco = models.CharField(max_length=50, blank=True)
     ram = models.CharField(max_length=50, blank=True)

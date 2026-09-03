@@ -238,6 +238,9 @@ def usuarios_pdf(request):
 
 @login_required
 def inventario_excel(request):
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
     wb = Workbook()
     ws_resumen = wb.active
     ws_resumen.title = "Resumen"
@@ -251,31 +254,119 @@ def inventario_excel(request):
     ws_resumen.append(["Por estado", "Total"])
     for item in activos_por_estado:
         ws_resumen.append([item["label"], item["total"]])
-
     ws_resumen.append([])
     ws_resumen.append(["Por tipo", "Total"])
     for item in activos_por_tipo:
         ws_resumen.append([item["label"], item["total"]])
 
-    ws_activos = wb.create_sheet(title="Activos")
-    ws_activos.append([
-        "Tipo", "Marca", "Modelo", "Serial", "Estado",
-        "Ubicacion", "Fecha compra", "Proveedor", "Valor compra"
-    ])
+    ws_resumen["A1"].font = Font(bold=True, size=14, color="0156A6")
+    ws_resumen.column_dimensions["A"].width = 24
+    ws_resumen.column_dimensions["B"].width = 20
 
-    activos = Activo.objects.all().order_by("tipo_dispositivo", "marca", "modelo")
-    for activo in activos:
-        ws_activos.append([
+    ws_activos = wb.create_sheet(title="Activos")
+
+    headers = [
+        "ID", "Tipo", "Marca", "Modelo", "Serial", "Nombre equipo",
+        "Estado", "Ubicacion fisica", "Fecha compra", "Proveedor",
+        "Valor compra", "Garantia fabrica (meses)", "Garantia extendida",
+        "Anios garantia extendida", "En garantia", "Fecha vencimiento garantia",
+        "IMEI", "Almacenamiento", "RAM (celular)", "Procesador (celular)",
+        "Tipo disco (celular)", "Correo dispositivo", "Numero linea", "Operador",
+        "Disco capacidad", "Tipo disco", "RAM", "Procesador",
+        "Sistema operativo", "Licencia SO", "Usuario red", "Usuario admin local",
+        "IP equipo", "MAC equipo",
+        "Extension", "Puerto jack", "Linea asignada",
+        "Pulgadas", "Resolucion", "Tipo panel", "Conectores",
+        "Asignado a", "Documento usuario", "Area usuario", "Fecha asignacion",
+        "Observaciones", "Fecha creacion", "Ultima actualizacion",
+    ]
+    ws_activos.append(headers)
+
+    header_fill = PatternFill(start_color="0156A6", end_color="0156A6", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws_activos.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+
+    ws_activos.freeze_panes = "A2"
+    ws_activos.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
+    ws_activos.row_dimensions[1].height = 32
+
+    activos = Activo.objects.prefetch_related(
+        Prefetch(
+            "asignaciones",
+            queryset=Asignacion.objects.filter(activa=True).select_related("usuario"),
+            to_attr="asignaciones_activas",
+        )
+    ).order_by("tipo_dispositivo", "marca", "modelo")
+
+    valor_col = headers.index("Valor compra") + 1
+
+    for row_idx, activo in enumerate(activos, start=2):
+        asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
+        row = [
+            activo.id,
             activo.get_tipo_dispositivo_display(),
             activo.marca,
             activo.modelo,
             activo.serial,
+            getattr(activo, "nombre_equipo", "") or "",
             activo.get_estado_display(),
             activo.ubicacion_fisica,
             activo.fecha_compra.strftime("%Y-%m-%d") if activo.fecha_compra else "",
             activo.proveedor,
-            float(activo.valor_compra) if activo.valor_compra else "",
-        ])
+            float(activo.valor_compra) if activo.valor_compra else None,
+            activo.garantia_fabrica_meses,
+            "Si" if activo.garantia_extendida else "No",
+            activo.anios_garantia_extendida,
+            "Si" if activo.en_garantia else "No",
+            activo.fecha_vencimiento_garantia.strftime("%Y-%m-%d") if activo.fecha_vencimiento_garantia else "",
+            activo.imei or "",
+            activo.almacenamiento,
+            activo.ram_celular,
+            activo.procesador_celular,
+            activo.tipo_disco_celular,
+            activo.cuenta_correo_dispositivo,
+            activo.numero_linea,
+            activo.operador,
+            activo.disco_capacidad,
+            activo.tipo_disco,
+            activo.ram,
+            activo.procesador,
+            activo.sistema_operativo,
+            activo.licencia_so,
+            activo.usuario_red,
+            activo.usuario_admin_local,
+            activo.ip_equipo or "",
+            activo.mac_equipo,
+            activo.extension,
+            activo.puerto_jack,
+            activo.linea_asignada,
+            float(activo.pulgadas) if activo.pulgadas else None,
+            activo.resolucion,
+            activo.tipo_panel,
+            activo.conectores,
+            asignacion.usuario.nombre_completo if asignacion else "",
+            asignacion.usuario.documento_identidad if asignacion else "",
+            asignacion.usuario.area if asignacion else "",
+            asignacion.fecha_asignacion.strftime("%Y-%m-%d") if asignacion else "",
+            activo.observaciones,
+            activo.fecha_creacion.strftime("%Y-%m-%d %H:%M"),
+            activo.fecha_actualizacion.strftime("%Y-%m-%d %H:%M"),
+        ]
+        ws_activos.append(row)
+        for col_idx in range(1, len(headers) + 1):
+            ws_activos.cell(row=row_idx, column=col_idx).border = border
+        ws_activos.cell(row=row_idx, column=valor_col).number_format = '$#,##0'
+
+    for col_idx, header in enumerate(headers, start=1):
+        ws_activos.column_dimensions[get_column_letter(col_idx)].width = max(12, len(header) + 4)
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
