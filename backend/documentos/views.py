@@ -119,7 +119,7 @@ def crear_categoria(request):
             return redirect("documentos:categorias_lista")
     else:
         form = CategoriaForm()
-    return render(request, "documentos/form.html", {"form": form, "titulo": "Nueva Categoría"})
+    return render(request, "documentos/form_categoria.html", {"form": form, "titulo": "Nueva Categoría"})
 
 
 @login_required
@@ -133,7 +133,7 @@ def editar_categoria(request, pk):
             return redirect("documentos:categorias_lista")
     else:
         form = CategoriaForm(instance=categoria)
-    return render(request, "documentos/form.html", {
+    return render(request, "documentos/form_categoria.html", {
         "form": form,
         "titulo": "Editar Categoría",
         "categoria": categoria,
