@@ -46,7 +46,7 @@
         <fieldset class="sa-fieldset">
         <legend>Informacion general</legend>
         <div class="row g-3">
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-3">
             <label class="form-label fw-semibold">
               Tipo de dispositivo <span class="text-danger">*</span>
             </label>
@@ -55,14 +55,22 @@
               <div class="invalid-feedback d-block">{{ form.tipo_dispositivo.errors|join:", " }}</div>
             {% endif %}
           </div>
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-3">
+            <label class="form-label fw-semibold">Catálogo / Modelo</label>
+            {{ form.catalogo }}
+            <div class="form-text">Selecciona para autocompletar marca y modelo.</div>
+            {% if form.catalogo.errors %}
+              <div class="invalid-feedback d-block">{{ form.catalogo.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-3">
             <label class="form-label fw-semibold">Marca <span class="text-danger">*</span></label>
             {{ form.marca }}
             {% if form.marca.errors %}
               <div class="invalid-feedback d-block">{{ form.marca.errors|join:", " }}</div>
             {% endif %}
           </div>
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-3">
             <label class="form-label fw-semibold">Modelo <span class="text-danger">*</span></label>
             {{ form.modelo }}
             {% if form.modelo.errors %}
@@ -188,6 +196,10 @@
         <fieldset id="sec-pc" class="tipo-section sa-fieldset" style="display:none;">
           <legend>Especificaciones del equipo</legend>
           <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Nombre del equipo</label>
+              {{ form.nombre_equipo }}
+            </div>
             <div class="col-12 col-md-6">
               <label class="form-label fw-semibold">Procesador</label>
               {{ form.procesador }}
@@ -308,6 +320,11 @@
   const sections = document.querySelectorAll('.tipo-section');
   const chkExt = document.querySelector('[name="garantia_extendida"]');
   const secExt = document.getElementById('sec-garantia-ext');
+  const catalogoSelect = document.getElementById('id_catalogo');
+  const marcaInput = document.querySelector('[name="marca"]');
+  const modeloInput = document.querySelector('[name="modelo"]');
+  const catalogoUrl = "{% url 'inventario:catalogo_json' %}";
+  const catalogoInicial = catalogoSelect ? catalogoSelect.value : "";
 
   function toggleSecciones() {
     const tipo = select ? select.value : '';
@@ -323,13 +340,72 @@
     if (secExt) secExt.style.display = (chkExt && chkExt.checked) ? '' : 'none';
   }
 
+  function setMarcaModelo(marca, modelo) {
+    if (marcaInput) marcaInput.value = marca || "";
+    if (modeloInput) modeloInput.value = modelo || "";
+  }
+
+  function onCatalogoChange() {
+    if (!catalogoSelect) return;
+    const opt = catalogoSelect.options[catalogoSelect.selectedIndex];
+    if (opt && opt.value) {
+      setMarcaModelo(opt.dataset.marca, opt.dataset.modelo);
+    } else {
+      setMarcaModelo("", "");
+    }
+  }
+
+  async function cargarCatalogo(tipo, seleccionado) {
+    if (!catalogoSelect) return;
+    catalogoSelect.innerHTML = '<option value="">---------</option>';
+    setMarcaModelo("", "");
+    if (!tipo) return;
+    try {
+      const resp = await fetch(`${catalogoUrl}?tipo=${encodeURIComponent(tipo)}`);
+      if (!resp.ok) {
+        console.error("HTTP error cargando catálogo:", resp.status);
+        return;
+      }
+      const data = await resp.json();
+      data.catalogo.forEach(function(item) {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.text;
+        opt.dataset.marca = item.marca;
+        opt.dataset.modelo = item.modelo;
+        if (String(item.id) === String(seleccionado)) {
+          opt.selected = true;
+        }
+        catalogoSelect.appendChild(opt);
+      });
+      // Si había una selección previa, autocompletar marca/modelo
+      onCatalogoChange();
+    } catch (e) {
+      console.error("Error cargando catálogo:", e);
+    }
+  }
+
   if (select) {
-    select.addEventListener('change', toggleSecciones);
-    toggleSecciones(); // dispara en carga (modo editar)
+    select.addEventListener('change', function() {
+      toggleSecciones();
+      cargarCatalogo(select.value, "");
+    });
+    toggleSecciones();
   }
   if (chkExt) {
     chkExt.addEventListener('change', toggleGarantiaExt);
     toggleGarantiaExt();
+  }
+  if (catalogoSelect) {
+    catalogoSelect.addEventListener('change', onCatalogoChange);
+    // Al cargar la página: si ya hay tipo y catálogo seleccionado, autocompletar
+    if (select && select.value) {
+      cargarCatalogo(select.value, catalogoInicial);
+    } else if (catalogoInicial) {
+      // Si el formulario vino con catálogo pero sin tipo, al menos autocompletar
+      // marca/modelo a partir de la opción actual (si tiene data attributes)
+      onCatalogoChange();
+    }
   }
 })();
 </script>

@@ -23,4 +23,5 @@ urlpatterns = [
     path("catalogo/", views.lista_catalogo, name="catalogo_lista"),
     path("catalogo/nuevo/", views.crear_catalogo, name="catalogo_crear"),
     path("catalogo/<int:pk>/editar/", views.editar_catalogo, name="catalogo_editar"),
+    path("catalogo/json/", views.catalogo_json, name="catalogo_json"),
 ]

@@ -12,7 +12,7 @@ CAMPOS_CELULAR = [
     "tipo_disco_celular", "cuenta_correo_dispositivo", "numero_linea", "operador",
 ]
 CAMPOS_PC = [
-    "disco_capacidad", "tipo_disco", "ram", "procesador",
+    "nombre_equipo", "disco_capacidad", "tipo_disco", "ram", "procesador",
     "sistema_operativo", "licencia_so", "usuario_red", "usuario_admin_local",
     "ip_equipo", "mac_equipo",
 ]
@@ -28,7 +28,7 @@ CAMPOS_TIPO = {
 }
 
 CAMPOS_COMUNES = [
-    "tipo_dispositivo", "marca", "modelo", "serial", "estado",
+    "tipo_dispositivo", "catalogo", "marca", "modelo", "serial", "estado",
     "ubicacion_fisica", "fecha_compra", "proveedor", "valor_compra",
     "garantia_fabrica_meses", "garantia_extendida", "anios_garantia_extendida",
     "foto_activo", "observaciones",
@@ -43,6 +43,7 @@ class ActivoForm(forms.ModelForm):
         fields = CAMPOS_COMUNES + ALL_SPECIFIC
         widgets = {
             "tipo_dispositivo": forms.Select(attrs={"class": "form-select", "id": "id_tipo_dispositivo"}),
+            "catalogo": forms.Select(attrs={"class": "form-select", "id": "id_catalogo"}),
             "marca": forms.TextInput(attrs={"class": "form-control"}),
             "modelo": forms.TextInput(attrs={"class": "form-control"}),
             "serial": forms.TextInput(attrs={"class": "form-control"}),
@@ -66,6 +67,7 @@ class ActivoForm(forms.ModelForm):
             "numero_linea": forms.TextInput(attrs={"class": "form-control"}),
             "operador": forms.TextInput(attrs={"class": "form-control"}),
             # PC
+            "nombre_equipo": forms.TextInput(attrs={"class": "form-control", "placeholder": "PC-CONTABILIDAD-01"}),
             "disco_capacidad": forms.TextInput(attrs={"class": "form-control"}),
             "tipo_disco": forms.TextInput(attrs={"class": "form-control"}),
             "ram": forms.TextInput(attrs={"class": "form-control"}),
@@ -89,6 +91,8 @@ class ActivoForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Catálogo es opcional: permite crear/editar activos sin elegir modelo de catálogo
+        self.fields["catalogo"].required = False
         # Make all specific fields optional at form level (model already nullable)
         for campo in ALL_SPECIFIC:
             self.fields[campo].required = False

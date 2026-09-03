@@ -13,6 +13,7 @@ urlpatterns = [
     path('mantenimiento/', include('mantenimiento.urls', namespace='mantenimiento')),
     path('passwords/', include('passwords.urls', namespace='passwords')),
     path('yule/', include('yule.urls', namespace='yule')),
+    path('documentos/', include('documentos.urls', namespace='documentos')),
 ]
 
 if settings.DEBUG:

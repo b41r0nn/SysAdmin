@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Eliminar categoría — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'documentos:lista' %}" class="text-decoration-none">Documentos</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'documentos:categorias_lista' %}" class="text-decoration-none">Categorías</a></li>
+    <li class="breadcrumb-item active">Eliminar</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-md-6">
+    <div class="sa-card p-4 text-center">
+      <div class="mb-3 text-danger">
+        <i class="bi bi-exclamation-triangle-fill display-4"></i>
+      </div>
+      <h5 class="fw-bold">¿Eliminar categoría?</h5>
+      <p class="text-muted">Se eliminará permanentemente <strong>«{{ categoria.nombre }}»</strong>.</p>
+      {% if categoria.documentos.exists() %}
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-circle me-2"></i>No se puede eliminar porque tiene {{ categoria.documentos.count }} documento(s) asociado(s).
+        </div>
+        <a href="{% url 'documentos:categorias_lista' %}" class="btn btn-outline-secondary">Volver</a>
+      {% else %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="d-flex gap-2 justify-content-center">
+            <a href="{% url 'documentos:categorias_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-danger">
+              <i class="bi bi-trash me-2"></i>Sí, eliminar
+            </button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
