@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-06-05 · Etapa 7B Completada
+> Documento actualizado: 2026-09-03 · v1.1.0 · Etapas 0-7B + Documentos Completas
 
 ---
 
@@ -10,27 +10,23 @@
 | 0 | Fundación Docker+Django+Nginx | ✅ COMPLETA |
 | 1 | accounts — Login/auth/sesión | ✅ COMPLETA |
 | 2 | usuarios — BD personas | ✅ COMPLETA |
-| 3 | inventario — Activos | ✅ COMPLETA · código en repo |
+| 3 | inventario — Activos | ✅ COMPLETA · mejoras v1.1.0 aplicadas |
 | 4 | reports — Reportes | ✅ COMPLETA |
 | 5 | mantenimiento — Órdenes | ✅ COMPLETA |
 | 6 | passwords — Vault | ✅ COMPLETA |
 | 7B | yule — Sincronización OCS | ✅ COMPLETA |
+| 8 | documentos — Repositorio documental | ✅ COMPLETA v1.1.0 |
 
 ---
 
 ## 🔴 TAREAS CRÍTICAS PENDIENTES
 
-1. **Patches 3F en servidor**: Inventario comentado en settings
-   - Activar `'inventario'` en INSTALLED_APPS
-   - Agregar rutas inventario en urls.py
-   - Ejecutar `makemigrations` + `migrate` en contenedor
+1. **Deploy v1.1.0 en servidor**
+   - Ejecutar `migrate` para aplicar migraciones pendientes de `inventario` y `documentos`
+   - Reiniciar contenedor Django
+   - Verificar módulo Documentos y autocompletado de catálogo en activos
 
-2. **Yule 7B en servidor**: Migración inicial
-   - Ejecutar `migrate yule` para crear modelos
-   - Configurar .env con OCS real
-   - Testear sincronización
-
-3. **Tests**: No hay tests automatizados (TODO futuro)
+2. **Tests**: No hay tests automatizados (TODO futuro)
 ## CRONOGRAMA ETAPAS 6 Y 7 (PROPUESTA vs REALIDAD)
 
 ### ✅ ETAPA 6 — passwords (Completada)
@@ -240,6 +236,25 @@ SysAdmin/
     ├── reports/                 ← ETAPA 4 COMPLETA
     ├── mantenimiento/           ← ETAPA 5 COMPLETA
     ├── passwords/               ← ETAPA 6 COMPLETA
+    ├── yule/                    ← ETAPA 7B COMPLETA
+    └── documentos/              ← ETAPA 8 COMPLETA v1.1.0
+        ├── __init__.py
+        ├── admin.py
+        ├── apps.py
+        ├── forms.py
+        ├── models.py
+        ├── urls.py
+        ├── views.py
+        ├── migrations/
+        │   ├── __init__.py
+        │   └── 0001_initial.py
+        └── templates/documentos/
+            ├── lista.html
+            ├── form.html
+            ├── categorias_lista.html
+            ├── confirmar_eliminar.html
+            └── confirmar_eliminar_categoria.html
+
     └── yule/                    ← ETAPA 7B COMPLETA
         ├── __init__.py
         ├── admin.py             ← Admin customizado con badges
@@ -281,6 +296,7 @@ INSTALLED_APPS = [
     "mantenimiento",
     "passwords",
     "yule",              # ← ETAPA 7B: Sincronización OCS
+    "documentos",        # ← ETAPA 8: Repositorio documental v1.1.0
 ]
 ```
 
@@ -545,6 +561,62 @@ whitenoise==6.6.0
 ```bash
 docker exec -it sysadmin_django python manage.py migrate
 docker exec -it sysadmin_django python manage.py collectstatic --noinput
+docker compose restart django
+```
+
+---
+
+## ACTUALIZACIÓN 2026-09-03 — v1.1.0
+
+### Resumen
+Release que consolida estabilización del sistema, mejora el módulo de inventario y agrega el módulo de documentos.
+
+### Nuevo módulo: `documentos`
+
+**Modelos (`documentos/models.py`)**
+- `Categoria`: nombre, descripción, orden
+- `Documento`: título, descripción, categoría FK, tipo (manual/procedimiento/política/general), archivo, versión, fecha de versión, activo, usuario creador
+
+**Vistas (`documentos/views.py`)**
+- `lista_documentos` — listado con filtros por texto, tipo y categoría
+- `crear_documento`, `editar_documento`, `eliminar_documento`
+- `descargar_documento` — descarga directa del archivo
+- `lista_categorias`, `crear_categoria`, `editar_categoria`, `eliminar_categoria`
+
+**Templates**
+- `lista.html`, `form.html`, `categorias_lista.html`, `confirmar_eliminar.html`, `confirmar_eliminar_categoria.html`
+
+**URLs namespace `documentos`**
+- `/documentos/`
+- `/documentos/nuevo/`
+- `/documentos/<pk>/editar/`
+- `/documentos/<pk>/eliminar/`
+- `/documentos/<pk>/descargar/`
+- `/documentos/categorias/`
+
+### Mejoras en inventario
+- `Activo.catalogo`: FK opcional a `CatalogoModelo`; el formulario ahora autocompleta marca y modelo al seleccionar un catálogo
+- `Activo.nombre_equipo`: nuevo campo para equipos escritorio/portátil
+- Endpoint JSON `/inventario/catalogo/json/` para filtrar catálogos por tipo
+- Fix de errores visuales en `detalle.html` y `sysadmin.css`
+- Fix de errores 500 en mantenimiento, asignaciones, reportes y exportación PDF
+- Exportación Excel de inventario mejorada (48 columnas con estilo)
+
+### Infraestructura y estabilidad
+- Puerto de acceso cambiado de `6000` a `6060` (evita `ERR_UNSAFE_PORT`)
+- Healthcheck en servicio Django y Nginx depende de `condition: service_healthy`
+- `SECRET_KEY` real en `.env`
+- Pin de `pydyf==0.10.0` para evitar error en WeasyPrint
+
+### Archivos creados/modificados relevantes
+- Creados: `backend/documentos/`, `backend/inventario/migrations/0004_activo_nombre_equipo.py`, `backend/inventario/migrations/0005_activo_catalogo.py`
+- Modificados: `backend/inventario/*`, `backend/sysadmin/settings/base.py`, `backend/sysadmin/urls.py`, `backend/templates/base.html`, `backend/reports/views.py`
+
+### Comandos post-deploy v1.1.0
+```bash
+docker compose exec django python manage.py migrate inventario
+docker compose exec django python manage.py migrate documentos
+docker compose exec django python manage.py collectstatic --noinput
 docker compose restart django
 ```
 
@@ -1170,3 +1242,7 @@ Para aprovechar los cambios:
 - `PASSWORDS_ENCRYPTION_KEY`: ya existía pero ahora su ausencia genera warning (sigue funcionando con fallback).
 
 *Auditoría completada 2026-07-22*
+
+---
+
+*Última actualización: 2026-09-03 · v1.1.0 · Módulo documentos y mejoras de inventario integradas*
