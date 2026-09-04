@@ -52,14 +52,23 @@
   z-index: 1;
 }
 
+.sa-shell-auth .sa-content.auth-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  max-width: none;
+}
+
 .auth-layout {
   position: relative;
   z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  padding: 24px;
+  width: 100%;
+  padding: 0;
 }
 
 .auth-login-logo {
