@@ -36,7 +36,7 @@ La documentación del proyecto (`README.md` y `SYSADMIN_HANDOFF.md`) fue actuali
 | Mantenimiento | Error 500 en agregación de repuestos | Se agregó `output_field=DecimalField()` |
 | Asignaciones | Error 500 cuando `observaciones` es `None` | Se hardenizó la concatenación de strings |
 | Reportes | Error 500 por `TruncMonth` con `datetime.date` | Se ajustó `_build_movimientos_mensuales` |
-| Reportes | Exportación Excel de inventario básica | Se reemplazó por una exportación de 48 columnas con estilo y filtros |
+| Reportes | Exportación Excel de inventario básica | Se reemplazó por una exportación de 48 columnas con estilo, filtros, resumen por categorías y totales |
 | UI | Tarjetas de estadísticas superpuestas en `detalle.html` | Se ajustaron clases CSS (`sysadmin.css` y `detalle.html`) |
 | UI | Botones de PDF abrían en la misma pestaña | Se agregó `target="_blank"` |
 
@@ -169,5 +169,32 @@ docker compose restart django
 
 ---
 
+## 10. Ajustes posteriores al cierre de v1.1.0
+
+### Reporte Excel de Inventario unificado
+- El reporte ahora genera **una sola hoja "Inventario"** en lugar de dos hojas separadas.
+- Estructura final:
+  1. Encabezado corporativo con logo de REDIHOS proporcional (42 px de alto, ancho calculado por aspect ratio real vía PIL).
+  2. Lista completa de activos con columnas seleccionables (48 campos disponibles).
+  3. **Resumen por categorías** (tipo de dispositivo) con desglose por estado.
+  4. **Fila de totales generales**: total de activos, valor total del inventario y totales por estado.
+- Configuración de página: orientación horizontal, ajustar a ancho de página y centrado horizontal.
+- Fix de banner: columnas A y B combinadas y reservadas para el logo, centrado con `OneCellAnchor` y offsets calculados desde PIL; título/subtítulo/metadata empiezan en C para evitar que el logo tape el texto.
+- Fix de anchos: `_adjust_column_widths` ahora recibe un límite de fila de datos para no inflar columnas (especialmente la A) con el contenido del resumen.
+- Se agregó una pantalla de selección de columnas en `/inventario/exportar/opciones/` con 8 secciones y botones *Reporte completo* / *Generar con selección*.
+- Se agregó filtro por tipo de dispositivo (multi-select) en la pantalla de opciones: oculta/muestra secciones dinámicamente y filtra los activos exportados.
+- El resumen y totales del Excel/PDF ahora usan la queryset filtrada, no el inventario completo.
+- El reporte PDF de inventario fue rediseñado con estilo de marca, columnas configurables y filtro por tipo (reusa `CAMPOS_INVENTARIO`).
+- La pantalla de opciones ahora permite elegir formato de exportación: Excel o PDF.
+- Los botones **Exportar Excel Inventario** y **Exportar PDF Inventario** en `reports/index.html` apuntan a la pantalla de opciones.
+- Archivos involucrados:
+  - `backend/reports/views.py`
+  - `backend/inventario/urls.py`
+  - `backend/inventario/views.py`
+  - `backend/inventario/templates/inventario/inventario_exportar_opciones.html`
+  - `backend/reports/templates/reports/index.html`
+
+---
+
 **Preparado por:** Asistente SysAdmin  
-**Próxima sesión sugerida:** validar deploy en servidor, probar módulos Documentos e Inventario, y continuar con mejoras según prioridad del equipo.
+**Próxima sesión sugerida:** validar deploy en servidor, probar exportación Excel unificada, módulos Documentos e Inventario, y continuar con mejoras según prioridad del equipo.

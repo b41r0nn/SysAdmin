@@ -13,8 +13,12 @@ from django.utils import timezone
 import weasyprint
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.units import pixels_to_EMU
+from PIL import Image as PILImage
 
 from inventario.models import Activo, Asignacion, Movimiento, TIPOS, ESTADOS
 from mantenimiento.models import OrdenMantenimiento
@@ -30,6 +34,68 @@ GRIS_TXT = "1F2937"
 BLANCO = "FFFFFF"
 
 LOGO_PATH = os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.png")
+
+
+# Mapeo de columnas disponibles para exportar inventario.
+# Cada entrada: key: (label, extractor(activo, asignacion_activa))
+# El orden define el orden de columnas en el reporte completo.
+CAMPOS_INVENTARIO = {
+    # ── Comunes ──────────────────────────────────────────────────────────────
+    "id": ("ID", lambda a, asig: a.id),
+    "tipo": ("Tipo de dispositivo", lambda a, asig: a.get_tipo_dispositivo_display()),
+    "marca": ("Marca", lambda a, asig: a.marca),
+    "modelo": ("Modelo", lambda a, asig: a.modelo),
+    "serial": ("Serial", lambda a, asig: a.serial),
+    "estado": ("Estado", lambda a, asig: a.get_estado_display()),
+    "ubicacion": ("Ubicación física", lambda a, asig: a.ubicacion_fisica),
+    "fecha_compra": ("Fecha de compra", lambda a, asig: a.fecha_compra.strftime("%Y-%m-%d") if a.fecha_compra else ""),
+    "proveedor": ("Proveedor", lambda a, asig: a.proveedor),
+    "valor_compra": ("Valor de compra", lambda a, asig: float(a.valor_compra) if a.valor_compra else None),
+    "garantia_meses": ("Garantía fábrica (meses)", lambda a, asig: a.garantia_fabrica_meses),
+    "garantia_extendida": ("Garantía extendida", lambda a, asig: "Sí" if a.garantia_extendida else "No"),
+    "garantia_anos": ("Años garantía extendida", lambda a, asig: a.anios_garantia_extendida),
+    "en_garantia": ("En garantía", lambda a, asig: "Sí" if a.en_garantia else "No"),
+    "fecha_vencimiento_garantia": ("Fecha vencimiento garantía", lambda a, asig: a.fecha_vencimiento_garantia.strftime("%Y-%m-%d") if a.fecha_vencimiento_garantia else ""),
+    "observaciones": ("Observaciones", lambda a, asig: a.observaciones),
+    # ── Escritorio / Portátil ────────────────────────────────────────────────
+    "nombre_equipo": ("Nombre del equipo", lambda a, asig: getattr(a, "nombre_equipo", "") or ""),
+    "disco_capacidad": ("Capacidad disco", lambda a, asig: a.disco_capacidad),
+    "tipo_disco": ("Tipo de disco", lambda a, asig: a.tipo_disco),
+    "ram": ("RAM", lambda a, asig: a.ram),
+    "procesador": ("Procesador", lambda a, asig: a.procesador),
+    "sistema_operativo": ("Sistema operativo", lambda a, asig: a.sistema_operativo),
+    "licencia_so": ("Licencia SO", lambda a, asig: a.licencia_so),
+    "usuario_red": ("Usuario de red", lambda a, asig: a.usuario_red),
+    "usuario_admin_local": ("Admin local", lambda a, asig: a.usuario_admin_local),
+    "ip_equipo": ("IP del equipo", lambda a, asig: a.ip_equipo or ""),
+    "mac_equipo": ("MAC del equipo", lambda a, asig: a.mac_equipo),
+    # ── Celular ───────────────────────────────────────────────────────────────
+    "imei": ("IMEI", lambda a, asig: a.imei or ""),
+    "almacenamiento": ("Almacenamiento", lambda a, asig: a.almacenamiento),
+    "ram_celular": ("RAM (celular)", lambda a, asig: a.ram_celular),
+    "procesador_celular": ("Procesador (celular)", lambda a, asig: a.procesador_celular),
+    "tipo_disco_celular": ("Tipo de disco (celular)", lambda a, asig: a.tipo_disco_celular),
+    "cuenta_correo_dispositivo": ("Correo dispositivo", lambda a, asig: a.cuenta_correo_dispositivo),
+    "numero_linea": ("Número de línea", lambda a, asig: a.numero_linea),
+    "operador": ("Operador", lambda a, asig: a.operador),
+    # ── Teléfono fijo ─────────────────────────────────────────────────────────
+    "extension": ("Extensión", lambda a, asig: a.extension),
+    "puerto_jack": ("Puerto / Jack", lambda a, asig: a.puerto_jack),
+    "linea_asignada": ("Línea asignada", lambda a, asig: a.linea_asignada),
+    # ── Monitor ───────────────────────────────────────────────────────────────
+    "pulgadas": ("Pulgadas", lambda a, asig: float(a.pulgadas) if a.pulgadas else None),
+    "resolucion": ("Resolución", lambda a, asig: a.resolucion),
+    "tipo_panel": ("Tipo de panel", lambda a, asig: a.tipo_panel),
+    "conectores": ("Conectores", lambda a, asig: a.conectores),
+    # ── Asignación ────────────────────────────────────────────────────────────
+    "asignado_a": ("Asignado a", lambda a, asig: asig.usuario.nombre_completo if asig else ""),
+    "documento_usuario": ("Documento usuario", lambda a, asig: asig.usuario.documento_identidad if asig else ""),
+    "area_usuario": ("Área usuario", lambda a, asig: asig.usuario.area if asig else ""),
+    "fecha_asignacion": ("Fecha asignación", lambda a, asig: asig.fecha_asignacion.strftime("%Y-%m-%d") if asig else ""),
+    # ── Metadatos ─────────────────────────────────────────────────────────────
+    "fecha_creacion": ("Fecha creación", lambda a, asig: a.fecha_creacion.strftime("%Y-%m-%d %H:%M")),
+    "ultima_actualizacion": ("Última actualización", lambda a, asig: a.fecha_actualizacion.strftime("%Y-%m-%d %H:%M")),
+}
 
 
 def _parse_date(value):
@@ -186,12 +252,36 @@ def _build_report_context(rango_inicio, rango_fin):
 # ── Helpers de estilo Excel REDIHOS ──────────────────────────────────────────
 
 def _add_redihos_logo(ws, logo_path=LOGO_PATH):
-    """Inserta el logo de REDIHOS en A1 si existe."""
-    if os.path.exists(logo_path):
-        img = XLImage(logo_path)
-        img.width = 28
-        img.height = 28
-        ws.add_image(img, "A1")
+    """Inserta el logo de REDIHOS centrado en el área combinada A1:B1."""
+    if not os.path.exists(logo_path):
+        return
+
+    img = XLImage(logo_path)
+    with PILImage.open(logo_path) as pil_img:
+        w, h = pil_img.size
+    img.height = 42
+    img.width = int(42 * (w / h))
+
+    # Área disponible: columnas A+B combinadas, fila 1.
+    # Aproximación: 1 unidad de ancho de columna ≈ 7 px; 1 punto de alto ≈ 4/3 px.
+    col_a_width = ws.column_dimensions["A"].width or 10
+    col_b_width = ws.column_dimensions["B"].width or 10
+    available_width_px = (col_a_width + col_b_width) * 7
+
+    row_height_pts = ws.row_dimensions[1].height or 48
+    available_height_px = row_height_pts * 4 / 3
+
+    off_x = max(0, int((available_width_px - img.width) / 2))
+    off_y = max(0, int((available_height_px - img.height) / 2))
+
+    img.anchor = OneCellAnchor(
+        _from=AnchorMarker(
+            col=0, colOff=pixels_to_EMU(off_x),
+            row=0, rowOff=pixels_to_EMU(off_y),
+        ),
+        ext=XDRPositiveSize2D(cx=pixels_to_EMU(img.width), cy=pixels_to_EMU(img.height)),
+    )
+    ws.add_image(img, "A1")
 
 
 def _apply_redihos_header(ws, headers, title, logo_path=LOGO_PATH):
@@ -213,35 +303,40 @@ def _apply_redihos_header(ws, headers, title, logo_path=LOGO_PATH):
     thin_side = Side(style="thin", color="D1D5DB")
     border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
+    # Filas 1-4: encabezado corporativo.
+    # Columnas A y B se reservan para el logo; el texto arranca en C.
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 10
+
     # Fila 1: banner
-    ws.merge_cells(f"A1:{last_col}1")
-    ws["A1"] = "REDIHOS S.A.S."
-    ws["A1"].fill = banner_fill
-    ws["A1"].font = banner_font
-    ws["A1"].alignment = Alignment(horizontal="left", vertical="center", indent=4)
-    ws.row_dimensions[1].height = 32
+    ws.merge_cells("A1:B1")
+    ws.merge_cells(f"C1:{last_col}1")
+    ws["C1"] = "REDIHOS S.A.S."
+    ws["C1"].fill = banner_fill
+    ws["C1"].font = banner_font
+    ws["C1"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[1].height = 48
     _add_redihos_logo(ws, logo_path)
-    ws.column_dimensions["A"].width = 6
 
     # Fila 2: subtítulo
-    ws.merge_cells(f"A2:{last_col}2")
-    ws["A2"] = f"Reporte de {title}"
-    ws["A2"].fill = subtitle_fill
-    ws["A2"].font = subtitle_font
-    ws["A2"].alignment = Alignment(horizontal="left", vertical="center", indent=2)
+    ws.merge_cells(f"C2:{last_col}2")
+    ws["C2"] = f"Reporte de {title}"
+    ws["C2"].fill = subtitle_fill
+    ws["C2"].font = subtitle_font
+    ws["C2"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
     ws.row_dimensions[2].height = 22
 
-    # Fila 3: franja naranja
+    # Fila 3: franja naranja (completa, incluyendo zona del logo)
     ws.merge_cells(f"A3:{last_col}3")
     for col in range(1, len(headers) + 1):
         ws.cell(row=3, column=col).fill = accent_fill
     ws.row_dimensions[3].height = 4
 
     # Fila 4: metadato
-    ws.merge_cells(f"A4:{last_col}4")
-    ws["A4"] = f"Generado por SysAdmin · {fecha} · Confidencial — uso interno"
-    ws["A4"].font = meta_font
-    ws["A4"].alignment = Alignment(horizontal="left", vertical="center", indent=2)
+    ws.merge_cells(f"C4:{last_col}4")
+    ws["C4"] = f"Generado por SysAdmin · {fecha} · Confidencial — uso interno"
+    ws["C4"].font = meta_font
+    ws["C4"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
     ws.row_dimensions[4].height = 16
 
     # Fila 6: headers de tabla
@@ -280,14 +375,19 @@ def _apply_redihos_data_style(ws, start_row, num_cols):
             cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
 
-def _adjust_column_widths(ws, headers, min_width=12, max_width=55):
-    """Ajusta el ancho de cada columna al contenido real."""
+def _adjust_column_widths(ws, headers, data_end_row=None, min_width=12, max_width=55):
+    """Ajusta el ancho de cada columna al contenido real.
+
+    Si `data_end_row` se proporciona, solo se mide hasta esa fila (útil para no
+    incluir secciones de resumen que puedan inflar columnas como la A).
+    """
+    max_row = data_end_row if data_end_row is not None else min(ws.max_row, 7 + 200)
     for col_idx, header in enumerate(headers, start=1):
         col_letter = get_column_letter(col_idx)
         max_len = len(str(header))
         for row in ws.iter_rows(
             min_row=7,
-            max_row=min(ws.max_row, 7 + 200),
+            max_row=max_row,
             min_col=col_idx,
             max_col=col_idx,
         ):
@@ -355,29 +455,87 @@ def index(request):
 
 @login_required
 def inventario_pdf(request):
-    today = timezone.now().date()
-    context = _build_report_context(today - timedelta(days=30), today)
-    activos = Activo.objects.prefetch_related(
+    # Selección de columnas
+    campos_solicitados = request.GET.getlist("campos")
+    campos = [c for c in campos_solicitados if c in CAMPOS_INVENTARIO] or list(CAMPOS_INVENTARIO.keys())
+
+    # Filtro por tipo de dispositivo
+    tipos_solicitados = request.GET.getlist("tipos")
+    filtrar_por_tipo = tipos_solicitados and "todos" not in tipos_solicitados
+
+    activos_qs = Activo.objects.prefetch_related(
         Prefetch(
             "asignaciones",
             queryset=Asignacion.objects.filter(activa=True).select_related("usuario"),
             to_attr="asignaciones_activas",
         )
-    ).order_by("estado", "marca", "modelo")
+    ).order_by("tipo_dispositivo", "marca", "modelo")
 
-    estados_counts = {key: 0 for key, _ in ESTADOS}
-    for row in Activo.objects.values("estado").annotate(total=Count("id")):
-        estados_counts[row["estado"]] = row["total"]
+    if filtrar_por_tipo:
+        activos_qs = activos_qs.filter(tipo_dispositivo__in=tipos_solicitados)
 
-    context.update({
-        "fecha_generacion": timezone.now(),
-        "activos": activos,
-        "disponibles": estados_counts.get("disponible", 0),
-        "asignados": estados_counts.get("asignado", 0),
-        "baja": estados_counts.get("dado_de_baja", 0),
+    columnas = [(c, CAMPOS_INVENTARIO[c][0]) for c in campos]
+    filas = []
+    for activo in activos_qs:
+        asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
+        celdas = []
+        for c in campos:
+            raw = CAMPOS_INVENTARIO[c][1](activo, asignacion)
+            celda = {"key": c, "label": CAMPOS_INVENTARIO[c][0], "valor": raw}
+            if c == "estado":
+                celda["css_clase"] = activo.estado
+            elif c == "valor_compra" and raw is not None:
+                celda["valor"] = f"${raw:,.0f} COP"
+            celdas.append(celda)
+        filas.append({
+            "id": activo.id,
+            "tipo": activo.get_tipo_dispositivo_display(),
+            "marca": activo.marca,
+            "modelo": activo.modelo,
+            "celdas": [c for c in celdas if c["key"] not in ("id", "tipo", "marca", "modelo")],
+        })
+
+    tipos_a_resumir = (
+        [(key, label) for key, label in TIPOS if key in tipos_solicitados]
+        if filtrar_por_tipo else TIPOS
+    )
+    resumen = []
+    for key, label in tipos_a_resumir:
+        qs = activos_qs.filter(tipo_dispositivo=key)
+        resumen.append({
+            "label": label,
+            "total": qs.count(),
+            "disponibles": qs.filter(estado="disponible").count(),
+            "asignados": qs.filter(estado="asignado").count(),
+            "mantenimiento": qs.filter(estado="en_mantenimiento").count(),
+            "reparacion": qs.filter(estado="en_reparacion").count(),
+            "baja": qs.filter(estado="dado_de_baja").count(),
+        })
+
+    totales = {"activos": activos_qs.count()}
+    if "valor_compra" in campos:
+        total_valor = sum(
+            (a.valor_compra or Decimal("0")) for a in activos_qs.exclude(valor_compra__isnull=True)
+        )
+        totales["valor"] = f"${total_valor:,.0f} COP"
+    if "estado" in campos:
+        totales["estado"] = {
+            "disponibles": activos_qs.filter(estado="disponible").count(),
+            "asignados": activos_qs.filter(estado="asignado").count(),
+            "mantenimiento": activos_qs.filter(estado="en_mantenimiento").count(),
+            "reparacion": activos_qs.filter(estado="en_reparacion").count(),
+            "baja": activos_qs.filter(estado="dado_de_baja").count(),
+        }
+
+    html_string = render_to_string("reports/inventario_pdf.html", {
+        "columnas": columnas,
+        "filas": filas,
+        "resumen": resumen,
+        "totales": totales,
+        "campos": campos,
+        "logo_path": LOGO_PATH,
+        "generado": timezone.now(),
     })
-
-    html_string = render_to_string("reports/inventario_pdf.html", context)
     pdf_bytes = weasyprint.HTML(
         string=html_string, base_url=request.build_absolute_uri("/")
     ).write_pdf()
@@ -413,45 +571,27 @@ def usuarios_pdf(request):
 @login_required
 def inventario_excel(request):
     wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventario"
 
-    # Hoja de resumen
-    ws_resumen = wb.active
-    ws_resumen.title = "Resumen"
-    _style_summary_sheet(ws_resumen, "Inventario")
+    # Selección de columnas
+    campos_solicitados = request.GET.getlist("campos")
+    if campos_solicitados:
+        campos = [c for c in campos_solicitados if c in CAMPOS_INVENTARIO]
+    else:
+        campos = list(CAMPOS_INVENTARIO.keys())
 
-    activos_por_estado, activos_por_tipo = _build_activos_resumen()
-    ws_resumen["A6"] = "Total activos"
-    ws_resumen["B6"] = Activo.objects.count()
-    ws_resumen["A7"] = "Por estado"
-    ws_resumen["B7"] = "Total"
-    for idx, item in enumerate(activos_por_estado, start=8):
-        ws_resumen.cell(row=idx, column=1, value=item["label"])
-        ws_resumen.cell(row=idx, column=2, value=item["total"])
-    offset = 8 + len(activos_por_estado) + 1
-    ws_resumen.cell(row=offset, column=1, value="Por tipo")
-    ws_resumen.cell(row=offset, column=2, value="Total")
-    for idx, item in enumerate(activos_por_tipo, start=offset + 1):
-        ws_resumen.cell(row=idx, column=1, value=item["label"])
-        ws_resumen.cell(row=idx, column=2, value=item["total"])
+    # Filtro por tipo de dispositivo
+    tipos_solicitados = request.GET.getlist("tipos")
+    filtrar_por_tipo = tipos_solicitados and "todos" not in tipos_solicitados
+    tipos_a_resumir = (
+        [(key, label) for key, label in TIPOS if key in tipos_solicitados]
+        if filtrar_por_tipo else TIPOS
+    )
 
-    # Hoja de activos
-    ws_activos = wb.create_sheet(title="Activos")
-    headers = [
-        "ID", "Tipo", "Marca", "Modelo", "Serial", "Nombre equipo",
-        "Estado", "Ubicacion fisica", "Fecha compra", "Proveedor",
-        "Valor compra", "Garantia fabrica (meses)", "Garantia extendida",
-        "Anios garantia extendida", "En garantia", "Fecha vencimiento garantia",
-        "IMEI", "Almacenamiento", "RAM (celular)", "Procesador (celular)",
-        "Tipo disco (celular)", "Correo dispositivo", "Numero linea", "Operador",
-        "Disco capacidad", "Tipo disco", "RAM", "Procesador",
-        "Sistema operativo", "Licencia SO", "Usuario red", "Usuario admin local",
-        "IP equipo", "MAC equipo",
-        "Extension", "Puerto jack", "Linea asignada",
-        "Pulgadas", "Resolucion", "Tipo panel", "Conectores",
-        "Asignado a", "Documento usuario", "Area usuario", "Fecha asignacion",
-        "Observaciones", "Fecha creacion", "Ultima actualizacion",
-    ]
-    start_row = _apply_redihos_header(ws_activos, headers, "Inventario")
+    headers = [CAMPOS_INVENTARIO[c][0] for c in campos]
+    last_col_letter = get_column_letter(len(headers))
+    start_row = _apply_redihos_header(ws, headers, "Inventario")
 
     activos = Activo.objects.prefetch_related(
         Prefetch(
@@ -461,66 +601,141 @@ def inventario_excel(request):
         )
     ).order_by("tipo_dispositivo", "marca", "modelo")
 
-    valor_col = headers.index("Valor compra") + 1
+    if filtrar_por_tipo:
+        activos = activos.filter(tipo_dispositivo__in=tipos_solicitados)
 
     for row_idx, activo in enumerate(activos, start=start_row):
         asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
-        row = [
-            activo.id,
-            activo.get_tipo_dispositivo_display(),
-            activo.marca,
-            activo.modelo,
-            activo.serial,
-            getattr(activo, "nombre_equipo", "") or "",
-            activo.get_estado_display(),
-            activo.ubicacion_fisica,
-            activo.fecha_compra.strftime("%Y-%m-%d") if activo.fecha_compra else "",
-            activo.proveedor,
-            float(activo.valor_compra) if activo.valor_compra else None,
-            activo.garantia_fabrica_meses,
-            "Si" if activo.garantia_extendida else "No",
-            activo.anios_garantia_extendida,
-            "Si" if activo.en_garantia else "No",
-            activo.fecha_vencimiento_garantia.strftime("%Y-%m-%d") if activo.fecha_vencimiento_garantia else "",
-            activo.imei or "",
-            activo.almacenamiento,
-            activo.ram_celular,
-            activo.procesador_celular,
-            activo.tipo_disco_celular,
-            activo.cuenta_correo_dispositivo,
-            activo.numero_linea,
-            activo.operador,
-            activo.disco_capacidad,
-            activo.tipo_disco,
-            activo.ram,
-            activo.procesador,
-            activo.sistema_operativo,
-            activo.licencia_so,
-            activo.usuario_red,
-            activo.usuario_admin_local,
-            activo.ip_equipo or "",
-            activo.mac_equipo,
-            activo.extension,
-            activo.puerto_jack,
-            activo.linea_asignada,
-            float(activo.pulgadas) if activo.pulgadas else None,
-            activo.resolucion,
-            activo.tipo_panel,
-            activo.conectores,
-            asignacion.usuario.nombre_completo if asignacion else "",
-            asignacion.usuario.documento_identidad if asignacion else "",
-            asignacion.usuario.area if asignacion else "",
-            asignacion.fecha_asignacion.strftime("%Y-%m-%d") if asignacion else "",
-            activo.observaciones,
-            activo.fecha_creacion.strftime("%Y-%m-%d %H:%M"),
-            activo.fecha_actualizacion.strftime("%Y-%m-%d %H:%M"),
-        ]
-        ws_activos.append(row)
+        row = [CAMPOS_INVENTARIO[c][1](activo, asignacion) for c in campos]
+        ws.append(row)
 
-    _apply_redihos_data_style(ws_activos, start_row, len(headers))
-    for row_idx in range(start_row, ws_activos.max_row + 1):
-        ws_activos.cell(row=row_idx, column=valor_col).number_format = '$#,##0'
-    _adjust_column_widths(ws_activos, headers)
+    _apply_redihos_data_style(ws, start_row, len(headers))
+
+    # Formato monetario para valor_compra si está presente
+    if "valor_compra" in campos:
+        valor_col = campos.index("valor_compra") + 1
+        for row_idx in range(start_row, ws.max_row + 1):
+            ws.cell(row=row_idx, column=valor_col).number_format = '$#,##0'
+
+    # ── Resumen por categorías (tipo de dispositivo) ─────────────────────────
+    thin_side = Side(style="thin", color="D1D5DB")
+    border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    data_font = Font(name="Calibri", size=10, color=GRIS_TXT)
+    white_fill = PatternFill(start_color=BLANCO, end_color=BLANCO, fill_type="solid")
+    blue_light_fill = PatternFill(start_color=AZUL_CLARO, end_color=AZUL_CLARO, fill_type="solid")
+    section_title_font = Font(name="Calibri", bold=True, size=12, color=AZUL_OSCURO)
+    section_title_fill = PatternFill(start_color=AZUL_CLARO, end_color=AZUL_CLARO, fill_type="solid")
+    header_fill = PatternFill(start_color=AZUL, end_color=AZUL, fill_type="solid")
+    header_font = Font(name="Calibri", bold=True, size=10, color=BLANCO)
+
+    resumen_start = ws.max_row + 3
+    ws.merge_cells(f"A{resumen_start}:{last_col_letter}{resumen_start}")
+    title_cell = ws.cell(row=resumen_start, column=1, value="Resumen por categorías")
+    title_cell.font = section_title_font
+    title_cell.fill = section_title_fill
+    title_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[resumen_start].height = 22
+
+    resumen_headers = [
+        "Categoría", "Total", "Disponibles", "Asignados",
+        "En mantenimiento", "En reparación", "Dados de baja"
+    ]
+    header_row = resumen_start + 1
+    for col_idx, h in enumerate(resumen_headers, start=1):
+        cell = ws.cell(row=header_row, column=col_idx, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+    ws.row_dimensions[header_row].height = 26
+
+    data_start = header_row + 1
+    for idx, (key, label) in enumerate(tipos_a_resumir, start=data_start):
+        qs = activos.filter(tipo_dispositivo=key)
+        values = [
+            label,
+            qs.count(),
+            qs.filter(estado="disponible").count(),
+            qs.filter(estado="asignado").count(),
+            qs.filter(estado="en_mantenimiento").count(),
+            qs.filter(estado="en_reparacion").count(),
+            qs.filter(estado="dado_de_baja").count(),
+        ]
+        fill = white_fill if (idx - data_start) % 2 == 0 else blue_light_fill
+        for col_idx, val in enumerate(values, start=1):
+            cell = ws.cell(row=idx, column=col_idx, value=val)
+            cell.font = data_font
+            cell.fill = fill
+            cell.border = border
+            cell.alignment = Alignment(
+                horizontal="left" if col_idx == 1 else "center",
+                vertical="center",
+                indent=1
+            )
+
+    # ── Fila de totales generales ────────────────────────────────────────────
+    totales_font = Font(name="Calibri", bold=True, size=11, color=AZUL_OSCURO)
+    totales_fill = PatternFill(start_color=AZUL_CLARO, end_color=AZUL_CLARO, fill_type="solid")
+    total_row = ws.max_row + 2
+
+    ws.merge_cells(f"A{total_row}:{last_col_letter}{total_row}")
+    total_cell = ws.cell(row=total_row, column=1, value=f"Total de activos: {activos.count()}")
+    total_cell.font = totales_font
+    total_cell.fill = totales_fill
+    total_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[total_row].height = 22
+
+    current_row = total_row + 1
+
+    if "valor_compra" in campos:
+        total_valor = sum(
+            (a.valor_compra or Decimal("0")) for a in activos.exclude(valor_compra__isnull=True)
+        )
+        ws.merge_cells(f"A{current_row}:{last_col_letter}{current_row}")
+        valor_cell = ws.cell(
+            row=current_row, column=1,
+            value=f"Valor total inventario: ${total_valor:,.0f} COP"
+        )
+        valor_cell.font = totales_font
+        valor_cell.fill = totales_fill
+        valor_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        ws.row_dimensions[current_row].height = 22
+        current_row += 1
+
+    if "estado" in campos:
+        qs = activos
+        ws.merge_cells(f"A{current_row}:{last_col_letter}{current_row}")
+        estado_cell = ws.cell(
+            row=current_row, column=1,
+            value=(
+                f"Por estado — Disponibles: {qs.filter(estado='disponible').count()} · "
+                f"Asignados: {qs.filter(estado='asignado').count()} · "
+                f"En mantenimiento: {qs.filter(estado='en_mantenimiento').count()} · "
+                f"En reparación: {qs.filter(estado='en_reparacion').count()} · "
+                f"Dados de baja: {qs.filter(estado='dado_de_baja').count()}"
+            )
+        )
+        estado_cell.font = totales_font
+        estado_cell.fill = totales_fill
+        estado_cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        ws.row_dimensions[current_row].height = 22
+
+    data_end_row = start_row + activos.count() - 1
+    _adjust_column_widths(ws, headers, data_end_row=data_end_row)
+
+    # Asegurar anchos mínimos para las columnas del resumen
+    for col_idx, h in enumerate(resumen_headers, start=1):
+        col_letter = get_column_letter(col_idx)
+        current = ws.column_dimensions[col_letter].width or 12
+        ws.column_dimensions[col_letter].width = max(current, len(h) + 4)
+
+    # Configuración de página: horizontal, ajustar ancho y centrado horizontal
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.print_options.verticalCentered = False
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

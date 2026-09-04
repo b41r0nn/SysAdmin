@@ -399,3 +399,102 @@ def editar_catalogo(request, pk):
         form = CatalogoModeloForm(instance=obj)
 
     return render(request, "inventario/form.html", {"form": form, "titulo": "Editar Modelo de Catálogo"})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Exportar inventario a Excel — selección de columnas
+# ══════════════════════════════════════════════════════════════════════════════
+
+@login_required
+def exportar_opciones(request):
+    secciones = [
+        {
+            "nombre": "Información general",
+            "campos": [
+                {"key": "id", "label": "ID"},
+                {"key": "tipo", "label": "Tipo de dispositivo"},
+                {"key": "marca", "label": "Marca"},
+                {"key": "modelo", "label": "Modelo"},
+                {"key": "serial", "label": "Serial"},
+                {"key": "estado", "label": "Estado"},
+                {"key": "ubicacion", "label": "Ubicación física"},
+                {"key": "fecha_compra", "label": "Fecha de compra"},
+                {"key": "proveedor", "label": "Proveedor"},
+                {"key": "valor_compra", "label": "Valor de compra"},
+                {"key": "observaciones", "label": "Observaciones"},
+            ],
+        },
+        {
+            "nombre": "Garantía",
+            "campos": [
+                {"key": "garantia_meses", "label": "Garantía fábrica (meses)"},
+                {"key": "garantia_extendida", "label": "Garantía extendida"},
+                {"key": "garantia_anos", "label": "Años garantía extendida"},
+                {"key": "en_garantia", "label": "En garantía"},
+                {"key": "fecha_vencimiento_garantia", "label": "Fecha vencimiento garantía"},
+            ],
+        },
+        {
+            "nombre": "Escritorio / Portátil",
+            "campos": [
+                {"key": "nombre_equipo", "label": "Nombre del equipo"},
+                {"key": "disco_capacidad", "label": "Capacidad disco"},
+                {"key": "tipo_disco", "label": "Tipo de disco"},
+                {"key": "ram", "label": "RAM"},
+                {"key": "procesador", "label": "Procesador"},
+                {"key": "sistema_operativo", "label": "Sistema operativo"},
+                {"key": "licencia_so", "label": "Licencia SO"},
+                {"key": "usuario_red", "label": "Usuario de red"},
+                {"key": "usuario_admin_local", "label": "Admin local"},
+                {"key": "ip_equipo", "label": "IP del equipo"},
+                {"key": "mac_equipo", "label": "MAC del equipo"},
+            ],
+        },
+        {
+            "nombre": "Celular",
+            "campos": [
+                {"key": "imei", "label": "IMEI"},
+                {"key": "almacenamiento", "label": "Almacenamiento"},
+                {"key": "ram_celular", "label": "RAM"},
+                {"key": "procesador_celular", "label": "Procesador"},
+                {"key": "tipo_disco_celular", "label": "Tipo de disco"},
+                {"key": "cuenta_correo_dispositivo", "label": "Cuenta correo"},
+                {"key": "numero_linea", "label": "Número de línea"},
+                {"key": "operador", "label": "Operador"},
+            ],
+        },
+        {
+            "nombre": "Teléfono fijo",
+            "campos": [
+                {"key": "extension", "label": "Extensión"},
+                {"key": "puerto_jack", "label": "Puerto / Jack"},
+                {"key": "linea_asignada", "label": "Línea asignada"},
+            ],
+        },
+        {
+            "nombre": "Monitor",
+            "campos": [
+                {"key": "pulgadas", "label": "Pulgadas"},
+                {"key": "resolucion", "label": "Resolución"},
+                {"key": "tipo_panel", "label": "Tipo de panel"},
+                {"key": "conectores", "label": "Conectores"},
+            ],
+        },
+        {
+            "nombre": "Asignación",
+            "campos": [
+                {"key": "asignado_a", "label": "Asignado a"},
+                {"key": "documento_usuario", "label": "Documento usuario"},
+                {"key": "area_usuario", "label": "Área usuario"},
+                {"key": "fecha_asignacion", "label": "Fecha asignación"},
+            ],
+        },
+        {
+            "nombre": "Metadatos",
+            "campos": [
+                {"key": "fecha_creacion", "label": "Fecha creación"},
+                {"key": "ultima_actualizacion", "label": "Última actualización"},
+            ],
+        },
+    ]
+    return render(request, "inventario/inventario_exportar_opciones.html", {"secciones": secciones})
