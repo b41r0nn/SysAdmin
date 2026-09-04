@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Exportar inventario — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'inventario:lista' %}" class="text-decoration-none">Inventario</a>
+    </li>
+    <li class="breadcrumb-item active">Exportar Excel</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-file-earmark-excel"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Exportar inventario</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">Selecciona el formato, el tipo de dispositivo y las columnas que deseas incluir.</p>
+        </div>
+      </div>
+
+      <form method="get" action="{% url 'reports:inventario_excel' %}" id="form-exportar"
+            data-url-excel="{% url 'reports:inventario_excel' %}"
+            data-url-pdf="{% url 'reports:inventario_pdf' %}">
+
+        <!-- Selector de formato -->
+        <fieldset class="sa-fieldset mb-4">
+          <legend>Formato de exportación</legend>
+          <div class="row g-2">
+            <div class="col-6 col-md-3">
+              <div class="form-check">
+                <input class="form-check-input formato-radio" type="radio" name="formato" value="excel" id="formato-excel" checked>
+                <label class="form-check-label" for="formato-excel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</label>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="form-check">
+                <input class="form-check-input formato-radio" type="radio" name="formato" value="pdf" id="formato-pdf">
+                <label class="form-check-label" for="formato-pdf"><i class="bi bi-filetype-pdf me-1"></i>PDF</label>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+        <!-- Filtro por tipo de dispositivo -->
+        <fieldset class="sa-fieldset mb-4">
+          <legend>Tipo de dispositivo</legend>
+          <div class="row g-2" id="tipo-filtro">
+            <div class="col-12 col-md-4 col-lg-3">
+              <div class="form-check">
+                <input class="form-check-input tipo-check" type="checkbox" name="tipos" value="todos" id="tipo-todos" checked>
+                <label class="form-check-label" for="tipo-todos">Todos los dispositivos</label>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+              <div class="form-check">
+                <input class="form-check-input tipo-check" type="checkbox" name="tipos" value="escritorio" id="tipo-escritorio">
+                <label class="form-check-label" for="tipo-escritorio">Computador de escritorio</label>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+              <div class="form-check">
+                <input class="form-check-input tipo-check" type="checkbox" name="tipos" value="portatil" id="tipo-portatil">
+                <label class="form-check-label" for="tipo-portatil">Portátil</label>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+              <div class="form-check">
+                <input class="form-check-input tipo-check" type="checkbox" name="tipos" value="celular" id="tipo-celular">
+                <label class="form-check-label" for="tipo-celular">Celular</label>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+              <div class="form-check">
+                <input class="form-check-input tipo-check" type="checkbox" name="tipos" value="telefono_fijo" id="tipo-telefono">
+                <label class="form-check-label" for="tipo-telefono">Teléfono fijo</label>
+              </div>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+              <div class="form-check">
+                <input class="form-check-input tipo-check" type="checkbox" name="tipos" value="monitor" id="tipo-monitor">
+                <label class="form-check-label" for="tipo-monitor">Monitor</label>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="row g-4" id="secciones-container">
+          {% for seccion in secciones %}
+          <div class="col-12 col-md-6 seccion-col"
+               {% if seccion.nombre == "Información general" or seccion.nombre == "Garantía" or seccion.nombre == "Asignación" or seccion.nombre == "Metadatos" %}data-common="true"{% endif %}
+               {% if seccion.nombre == "Escritorio / Portátil" %}data-tipos="escritorio,portatil"{% endif %}
+               {% if seccion.nombre == "Celular" %}data-tipos="celular"{% endif %}
+               {% if seccion.nombre == "Teléfono fijo" %}data-tipos="telefono_fijo"{% endif %}
+               {% if seccion.nombre == "Monitor" %}data-tipos="monitor"{% endif %}>
+            <fieldset class="sa-fieldset">
+              <legend>{{ seccion.nombre }}</legend>
+              <div class="row g-2">
+                {% for campo in seccion.campos %}
+                <div class="col-12 col-md-6">
+                  <div class="form-check">
+                    <input class="form-check-input campo-check" type="checkbox"
+                           name="campos" value="{{ campo.key }}" id="campo_{{ campo.key }}" checked>
+                    <label class="form-check-label" for="campo_{{ campo.key }}">
+                      {{ campo.label }}
+                    </label>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </fieldset>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="d-flex gap-2 justify-content-end pt-3 mt-4"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <button type="button" class="btn btn-outline-secondary" id="btn-completo">
+            <i class="bi bi-check-all me-2"></i>Reporte completo
+          </button>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-file-earmark-arrow-down me-2"></i>Generar con selección
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('form-exportar');
+  const btnCompleto = document.getElementById('btn-completo');
+  const tipoTodos = document.getElementById('tipo-todos');
+  const tipoChecks = document.querySelectorAll('.tipo-check:not(#tipo-todos)');
+  const seccionCols = document.querySelectorAll('.seccion-col');
+  const campoChecks = document.querySelectorAll('.campo-check');
+  const formatoRadios = document.querySelectorAll('.formato-radio');
+  const urlExcel = form.getAttribute('data-url-excel');
+  const urlPdf = form.getAttribute('data-url-pdf');
+
+  function updateAction() {
+    const selected = Array.from(formatoRadios).find(function (r) { return r.checked; });
+    const isPdf = selected && selected.value === 'pdf';
+    form.action = isPdf ? urlPdf : urlExcel;
+    form.target = isPdf ? '_blank' : '';
+  }
+
+  formatoRadios.forEach(function (radio) {
+    radio.addEventListener('change', updateAction);
+  });
+
+  function getSelectedTipos() {
+    return Array.from(tipoChecks).filter(function (chk) { return chk.checked; }).map(function (chk) { return chk.value; });
+  }
+
+  function updateSections() {
+    const todosChecked = tipoTodos.checked;
+    const selected = getSelectedTipos();
+    const mostrarTodo = todosChecked || selected.length === 0;
+
+    seccionCols.forEach(function (col) {
+      const isCommon = col.getAttribute('data-common') === 'true';
+      const tiposAttr = col.getAttribute('data-tipos');
+      const tipos = tiposAttr ? tiposAttr.split(',') : [];
+      const visible = mostrarTodo || isCommon || tipos.some(function (t) { return selected.indexOf(t) !== -1; });
+
+      if (visible) {
+        col.style.display = '';
+        col.querySelectorAll('.campo-check').forEach(function (chk) {
+          chk.disabled = false;
+        });
+      } else {
+        col.style.display = 'none';
+        col.querySelectorAll('.campo-check').forEach(function (chk) {
+          chk.disabled = true;
+        });
+      }
+    });
+  }
+
+  // Cambios en checkboxes de tipo
+  tipoTodos.addEventListener('change', function () {
+    if (tipoTodos.checked) {
+      tipoChecks.forEach(function (chk) { chk.checked = false; });
+    }
+    updateSections();
+  });
+
+  tipoChecks.forEach(function (chk) {
+    chk.addEventListener('change', function () {
+      if (chk.checked) {
+        tipoTodos.checked = false;
+      }
+      updateSections();
+    });
+  });
+
+  // Reporte completo: marcar todo y enviar
+  if (btnCompleto) {
+    btnCompleto.addEventListener('click', function () {
+      tipoTodos.checked = true;
+      tipoChecks.forEach(function (chk) { chk.checked = false; });
+      campoChecks.forEach(function (chk) { chk.checked = true; chk.disabled = false; });
+      updateSections();
+      form.submit();
+    });
+  }
+
+  // Antes de enviar, habilitar todos los inputs para que lleguen correctamente
+  form.addEventListener('submit', function () {
+    campoChecks.forEach(function (chk) { chk.disabled = false; });
+  });
+
+  updateAction();
+  updateSections();
+})();
+</script>
+{% endblock %}

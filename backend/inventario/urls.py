@@ -24,4 +24,7 @@ urlpatterns = [
     path("catalogo/nuevo/", views.crear_catalogo, name="catalogo_crear"),
     path("catalogo/<int:pk>/editar/", views.editar_catalogo, name="catalogo_editar"),
     path("catalogo/json/", views.catalogo_json, name="catalogo_json"),
+
+    # ── Exportar Excel ────────────────────────────────────────────────────────
+    path("exportar/opciones/", views.exportar_opciones, name="exportar_opciones"),
 ]

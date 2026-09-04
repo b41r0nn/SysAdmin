@@ -1,72 +1,127 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 10pt; }
-    .header { border-bottom: 2px solid #1a56db; padding-bottom: 10px; margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; }
-    th { background-color: #f1f5f9; color: #1a56db; padding: 8px; border: 1px solid #e2e8f0; }
-    td { padding: 8px; border: 1px solid #e2e8f0; }
-    .badge { padding: 2px 6px; border-radius: 3px; font-weight: bold; }
-    .success { background-color: #dcfce7; color: #15803d; }
-    .primary { background-color: #dbeafe; color: #1e40af; }
-    .danger { background-color: #fee2e2; color: #991b1b; }
-  </style>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm 18mm 10mm;
+    @bottom-center { content: element(footer); }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", Arial, Helvetica, sans-serif; color: #1F2937; font-size: 8.5pt; margin: 0; }
+  .banner { display: flex; align-items: stretch; width: 100%; }
+  .banner .logo-plate { background: #FFFFFF; padding: 8px 18px; display: flex; align-items: center; border-bottom: 3px solid #F18020; }
+  .banner .logo-plate img { height: 40px; width: auto; display: block; }
+  .banner .title-block { flex: 1; background: linear-gradient(135deg, #0156A6 0%, #013D7A 100%); color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 6px 18px; border-bottom: 3px solid #F18020; }
+  .banner .title-block .titulo { font-size: 14pt; font-weight: bold; letter-spacing: .4px; }
+  .banner .title-block .subtitulo { font-size: 7.5pt; opacity: .85; margin-top: 2px; }
+  #footer { position: running(footer); }
+  .footbar { display: flex; justify-content: space-between; align-items: center; font-size: 7pt; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 3px; }
+  .footbar .page-num::after { content: counter(page) " / " counter(pages); }
+
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .card {
+    width: calc(50% - 5px);
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-top: 3px solid #0156A6;
+    border-radius: 5px;
+    padding: 8px 10px;
+    page-break-inside: avoid;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #E6F0FA;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+  }
+  .card-title { font-size: 9pt; font-weight: bold; color: #013D7A; }
+  .card-id { font-size: 7pt; color: #6B7280; }
+  .fields { display: flex; flex-wrap: wrap; }
+  .field { width: 33.33%; padding: 3px 4px; }
+  .field.half { width: 50%; }
+  .field.full { width: 100%; }
+  .field-label { font-size: 6.5pt; color: #6B7280; text-transform: uppercase; letter-spacing: .3px; }
+  .field-value { font-size: 7.5pt; color: #1F2937; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 6.5pt; font-weight: bold; white-space: nowrap; }
+  .badge.asignado { background: #DBEAFE; color: #1D4ED8; }
+  .badge.disponible { background: #DCFCE7; color: #15803D; }
+  .badge.dado_de_baja { background: #FEE2E2; color: #B91C1C; }
+  .badge.en_mantenimiento, .badge.en_reparacion { background: #FEF3C7; color: #B45309; }
+  .empty { text-align: center; color: #6B7280; padding: 20px; width: 100%; }
+
+  .resumen { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 110px; background: #F8FAFC; border: 1px solid #E5E7EB; border-left: 4px solid #0156A6; border-radius: 4px; padding: 8px 10px; }
+  .stat .label { font-size: 7.5pt; color: #6B7280; text-transform: uppercase; letter-spacing: .3px; }
+  .stat .value { font-size: 15pt; font-weight: bold; color: #013D7A; }
+  .stat.accent { border-left-color: #F18020; }
+</style>
 </head>
 <body>
-  <div class="header">
-    <h2>REPORTE INVENTARIO</h2>
-    <p>Generado: {{ fecha_generacion|date:"d/m/Y H:i" }}</p>
+  <div class="banner">
+    <div class="logo-plate"><img src="file://{{ logo_path }}"></div>
+    <div class="title-block">
+      <div class="titulo">REPORTE DE INVENTARIO</div>
+      <div class="subtitulo">Generado: {{ generado|date:"d/m/Y H:i" }} · SysAdmin · Confidencial, uso interno</div>
+    </div>
+  </div>
+  <div id="footer">
+    <div class="footbar"><div>REDIHOS S.A.S. — Confidencial, uso interno</div><div class="page-num"></div></div>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>NOMBRE</th>
-        <th>SERIAL</th>
-        <th>MODELO</th>
-        <th>ESTADO</th>
-        <th>ASIGNADO A</th>
-        <th>PRECIO</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if activos %}
-        {% for activo in activos %}
-        <tr>
-          <td>{{ activo.marca }} {{ activo.modelo }}</td>
-          <td>{{ activo.serial }}</td>
-          <td>{{ activo.modelo }}</td>
-          <td>
-            <span class="badge {% if activo.estado == 'disponible' %}success{% elif activo.estado == 'asignado' %}primary{% else %}danger{% endif %}">
-              {{ activo.get_estado_display }}
-            </span>
-          </td>
-          <td>
-            {% if activo.asignaciones_activas %}
-              {% with asignacion=activo.asignaciones_activas.0 %}
-                {% if asignacion.usuario %}{{ asignacion.usuario.nombre_completo }}{% else %}N/A{% endif %}
-              {% endwith %}
+  <div class="cards">
+    {% for item in filas %}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          {% if item.tipo %}{{ item.tipo }} — {% endif %}{% if item.marca %}{{ item.marca }}{% endif %}{% if item.modelo %} {{ item.modelo }}{% endif %}
+        </div>
+        <div class="card-id">#{{ item.id }}</div>
+      </div>
+      <div class="fields">
+        {% for celda in item.celdas %}
+        <div class="field {% if celda.key == 'observaciones' %}full{% endif %}">
+          <div class="field-label">{{ celda.label }}</div>
+          <div class="field-value">
+            {% if celda.key == "estado" %}
+              <span class="badge {{ celda.css_clase }}">{{ celda.valor }}</span>
             {% else %}
-              N/A
+              {{ celda.valor|default:"—" }}
             {% endif %}
-          </td>
-          <td>${{ activo.valor_compra|default:"N/A" }}</td>
-        </tr>
+          </div>
+        </div>
         {% endfor %}
-      {% else %}
-        <tr>
-          <td colspan="6" style="text-align:center;">Sin datos</td>
-        </tr>
-      {% endif %}
-    </tbody>
-  </table>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty">No hay activos para los criterios seleccionados.</div>
+    {% endfor %}
+  </div>
 
-  <div style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
-    <p><strong>Total activos:</strong> {{ activos|length }}</p>
-    <p><strong>Disponibles:</strong> {{ disponibles }}</p>
-    <p><strong>Asignados:</strong> {{ asignados }}</p>
-    <p><strong>Baja:</strong> {{ baja }}</p>
+  <div class="resumen">
+    <div class="stat">
+      <div class="label">Total activos</div>
+      <div class="value">{{ totales.activos }}</div>
+    </div>
+    {% if totales.valor %}
+    <div class="stat accent">
+      <div class="label">Valor total</div>
+      <div class="value">{{ totales.valor }}</div>
+    </div>
+    {% endif %}
+    {% if totales.estado %}
+    <div class="stat">
+      <div class="label">Disponibles</div>
+      <div class="value">{{ totales.estado.disponibles }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Asignados</div>
+      <div class="value">{{ totales.estado.asignados }}</div>
+    </div>
+    {% endif %}
   </div>
 </body>
 </html>
