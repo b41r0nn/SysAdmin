@@ -1,6 +1,6 @@
 # SysAdmin · Sistema de Gestión IT
 
-> **Versión:** 1.1.0 · **Fecha:** 2026-09-03 · **Estado:** Etapas 0-7B + Documentos Completas  
+> **Versión:** 1.1.0 · **Fecha:** 2026-09-04 · **Estado:** Etapas 0-7B + Documentos Completas  
 > Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG y repositorio de documentos
 
 ---
@@ -297,11 +297,13 @@ Gestión de personal de la organización.
 Generación de reportes y exportación de datos.
 
 **Reportes disponibles:**
-- 📄 PDF de inventario completo con estadísticas
+- 📄 PDF de inventario con estilo de marca, columnas configurables y filtro por tipo
 - 📄 PDF de usuarios por área
-- 📊 Excel de inventario detallado
+- 📊 Excel de inventario detallado (columnas seleccionables, resumen por categorías, totales)
 - 📊 Excel de movimientos (filtrable por fecha)
 - 📊 Excel de costos y amortización
+
+**Pantalla de opciones de exportación:** `/inventario/exportar/opciones/` permite elegir formato (Excel/PDF), tipo de dispositivo y columnas.
 
 **Acceso:** `http://192.168.1.250/reports/`
 
@@ -473,6 +475,15 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
+### 2026-09-04 — Post-v1.1.0: Reportes configurables
+
+- ✅ Reporte PDF de inventario rediseñado con estilo de marca, columnas configurables y filtro por tipo
+- ✅ Reporte Excel de inventario unificado en una sola hoja con columnas seleccionables, resumen por categorías y totales
+- ✅ Pantalla `/inventario/exportar/opciones/` con selector de formato (Excel/PDF), filtro multi-select por tipo y checkboxes de columnas
+- ✅ Logo del banner Excel proporcional y centrado en área A1:B1; título desplazado a columna C
+- ✅ Configuración de página Excel: orientación horizontal, ajuste a ancho y centrado
+- ✅ Commits `4ab2594` y `a7a0258`
+
 ### 2026-09-03 — v1.1.0: Catálogo en activos, fixes y módulo Documentos
 
 - ✅ Nuevo módulo `documentos`: repositorio de manuales, procedimientos, políticas y documentos generales
@@ -520,5 +531,5 @@ Para documentación técnica completa, ver **SYSADMIN_HANDOFF.md**
 
 ---
 
-**Última actualización:** 2026-09-03  
+**Última actualización:** 2026-09-04  
 **Proyecto:** 100% Funcional · Listo para producción
