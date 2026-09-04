@@ -1,6 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+import os
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Prefetch, Q
 from django.db.models.functions import TruncMonth
@@ -10,10 +12,24 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 import weasyprint
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from inventario.models import Activo, Asignacion, Movimiento, TIPOS, ESTADOS
 from mantenimiento.models import OrdenMantenimiento
 from usuarios.models import Usuario
+
+
+# ── Paleta corporativa REDIHOS ───────────────────────────────────────────────
+AZUL = "0156A6"
+AZUL_OSCURO = "013D7A"
+AZUL_CLARO = "E6F0FA"
+NARANJA = "F18020"
+GRIS_TXT = "1F2937"
+BLANCO = "FFFFFF"
+
+LOGO_PATH = os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.png")
 
 
 def _parse_date(value):
@@ -167,6 +183,164 @@ def _build_report_context(rango_inicio, rango_fin):
     }
 
 
+# ── Helpers de estilo Excel REDIHOS ──────────────────────────────────────────
+
+def _add_redihos_logo(ws, logo_path=LOGO_PATH):
+    """Inserta el logo de REDIHOS en A1 si existe."""
+    if os.path.exists(logo_path):
+        img = XLImage(logo_path)
+        img.width = 28
+        img.height = 28
+        ws.add_image(img, "A1")
+
+
+def _apply_redihos_header(ws, headers, title, logo_path=LOGO_PATH):
+    """
+    Escribe el encabezado corporativo (filas 1-4) y los headers de tabla (fila 6).
+    Retorna la fila inicial para datos: 7.
+    """
+    last_col = get_column_letter(len(headers))
+    fecha = timezone.now().strftime("%d/%m/%Y")
+
+    banner_fill = PatternFill(start_color=AZUL_OSCURO, end_color=AZUL_OSCURO, fill_type="solid")
+    banner_font = Font(name="Calibri", bold=True, size=16, color=BLANCO)
+    subtitle_fill = PatternFill(start_color=AZUL_CLARO, end_color=AZUL_CLARO, fill_type="solid")
+    subtitle_font = Font(name="Calibri", bold=True, size=12, color=AZUL_OSCURO)
+    accent_fill = PatternFill(start_color=NARANJA, end_color=NARANJA, fill_type="solid")
+    meta_font = Font(name="Calibri", italic=True, size=9, color="6B7280")
+    header_fill = PatternFill(start_color=AZUL, end_color=AZUL, fill_type="solid")
+    header_font = Font(name="Calibri", bold=True, size=10, color=BLANCO)
+    thin_side = Side(style="thin", color="D1D5DB")
+    border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+    # Fila 1: banner
+    ws.merge_cells(f"A1:{last_col}1")
+    ws["A1"] = "REDIHOS S.A.S."
+    ws["A1"].fill = banner_fill
+    ws["A1"].font = banner_font
+    ws["A1"].alignment = Alignment(horizontal="left", vertical="center", indent=4)
+    ws.row_dimensions[1].height = 32
+    _add_redihos_logo(ws, logo_path)
+    ws.column_dimensions["A"].width = 6
+
+    # Fila 2: subtítulo
+    ws.merge_cells(f"A2:{last_col}2")
+    ws["A2"] = f"Reporte de {title}"
+    ws["A2"].fill = subtitle_fill
+    ws["A2"].font = subtitle_font
+    ws["A2"].alignment = Alignment(horizontal="left", vertical="center", indent=2)
+    ws.row_dimensions[2].height = 22
+
+    # Fila 3: franja naranja
+    ws.merge_cells(f"A3:{last_col}3")
+    for col in range(1, len(headers) + 1):
+        ws.cell(row=3, column=col).fill = accent_fill
+    ws.row_dimensions[3].height = 4
+
+    # Fila 4: metadato
+    ws.merge_cells(f"A4:{last_col}4")
+    ws["A4"] = f"Generado por SysAdmin · {fecha} · Confidencial — uso interno"
+    ws["A4"].font = meta_font
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center", indent=2)
+    ws.row_dimensions[4].height = 16
+
+    # Fila 6: headers de tabla
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=6, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+    ws.row_dimensions[6].height = 26
+
+    # Freeze panes en primera celda de datos
+    ws.freeze_panes = "A8"
+
+    # Auto filter sobre header
+    ws.auto_filter.ref = f"A6:{last_col}6"
+
+    return 7
+
+
+def _apply_redihos_data_style(ws, start_row, num_cols):
+    """Aplica zebra striping, bordes y tipografía a las filas de datos."""
+    data_font = Font(name="Calibri", size=10, color=GRIS_TXT)
+    white_fill = PatternFill(start_color=BLANCO, end_color=BLANCO, fill_type="solid")
+    blue_light_fill = PatternFill(start_color=AZUL_CLARO, end_color=AZUL_CLARO, fill_type="solid")
+    thin_side = Side(style="thin", color="D1D5DB")
+    border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+    for row_idx in range(start_row, ws.max_row + 1):
+        fill = white_fill if (row_idx - start_row) % 2 == 0 else blue_light_fill
+        for col_idx in range(1, num_cols + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.font = data_font
+            cell.fill = fill
+            cell.border = border
+            cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+
+def _adjust_column_widths(ws, headers, min_width=12, max_width=55):
+    """Ajusta el ancho de cada columna al contenido real."""
+    for col_idx, header in enumerate(headers, start=1):
+        col_letter = get_column_letter(col_idx)
+        max_len = len(str(header))
+        for row in ws.iter_rows(
+            min_row=7,
+            max_row=min(ws.max_row, 7 + 200),
+            min_col=col_idx,
+            max_col=col_idx,
+        ):
+            for cell in row:
+                val = cell.value
+                if val is not None:
+                    max_len = max(max_len, len(str(val)))
+        width = min(max(max_len + 4, min_width), max_width)
+        ws.column_dimensions[col_letter].width = width
+
+
+def _style_summary_sheet(ws, title):
+    """Aplica solo el encabezado corporativo a una hoja de resumen (sin tabla)."""
+    last_col = "B"
+    fecha = timezone.now().strftime("%d/%m/%Y")
+
+    banner_fill = PatternFill(start_color=AZUL_OSCURO, end_color=AZUL_OSCURO, fill_type="solid")
+    banner_font = Font(name="Calibri", bold=True, size=16, color=BLANCO)
+    subtitle_fill = PatternFill(start_color=AZUL_CLARO, end_color=AZUL_CLARO, fill_type="solid")
+    subtitle_font = Font(name="Calibri", bold=True, size=12, color=AZUL_OSCURO)
+    accent_fill = PatternFill(start_color=NARANJA, end_color=NARANJA, fill_type="solid")
+    meta_font = Font(name="Calibri", italic=True, size=9, color="6B7280")
+
+    ws.merge_cells(f"A1:{last_col}1")
+    ws["A1"] = "REDIHOS S.A.S."
+    ws["A1"].fill = banner_fill
+    ws["A1"].font = banner_font
+    ws["A1"].alignment = Alignment(horizontal="left", vertical="center", indent=2)
+    ws.row_dimensions[1].height = 32
+
+    ws.merge_cells(f"A2:{last_col}2")
+    ws["A2"] = f"Reporte de {title} — Resumen"
+    ws["A2"].fill = subtitle_fill
+    ws["A2"].font = subtitle_font
+    ws["A2"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[2].height = 22
+
+    ws.merge_cells(f"A3:{last_col}3")
+    ws["A3"].fill = accent_fill
+    ws.row_dimensions[3].height = 4
+
+    ws.merge_cells(f"A4:{last_col}4")
+    ws["A4"] = f"Generado por SysAdmin · {fecha} · Confidencial — uso interno"
+    ws["A4"].font = meta_font
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[4].height = 16
+
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 20
+
+
+# ── Vistas ───────────────────────────────────────────────────────────────────
+
 @login_required
 def index(request):
     today = timezone.now().date()
@@ -238,33 +412,30 @@ def usuarios_pdf(request):
 
 @login_required
 def inventario_excel(request):
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-
     wb = Workbook()
+
+    # Hoja de resumen
     ws_resumen = wb.active
     ws_resumen.title = "Resumen"
+    _style_summary_sheet(ws_resumen, "Inventario")
 
     activos_por_estado, activos_por_tipo = _build_activos_resumen()
+    ws_resumen["A6"] = "Total activos"
+    ws_resumen["B6"] = Activo.objects.count()
+    ws_resumen["A7"] = "Por estado"
+    ws_resumen["B7"] = "Total"
+    for idx, item in enumerate(activos_por_estado, start=8):
+        ws_resumen.cell(row=idx, column=1, value=item["label"])
+        ws_resumen.cell(row=idx, column=2, value=item["total"])
+    offset = 8 + len(activos_por_estado) + 1
+    ws_resumen.cell(row=offset, column=1, value="Por tipo")
+    ws_resumen.cell(row=offset, column=2, value="Total")
+    for idx, item in enumerate(activos_por_tipo, start=offset + 1):
+        ws_resumen.cell(row=idx, column=1, value=item["label"])
+        ws_resumen.cell(row=idx, column=2, value=item["total"])
 
-    ws_resumen.append(["Reporte Inventario", timezone.now().strftime("%Y-%m-%d %H:%M")])
-    ws_resumen.append([])
-    ws_resumen.append(["Total activos", Activo.objects.count()])
-    ws_resumen.append([])
-    ws_resumen.append(["Por estado", "Total"])
-    for item in activos_por_estado:
-        ws_resumen.append([item["label"], item["total"]])
-    ws_resumen.append([])
-    ws_resumen.append(["Por tipo", "Total"])
-    for item in activos_por_tipo:
-        ws_resumen.append([item["label"], item["total"]])
-
-    ws_resumen["A1"].font = Font(bold=True, size=14, color="0156A6")
-    ws_resumen.column_dimensions["A"].width = 24
-    ws_resumen.column_dimensions["B"].width = 20
-
+    # Hoja de activos
     ws_activos = wb.create_sheet(title="Activos")
-
     headers = [
         "ID", "Tipo", "Marca", "Modelo", "Serial", "Nombre equipo",
         "Estado", "Ubicacion fisica", "Fecha compra", "Proveedor",
@@ -280,23 +451,7 @@ def inventario_excel(request):
         "Asignado a", "Documento usuario", "Area usuario", "Fecha asignacion",
         "Observaciones", "Fecha creacion", "Ultima actualizacion",
     ]
-    ws_activos.append(headers)
-
-    header_fill = PatternFill(start_color="0156A6", end_color="0156A6", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF")
-    thin = Side(style="thin", color="D9D9D9")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws_activos.cell(row=1, column=col_idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        cell.border = border
-
-    ws_activos.freeze_panes = "A2"
-    ws_activos.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
-    ws_activos.row_dimensions[1].height = 32
+    start_row = _apply_redihos_header(ws_activos, headers, "Inventario")
 
     activos = Activo.objects.prefetch_related(
         Prefetch(
@@ -308,7 +463,7 @@ def inventario_excel(request):
 
     valor_col = headers.index("Valor compra") + 1
 
-    for row_idx, activo in enumerate(activos, start=2):
+    for row_idx, activo in enumerate(activos, start=start_row):
         asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
         row = [
             activo.id,
@@ -361,12 +516,11 @@ def inventario_excel(request):
             activo.fecha_actualizacion.strftime("%Y-%m-%d %H:%M"),
         ]
         ws_activos.append(row)
-        for col_idx in range(1, len(headers) + 1):
-            ws_activos.cell(row=row_idx, column=col_idx).border = border
-        ws_activos.cell(row=row_idx, column=valor_col).number_format = '$#,##0'
 
-    for col_idx, header in enumerate(headers, start=1):
-        ws_activos.column_dimensions[get_column_letter(col_idx)].width = max(12, len(header) + 4)
+    _apply_redihos_data_style(ws_activos, start_row, len(headers))
+    for row_idx in range(start_row, ws_activos.max_row + 1):
+        ws_activos.cell(row=row_idx, column=valor_col).number_format = '$#,##0'
+    _adjust_column_widths(ws_activos, headers)
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -379,8 +533,6 @@ def inventario_excel(request):
 @login_required
 def usuarios_excel(request):
     wb = Workbook()
-    ws_resumen = wb.active
-    ws_resumen.title = "Resumen"
 
     usuarios_activos = Usuario.objects.filter(estado="activo").count()
     usuarios_inactivos = Usuario.objects.filter(estado="inactivo").count()
@@ -395,24 +547,32 @@ def usuarios_excel(request):
         .order_by("-total", "cargo")
     )
 
-    ws_resumen.append(["Reporte Usuarios", timezone.now().strftime("%Y-%m-%d %H:%M")])
-    ws_resumen.append([])
-    ws_resumen.append(["Usuarios activos", usuarios_activos])
-    ws_resumen.append(["Usuarios inactivos", usuarios_inactivos])
-    ws_resumen.append([])
-    ws_resumen.append(["Por area", "Total"])
-    for row in usuarios_por_area:
-        ws_resumen.append([row["area"], row["total"]])
-    ws_resumen.append([])
-    ws_resumen.append(["Por cargo", "Total"])
-    for row in usuarios_por_cargo:
-        ws_resumen.append([row["cargo"], row["total"]])
+    ws_resumen = wb.active
+    ws_resumen.title = "Resumen"
+    _style_summary_sheet(ws_resumen, "Usuarios")
+
+    ws_resumen["A6"] = "Usuarios activos"
+    ws_resumen["B6"] = usuarios_activos
+    ws_resumen["A7"] = "Usuarios inactivos"
+    ws_resumen["B7"] = usuarios_inactivos
+    ws_resumen["A9"] = "Por area"
+    ws_resumen["B9"] = "Total"
+    for idx, row in enumerate(usuarios_por_area, start=10):
+        ws_resumen.cell(row=idx, column=1, value=row["area"])
+        ws_resumen.cell(row=idx, column=2, value=row["total"])
+    offset = 10 + len(usuarios_por_area) + 2
+    ws_resumen.cell(row=offset, column=1, value="Por cargo")
+    ws_resumen.cell(row=offset, column=2, value="Total")
+    for idx, row in enumerate(usuarios_por_cargo, start=offset + 1):
+        ws_resumen.cell(row=idx, column=1, value=row["cargo"])
+        ws_resumen.cell(row=idx, column=2, value=row["total"])
 
     ws = wb.create_sheet(title="Usuarios")
-    ws.append([
+    headers = [
         "Nombre", "Documento", "Cargo", "Area", "Correo",
         "Telefono", "Estado", "Fecha creacion"
-    ])
+    ]
+    start_row = _apply_redihos_header(ws, headers, "Usuarios")
 
     for usuario in Usuario.objects.all().order_by("nombre_completo"):
         ws.append([
@@ -425,6 +585,9 @@ def usuarios_excel(request):
             usuario.get_estado_display(),
             usuario.fecha_creacion.strftime("%Y-%m-%d"),
         ])
+
+    _apply_redihos_data_style(ws, start_row, len(headers))
+    _adjust_column_widths(ws, headers)
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -442,18 +605,23 @@ def costos_excel(request):
     wb = Workbook()
     ws_resumen = wb.active
     ws_resumen.title = "Resumen"
-    ws_resumen.append(["Reporte Costos", timezone.now().strftime("%Y-%m-%d %H:%M")])
-    ws_resumen.append([])
-    ws_resumen.append(["Vida util (meses)", costos["vida_util"]])
-    ws_resumen.append(["Valor compra total", float(costos["total"])])
-    ws_resumen.append(["Depreciacion acumulada", float(costos["depreciacion"])])
-    ws_resumen.append(["Valor actual estimado", float(costos["valor_actual"])])
+    _style_summary_sheet(ws_resumen, "Costos")
+
+    ws_resumen["A6"] = "Vida util (meses)"
+    ws_resumen["B6"] = costos["vida_util"]
+    ws_resumen["A7"] = "Valor compra total"
+    ws_resumen["B7"] = float(costos["total"])
+    ws_resumen["A8"] = "Depreciacion acumulada"
+    ws_resumen["B8"] = float(costos["depreciacion"])
+    ws_resumen["A9"] = "Valor actual estimado"
+    ws_resumen["B9"] = float(costos["valor_actual"])
 
     ws = wb.create_sheet(title="Costos")
-    ws.append([
+    headers = [
         "Activo", "Serial", "Tipo", "Valor compra",
         "Meses", "Depreciacion", "Valor actual"
-    ])
+    ]
+    start_row = _apply_redihos_header(ws, headers, "Costos")
 
     for item in costos["items"]:
         activo = item["activo"]
@@ -466,6 +634,13 @@ def costos_excel(request):
             float(item["depreciacion"]),
             float(item["valor_actual"]),
         ])
+
+    _apply_redihos_data_style(ws, start_row, len(headers))
+    money_cols = {4, 6, 7}  # columnas con valores monetarios
+    for row_idx in range(start_row, ws.max_row + 1):
+        for col in money_cols:
+            ws.cell(row=row_idx, column=col).number_format = '$#,##0.00'
+    _adjust_column_widths(ws, headers)
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -492,10 +667,11 @@ def movimientos_excel(request):
     wb = Workbook()
     ws = wb.active
     ws.title = "Movimientos"
-    ws.append([
+    headers = [
         "Fecha", "Tipo", "Activo", "Serial", "Usuario destino",
         "Descripcion", "Realizado por"
-    ])
+    ]
+    start_row = _apply_redihos_header(ws, headers, "Movimientos")
 
     for mov in movimientos:
         ws.append([
@@ -507,6 +683,9 @@ def movimientos_excel(request):
             mov.descripcion,
             mov.realizado_por,
         ])
+
+    _apply_redihos_data_style(ws, start_row, len(headers))
+    _adjust_column_widths(ws, headers)
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -533,7 +712,7 @@ def mantenimiento_excel(request):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ordenes"
-    ws.append([
+    headers = [
         "Fecha apertura",
         "Fecha cierre",
         "Tipo",
@@ -545,7 +724,8 @@ def mantenimiento_excel(request):
         "Tecnico",
         "Costo estimado",
         "Costo real",
-    ])
+    ]
+    start_row = _apply_redihos_header(ws, headers, "Mantenimiento")
 
     for orden in ordenes:
         ws.append([
@@ -561,6 +741,15 @@ def mantenimiento_excel(request):
             float(orden.costo_estimado) if orden.costo_estimado else "",
             float(orden.costo_real) if orden.costo_real else "",
         ])
+
+    _apply_redihos_data_style(ws, start_row, len(headers))
+    money_cols = {10, 11}
+    for row_idx in range(start_row, ws.max_row + 1):
+        for col in money_cols:
+            cell = ws.cell(row=row_idx, column=col)
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = '$#,##0.00'
+    _adjust_column_widths(ws, headers)
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
