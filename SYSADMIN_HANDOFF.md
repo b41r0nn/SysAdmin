@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-03 · v1.1.0 · Etapas 0-7B + Documentos Completas
+> Documento actualizado: 2026-09-04 · v1.1.0 + post-release reportes · Etapas 0-7B + Documentos Completas
 
 ---
 
@@ -11,7 +11,7 @@
 | 1 | accounts — Login/auth/sesión | ✅ COMPLETA |
 | 2 | usuarios — BD personas | ✅ COMPLETA |
 | 3 | inventario — Activos | ✅ COMPLETA · mejoras v1.1.0 aplicadas |
-| 4 | reports — Reportes | ✅ COMPLETA |
+| 4 | reports — Reportes | ✅ COMPLETA · export configurables Excel/PDF post-v1.1.0 |
 | 5 | mantenimiento — Órdenes | ✅ COMPLETA |
 | 6 | passwords — Vault | ✅ COMPLETA |
 | 7B | yule — Sincronización OCS | ✅ COMPLETA |
@@ -26,7 +26,12 @@
    - Reiniciar contenedor Django
    - Verificar módulo Documentos y autocompletado de catálogo en activos
 
-2. **Tests**: No hay tests automatizados (TODO futuro)
+2. **Validar reportes configurables**
+   - Probar `/inventario/exportar/opciones/` en Excel y PDF
+   - Verificar filtro por tipo de dispositivo y columnas seleccionadas
+   - Ajustar diseño del PDF si es necesario
+
+3. **Tests**: No hay tests automatizados (TODO futuro)
 ## CRONOGRAMA ETAPAS 6 Y 7 (PROPUESTA vs REALIDAD)
 
 ### ✅ ETAPA 6 — passwords (Completada)
@@ -619,6 +624,44 @@ docker compose exec django python manage.py migrate documentos
 docker compose exec django python manage.py collectstatic --noinput
 docker compose restart django
 ```
+
+---
+
+## ACTUALIZACIÓN 2026-09-04 — Reportes configurables
+
+### Resumen
+Mejoras post-release sobre los reportes de inventario: export Excel/PDF ahora comparten la misma pantalla de configuración, permiten filtrar por tipo de dispositivo y elegir qué columnas exportar.
+
+### Excel de inventario
+- Hoja única "Inventario" que combina lista de activos + resumen por categorías + totales.
+- 48 campos disponibles a través de `/inventario/exportar/opciones/`.
+- Logo proporcional calculado con PIL, centrado en área A1:B1.
+- Banner con texto desplazado a columna C para no tapar el logo.
+- Configuración de página horizontal, ajuste a ancho y centrado horizontal.
+- Anchos de columna calculados solo sobre filas de datos, sin incluir el resumen.
+
+### PDF de inventario
+- Nuevo diseño con banner de marca, fichas/tarjetas por activo y cards de resumen.
+- Columnas configurables: se construyen dinámicamente desde `CAMPOS_INVENTARIO`.
+- Filtro por tipo de dispositivo.
+- Badges de estado con colores según el estado crudo.
+- Valor total solo aparece si se incluye `valor_compra` entre los campos.
+- Se abre en nueva pestaña desde la pantalla de opciones.
+
+### Pantalla de opciones (`/inventario/exportar/opciones/`)
+- Selector de formato: Excel o PDF.
+- Filtro multi-select por tipo de dispositivo con JS que oculta/muestra secciones de columnas.
+- Checkboxes de columnas agrupados por sección.
+- Botones "Reporte completo" y "Generar con selección".
+- La acción del formulario cambia vía JS según el formato elegido.
+
+### Archivos creados/modificados relevantes
+- Creado: `backend/inventario/templates/inventario/inventario_exportar_opciones.html`
+- Modificados: `backend/reports/views.py`, `backend/reports/templates/reports/inventario_pdf.html`, `backend/reports/templates/reports/index.html`, `backend/inventario/views.py`, `backend/inventario/urls.py`
+
+### Commits
+- `4ab2594` feat(reports): reporte de inventario configurable en PDF/Excel con filtros y estilo de marca
+- `a7a0258` docs: actualiza SESION_2026-09-04_RESUMEN con hash final 4ab2594
 
 ---
 
@@ -1245,4 +1288,4 @@ Para aprovechar los cambios:
 
 ---
 
-*Última actualización: 2026-09-03 · v1.1.0 · Módulo documentos y mejoras de inventario integradas*
+*Última actualización: 2026-09-04 · v1.1.0 + post-release reportes · Módulo documentos y mejoras de inventario integradas*
