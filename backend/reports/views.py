@@ -10,6 +10,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 import weasyprint
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
@@ -491,7 +492,7 @@ def inventario_pdf(request):
         for c in campos:
             raw = CAMPOS_INVENTARIO[c][1](activo, asignacion)
             if c == "estado":
-                valor = f'<span class="badge {activo.estado}">{raw}</span>'
+                valor = mark_safe(f'<span class="badge {activo.estado}">{raw}</span>')
             elif c == "valor_compra" and raw is not None:
                 valor = f"${raw:,.0f} COP"
             else:
