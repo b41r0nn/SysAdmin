@@ -475,25 +475,29 @@ def inventario_pdf(request):
         activos_qs = activos_qs.filter(tipo_dispositivo__in=tipos_solicitados)
 
     columnas = [(c, CAMPOS_INVENTARIO[c][0]) for c in campos]
+
+    columnas_count = len(columnas)
+    if columnas_count > 25:
+        tabla_font = "6pt"
+    elif columnas_count > 15:
+        tabla_font = "7pt"
+    else:
+        tabla_font = "8.5pt"
+
     filas = []
     for activo in activos_qs:
         asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
-        celdas = []
+        fila = []
         for c in campos:
             raw = CAMPOS_INVENTARIO[c][1](activo, asignacion)
-            celda = {"key": c, "label": CAMPOS_INVENTARIO[c][0], "valor": raw}
             if c == "estado":
-                celda["css_clase"] = activo.estado
+                valor = f'<span class="badge {activo.estado}">{raw}</span>'
             elif c == "valor_compra" and raw is not None:
-                celda["valor"] = f"${raw:,.0f} COP"
-            celdas.append(celda)
-        filas.append({
-            "id": activo.id,
-            "tipo": activo.get_tipo_dispositivo_display(),
-            "marca": activo.marca,
-            "modelo": activo.modelo,
-            "celdas": [c for c in celdas if c["key"] not in ("id", "tipo", "marca", "modelo")],
-        })
+                valor = f"${raw:,.0f} COP"
+            else:
+                valor = raw if raw not in (None, "") else "—"
+            fila.append({"valor": valor})
+        filas.append(fila)
 
     tipos_a_resumir = (
         [(key, label) for key, label in TIPOS if key in tipos_solicitados]
@@ -533,6 +537,7 @@ def inventario_pdf(request):
         "resumen": resumen,
         "totales": totales,
         "campos": campos,
+        "tabla_font": tabla_font,
         "logo_path": LOGO_PATH,
         "generado": timezone.now(),
     })
