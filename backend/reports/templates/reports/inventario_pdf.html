@@ -20,38 +20,35 @@
   .footbar { display: flex; justify-content: space-between; align-items: center; font-size: 7pt; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 3px; }
   .footbar .page-num::after { content: counter(page) " / " counter(pages); }
 
-  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-  .card {
-    width: calc(50% - 5px);
-    background: #FFFFFF;
+  .datos {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    table-layout: fixed;
+  }
+  .datos th, .datos td {
     border: 1px solid #E5E7EB;
-    border-top: 3px solid #0156A6;
-    border-radius: 5px;
-    padding: 8px 10px;
-    page-break-inside: avoid;
+    padding: 4px 5px;
+    text-align: left;
+    vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #E6F0FA;
-    padding-bottom: 5px;
-    margin-bottom: 6px;
+  .datos th {
+    background: #0156A6;
+    color: #fff;
+    font-size: 7.5pt;
+    font-weight: bold;
   }
-  .card-title { font-size: 9pt; font-weight: bold; color: #013D7A; }
-  .card-id { font-size: 7pt; color: #6B7280; }
-  .fields { display: flex; flex-wrap: wrap; }
-  .field { width: 33.33%; padding: 3px 4px; }
-  .field.half { width: 50%; }
-  .field.full { width: 100%; }
-  .field-label { font-size: 6.5pt; color: #6B7280; text-transform: uppercase; letter-spacing: .3px; }
-  .field-value { font-size: 7.5pt; color: #1F2937; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word; }
+  .datos td { background: #FFFFFF; color: #1F2937; }
+  .datos tr:nth-child(even) td { background: #F8FAFC; }
+  .datos tr { page-break-inside: avoid; }
   .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 6.5pt; font-weight: bold; white-space: nowrap; }
   .badge.asignado { background: #DBEAFE; color: #1D4ED8; }
   .badge.disponible { background: #DCFCE7; color: #15803D; }
   .badge.dado_de_baja { background: #FEE2E2; color: #B91C1C; }
   .badge.en_mantenimiento, .badge.en_reparacion { background: #FEF3C7; color: #B45309; }
-  .empty { text-align: center; color: #6B7280; padding: 20px; width: 100%; }
+  .empty { text-align: center; color: #6B7280; padding: 20px; }
 
   .resumen { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .stat { flex: 1; min-width: 110px; background: #F8FAFC; border: 1px solid #E5E7EB; border-left: 4px solid #0156A6; border-radius: 4px; padding: 8px 10px; }
@@ -72,34 +69,18 @@
     <div class="footbar"><div>REDIHOS S.A.S. — Confidencial, uso interno</div><div class="page-num"></div></div>
   </div>
 
-  <div class="cards">
-    {% for item in filas %}
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">
-          {% if item.tipo %}{{ item.tipo }} — {% endif %}{% if item.marca %}{{ item.marca }}{% endif %}{% if item.modelo %} {{ item.modelo }}{% endif %}
-        </div>
-        <div class="card-id">#{{ item.id }}</div>
-      </div>
-      <div class="fields">
-        {% for celda in item.celdas %}
-        <div class="field {% if celda.key == 'observaciones' %}full{% endif %}">
-          <div class="field-label">{{ celda.label }}</div>
-          <div class="field-value">
-            {% if celda.key == "estado" %}
-              <span class="badge {{ celda.css_clase }}">{{ celda.valor }}</span>
-            {% else %}
-              {{ celda.valor|default:"—" }}
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% empty %}
-    <div class="empty">No hay activos para los criterios seleccionados.</div>
-    {% endfor %}
-  </div>
+  <table class="datos" style="font-size: {{ tabla_font }};">
+    <thead>
+      <tr>{% for key, label in columnas %}<th>{{ label }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for fila in filas %}
+      <tr>{% for celda in fila %}<td>{{ celda.valor|default:"—" }}</td>{% endfor %}</tr>
+      {% empty %}
+      <tr><td colspan="{{ columnas|length }}" class="empty">No hay activos para los criterios seleccionados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   <div class="resumen">
     <div class="stat">
