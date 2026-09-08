@@ -114,6 +114,25 @@ body {
   padding: 28px 32px 36px;
 }
 
+/* Marca de agua translúcida del dashboard (Página Principal) */
+img.sa-watermark {
+  position: fixed;
+  top: 50%;
+  left: calc(50% + var(--sa-sidebar-w) / 2);
+  transform: translate(-50%, -50%);
+  width: 40vw;
+  max-width: 40%;
+  height: auto;
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.sa-dashboard-content {
+  position: relative;
+  z-index: 1;
+}
+
 .auth-shell {
   max-width: 980px;
   margin: auto;

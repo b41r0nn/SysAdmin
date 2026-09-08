@@ -1,8 +1,11 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Dashboard - SysAdmin{% endblock %}
 
 {% block content %}
+<img src="{% static 'img/logo_redihos_mark.png' %}" class="sa-watermark" alt="" aria-hidden="true">
+<div class="sa-dashboard-content">
 <div class="sa-topbar">
     <div class="sa-topbar-greeting">
         <h2>Hola, {{ user.first_name|default:user.username }} 👋</h2>
@@ -96,5 +99,6 @@
             <div class="stat-trend">ALERTA</div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
