@@ -27,7 +27,7 @@
             </div>
             <nav class="nav flex-column">
                 <a class="nav-link {% if request.resolver_match.app_name == 'core' %}active{% endif %}" href="{% url 'core:dashboard' %}">
-                    <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                    <i class="bi bi-speedometer2 me-2"></i>Página Principal
                 </a>
                 <a class="nav-link {% if request.resolver_match.app_name == 'usuarios' %}active{% endif %}" href="{% url 'usuarios:lista' %}">
                     <i class="bi bi-people me-2"></i>Usuarios
