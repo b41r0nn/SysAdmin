@@ -7,32 +7,32 @@
 
 ## 📊 Estado del Proyecto
 
-| Módulo | App Django | Estado | Etapa |
-|--------|-----------|--------|-------|
-| 🔐 Autenticación | `accounts` | ✅ Completa | 0-1 |
-| 📊 Dashboard | `core` | ✅ Completa | 0 |
-| 👥 Usuarios | `usuarios` | ✅ Completa | 2 |
-| 💻 Inventario | `inventario` | ✅ Completa | 3 |
-| 📈 Reportes | `reports` | ✅ Completa | 4 |
-| 🔧 Mantenimiento | `mantenimiento` | ✅ Completa | 5 |
-| 🔑 Contraseñas | `passwords` | ✅ Completa | 6 |
-| 🔄 Yule (OCS) | `yule` | ✅ Completa | 7B |
-| 📁 Documentos | `documentos` | ✅ Completa | 8 |
+| Módulo          | App Django      | Estado     | Etapa |
+| --------------- | --------------- | ---------- | ----- |
+| 🔐 Autenticación | `accounts`      | ✅ Completa | 0-1   |
+| 📊 Dashboard     | `core`          | ✅ Completa | 0     |
+| 👥 Usuarios      | `usuarios`      | ✅ Completa | 2     |
+| 💻 Inventario    | `inventario`    | ✅ Completa | 3     |
+| 📈 Reportes      | `reports`       | ✅ Completa | 4     |
+| 🔧 Mantenimiento | `mantenimiento` | ✅ Completa | 5     |
+| 🔑 Contraseñas   | `passwords`     | ✅ Completa | 6     |
+| 🔄 Yule (OCS)    | `yule`          | ✅ Completa | 7B    |
+| 📁 Documentos    | `documentos`    | ✅ Completa | 8     |
 
 ---
 
 ## 🏗️ Stack Técnico
 
-| Componente | Tecnología |
-|-----------|-----------|
-| **Backend** | Django 4.2 + Python 3.11 |
-| **Base de Datos** | PostgreSQL 15 |
-| **Frontend** | Bootstrap 5.3 + HTMX |
-| **Reportes** | WeasyPrint (PDF) + openpyxl (Excel) |
-| **Seguridad** | Cryptography + Argon2 |
-| **Contenedores** | Docker Compose |
-| **Proxy Inverso** | Nginx 1.25 |
-| **Red** | LAN Local (192.168.1.250) |
+| Componente        | Tecnología                          |
+| ----------------- | ----------------------------------- |
+| **Backend**       | Django 4.2 + Python 3.11            |
+| **Base de Datos** | PostgreSQL 15                       |
+| **Frontend**      | Bootstrap 5.3 + HTMX                |
+| **Reportes**      | WeasyPrint (PDF) + openpyxl (Excel) |
+| **Seguridad**     | Cryptography + Argon2               |
+| **Contenedores**  | Docker Compose                      |
+| **Proxy Inverso** | Nginx 1.25                          |
+| **Red**           | LAN Local (192.168.1.250)           |
 
 ---
 
@@ -377,13 +377,13 @@ OCS_VERIFY_SSL=True
 ```
 
 **Vistas disponibles:**
-| URL | Descripción |
-|-----|-------------|
-| `/yule/` | Dashboard principal |
-| `/yule/equipos/` | Lista paginada con filtros |
-| `/yule/equipos/<id>/` | Detalle del equipo |
+| URL                        | Descripción                             |
+| -------------------------- | --------------------------------------- |
+| `/yule/`                   | Dashboard principal                     |
+| `/yule/equipos/`           | Lista paginada con filtros              |
+| `/yule/equipos/<id>/`      | Detalle del equipo                      |
 | `/yule/equipos/sin-match/` | Equipos sin vincular a inventario local |
-| `/yule/historial/` | Auditoría de sincronizaciones |
+| `/yule/historial/`         | Auditoría de sincronizaciones           |
 
 **3 formas de sincronizar:**
 
@@ -404,12 +404,12 @@ OCS_VERIFY_SSL=True
 
 **Troubleshooting:**
 
-| Problema | Solución |
-|----------|----------|
-| No conecta a OCS | Verificar URL, credenciales, certificados SSL |
-| Equipos sin vincular | Usar búsqueda de matches por serial/MAC en detalle |
-| Sincronización lenta | Aumentar timeout en client.py (default: 15s) |
-| Error 401 Unauthorized | Regenerar token en OCS Admin |
+| Problema               | Solución                                           |
+| ---------------------- | -------------------------------------------------- |
+| No conecta a OCS       | Verificar URL, credenciales, certificados SSL      |
+| Equipos sin vincular   | Usar búsqueda de matches por serial/MAC en detalle |
+| Sincronización lenta   | Aumentar timeout en client.py (default: 15s)       |
+| Error 401 Unauthorized | Regenerar token en OCS Admin                       |
 
 ---
 
