@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-04 · v1.1.0 + post-release reportes · Etapas 0-7B + Documentos Completas
+> Documento actualizado: 2026-09-09 · v1.1.0 + post-release importación masiva · Etapas 0-7B + Documentos Completas
 
 ---
 
@@ -10,7 +10,7 @@
 | 0 | Fundación Docker+Django+Nginx | ✅ COMPLETA |
 | 1 | accounts — Login/auth/sesión | ✅ COMPLETA |
 | 2 | usuarios — BD personas | ✅ COMPLETA |
-| 3 | inventario — Activos | ✅ COMPLETA · mejoras v1.1.0 aplicadas |
+| 3 | inventario — Activos | ✅ COMPLETA · import masiva + plantillas v1.1.0+ |
 | 4 | reports — Reportes | ✅ COMPLETA · export configurables Excel/PDF post-v1.1.0 |
 | 5 | mantenimiento — Órdenes | ✅ COMPLETA |
 | 6 | passwords — Vault | ✅ COMPLETA |
@@ -31,7 +31,12 @@
    - Verificar filtro por tipo de dispositivo y columnas seleccionadas
    - Ajustar diseño del PDF si es necesario
 
-3. **Tests**: No hay tests automatizados (TODO futuro)
+3. **Validar importación masiva**
+   - Probar `/inventario/importar/` y `/usuarios/importar/` con plantillas descargadas
+   - Verificar vista previa, badges de estado, confirmación
+   - Verificar race guard (duplicados entre preview y confirmar)
+
+4. **Tests**: No hay tests automatizados (TODO futuro)
 ## CRONOGRAMA ETAPAS 6 Y 7 (PROPUESTA vs REALIDAD)
 
 ### ✅ ETAPA 6 — passwords (Completada)
@@ -665,6 +670,47 @@ Mejoras post-release sobre los reportes de inventario: export Excel/PDF ahora co
 
 ---
 
+## ACTUALIZACIÓN 2026-09-09 — Importación masiva Activos + Usuarios + Plantillas Excel
+
+### Resumen
+Implementación de importación masiva desde Excel para Activos e Usuarios, siguiendo el mismo patrón: subir archivo → vista previa con estado por fila → confirmar creación. Incluye plantillas Excel descargables con ejemplos e instrucciones.
+
+### Importación masiva de Activos (`/inventario/importar/`)
+- **Parser robusto**: Lee primera hoja .xlsx, mapea headers por label exacto contra `CAMPOS_INVENTARIO` (39 campos soportados)
+- **Normalización automática**:
+  - Tipo de dispositivo: "Portátil" → `portatil`, "Equipo Escritorio" → `escritorio`, etc.
+  - Estado: "Disponible" → `disponible`, "En mantenimiento" → `en_mantenimiento`, etc.
+  - Booleanos: "Sí/No" → True/False
+  - Moneda: "$1.234.567" → 1234567.0
+  - Fechas: "2024-03-15" / "15/03/2024" / "15-03-2024" → ISO string
+  - Pulgadas: "15,6" → 15.6
+- **Vista previa**: Tabla con Tipo/Marca/Modelo/Serial + badge estado:
+  - ✅ **OK** (tiene serial + tipo)
+  - ⚠️ **Ya existe — se omite** (serial ya en BD)
+  - ❌ **Error: falta serial** / **Error: falta tipo**
+- **Race guard**: Doble verificación de serial en confirmación (evita duplicados entre preview y confirmar)
+- **Plantilla Excel descargable** (`/inventario/importar/plantilla/`): 39 columnas, 2 filas ejemplo (Portátil + Celular), hoja Instrucciones completa
+
+### Importación masiva de Usuarios (`/usuarios/importar/`)
+- Mismo patrón: subir → preview → confirmar
+- Parser reordena nombre: "Calle Rivera Bairon Nicolas" → "Bairon Nicolas Calle Rivera"
+- Valida: Identificación única, Nombre obligatorio
+- **Plantilla Excel descargable** (`/usuarios/importar/plantilla/`): 6 columnas, 2 ejemplos, hoja Instrucciones con formato de nombre
+
+### UI
+- Botón "Descargar plantilla" en ambas pantallas de importación
+- Badges de estado con colores consistentes (OK=success, Duplicado=warning, Error=danger)
+
+### Archivos creados/modificados
+- Creados: `backend/inventario/templates/inventario/importar.html`, `importar_preview.html`
+- Creados: `backend/usuarios/views.py` (+descargar_plantilla_usuarios), `backend/usuarios/urls.py` (+plantilla)
+- Modificados: `backend/inventario/views.py` (+LABEL_TO_CAMPO, _normalizar_valor, _parsear_excel_activos, importar_activos, confirmar_importar_activos, descargar_plantilla_activos), `backend/inventario/urls.py`, `backend/inventario/templates/inventario/lista.html`, `backend/usuarios/templates/usuarios/importar.html`
+
+### Commits
+- `d952a6f` feat: importación masiva Activos + Usuarios con plantillas Excel
+
+---
+
 ## CHANGELOG
 
 ### 2026-05-04 — Revisión y corrección Etapa 3 (3A–3C)
@@ -1288,4 +1334,4 @@ Para aprovechar los cambios:
 
 ---
 
-*Última actualización: 2026-09-04 · v1.1.0 + post-release reportes · Módulo documentos y mejoras de inventario integradas*
+*Última actualización: 2026-09-09 · v1.1.0 + post-release importación masiva · Módulo documentos y mejoras de inventario integradas*

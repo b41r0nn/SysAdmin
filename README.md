@@ -1,6 +1,6 @@
 # SysAdmin · Sistema de Gestión IT
 
-> **Versión:** 1.1.0 · **Fecha:** 2026-09-04 · **Estado:** Etapas 0-7B + Documentos Completas  
+> **Versión:** 1.1.0 · **Fecha:** 2026-09-09 · **Estado:** Etapas 0-7B + Documentos Completas + Importación Masiva  
 > Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG y repositorio de documentos
 
 ---
@@ -271,6 +271,8 @@ Gestión completa de activos IT con soporte para múltiples tipos de dispositivo
 - ✅ Historial de movimientos
 - ✅ Actas de asignación en PDF
 - ✅ Exportación a Excel
+- ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
+- ✅ **Plantilla Excel** con 39 columnas, 2 ejemplos (Portátil/Celular) y hoja Instrucciones
 
 **Acceso:** `http://192.168.1.250/inventario/`
 
@@ -287,6 +289,13 @@ Gestión de personal de la organización.
 - Correo y teléfono
 - Foto de perfil
 - Activos asignados
+
+**Características:**
+- ✅ CRUD completo con validación
+- ✅ Foto de perfil
+- ✅ Activos asignados
+- ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
+- ✅ **Plantilla Excel** con 6 columnas, 2 ejemplos y hoja Instrucciones
 
 **Acceso:** `http://192.168.1.250/usuarios/`
 
@@ -475,14 +484,19 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
-### 2026-09-04 — Post-v1.1.0: Reportes configurables
+### 2026-09-09 — Post-v1.1.0: Importación masiva Activos + Usuarios + Plantillas Excel
 
-- ✅ Reporte PDF de inventario rediseñado con estilo de marca, columnas configurables y filtro por tipo
-- ✅ Reporte Excel de inventario unificado en una sola hoja con columnas seleccionables, resumen por categorías y totales
-- ✅ Pantalla `/inventario/exportar/opciones/` con selector de formato (Excel/PDF), filtro multi-select por tipo y checkboxes de columnas
-- ✅ Logo del banner Excel proporcional y centrado en área A1:B1; título desplazado a columna C
-- ✅ Configuración de página Excel: orientación horizontal, ajuste a ancho y centrado
-- ✅ Commits `4ab2594` y `a7a0258`
+- ✅ **Importación masiva de Activos**: subir .xlsx → vista previa con estado por fila (OK/Duplicado/Error) → confirmar
+- ✅ **Importación masiva de Usuarios**: mismo patrón, vista previa, confirmación
+- ✅ **Plantillas Excel descargables** para ambos módulos (botón en UI):
+  - Activos: 39 columnas, 2 ejemplos (Portátil/Celular), hoja Instrucciones completa
+  - Usuarios: 6 columnas, 2 ejemplos, hoja Instrucciones con formato de nombre
+- ✅ Parser robusto: mapea labels exactos de CAMPOS_INVENTARIO, normaliza choices/moneda/fechas/booleanos
+- ✅ Race guard: doble verificación de serial/documento en confirmación
+- ✅ Botón "Descargar plantilla" en ambas pantallas de importación
+- ✅ Commit `d952a6f`
+
+### 2026-09-04 — Post-v1.1.0: Reportes configurables
 
 ### 2026-09-03 — v1.1.0: Catálogo en activos, fixes y módulo Documentos
 
@@ -531,5 +545,5 @@ Para documentación técnica completa, ver **SYSADMIN_HANDOFF.md**
 
 ---
 
-**Última actualización:** 2026-09-04  
+**Última actualización:** 2026-09-09  
 **Proyecto:** 100% Funcional · Listo para producción
