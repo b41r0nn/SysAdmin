@@ -42,7 +42,12 @@
           <legend>Archivo</legend>
           <div class="row g-3">
             <div class="col-12">
-              <label class="form-label fw-semibold">Archivo Excel <span class="text-danger">*</span></label>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <label class="form-label fw-semibold mb-0">Archivo Excel <span class="text-danger">*</span></label>
+                <a href="{% url 'usuarios:importar_plantilla' %}" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-download me-1"></i>Descargar plantilla
+                </a>
+              </div>
               <input type="file" name="archivo" class="form-control" accept=".xlsx" required>
               <div class="form-text">Solo .xlsx — las filas sin datos se omiten, nada se guarda hasta confirmar.</div>
             </div>

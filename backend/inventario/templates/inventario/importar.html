@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Importar activos — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'inventario:lista' %}" class="text-decoration-none">Inventario</a>
+    </li>
+    <li class="breadcrumb-item active">Importar desde Excel</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-7">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-file-earmark-excel"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Importar activos desde Excel</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Se lee la primera hoja del archivo. La fila 1 debe tener los encabezados.
+          </p>
+        </div>
+      </div>
+
+      <div class="alert alert-info py-2 mb-4" style="font-size:.83rem;">
+        <strong>Columnas reconocidas</strong> (sin importar orden ni mayúsculas):
+        Tipo de dispositivo · Marca · Modelo · Serial · Estado · Ubicación física ·
+        Fecha de compra · Proveedor · Valor de compra · Garantía fábrica (meses) ·
+        Garantía extendida · Años garantía extendida · Observaciones ·
+        Nombre del equipo · Capacidad disco · Tipo de disco · RAM · Procesador ·
+        Sistema operativo · Licencia SO · Usuario de red · Admin local ·
+        IP del equipo · MAC del equipo · IMEI · Almacenamiento · RAM (celular) ·
+        Procesador (celular) · Tipo de disco (celular) · Correo dispositivo ·
+        Número de línea · Operador · Extensión · Puerto / Jack · Línea asignada ·
+        Pulgadas · Resolución · Tipo de panel · Conectores.
+        Las demás columnas se ignoran. El <strong>Serial</strong> es obligatorio.
+        <br>Valores de <strong>Tipo de dispositivo</strong>: Celular, Equipo Escritorio, Portátil, Teléfono Fijo, Monitor.
+        <br>Valores de <strong>Estado</strong>: Disponible, Asignado, En mantenimiento, En reparación, Dado de baja.
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Archivo</legend>
+          <div class="row g-3">
+            <div class="col-12">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <label class="form-label fw-semibold mb-0">Archivo Excel <span class="text-danger">*</span></label>
+                <a href="{% url 'inventario:importar_plantilla' %}" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-download me-1"></i>Descargar plantilla
+                </a>
+              </div>
+              <input type="file" name="archivo" class="form-control" accept=".xlsx" required>
+              <div class="form-text">Solo .xlsx — las filas sin datos se omiten, nada se guarda hasta confirmar.</div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-upload me-2"></i>Subir y previsualizar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
