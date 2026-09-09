@@ -16,8 +16,8 @@
   .banner .title-block { flex: 1; background: linear-gradient(135deg, #0156A6 0%, #013D7A 100%); color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 6px 18px; border-bottom: 3px solid #F18020; }
   .banner .title-block .titulo { font-size: 14pt; font-weight: bold; letter-spacing: .4px; }
   .banner .title-block .subtitulo { font-size: 7.5pt; opacity: .85; margin-top: 2px; }
-  #footer { position: running(footer); }
-  .footbar { display: flex; justify-content: space-between; align-items: center; font-size: 7pt; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 3px; }
+  #footer { position: running(footer); width: 100%; }
+  .footbar { display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 7pt; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 3px; }
   .footbar .page-num::after { content: counter(page) " / " counter(pages); }
 
   .datos {
@@ -28,21 +28,24 @@
   }
   .datos th, .datos td {
     border: 1px solid #E5E7EB;
-    padding: 4px 5px;
+    padding: 3px 4px;
     text-align: left;
     vertical-align: top;
-    word-break: break-word;
     overflow-wrap: break-word;
+    hyphens: auto;
   }
   .datos th {
     background: #0156A6;
     color: #fff;
-    font-size: 7.5pt;
+    font-size: inherit;
     font-weight: bold;
+    vertical-align: middle;
+    text-align: center;
   }
   .datos td { background: #FFFFFF; color: #1F2937; }
   .datos tr:nth-child(even) td { background: #F8FAFC; }
   .datos tr { page-break-inside: avoid; }
+  .datos .vacio { color: #C3CAD3; }
   .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 6.5pt; font-weight: bold; white-space: nowrap; }
   .badge.asignado { background: #DBEAFE; color: #1D4ED8; }
   .badge.disponible { background: #DCFCE7; color: #15803D; }
@@ -70,12 +73,15 @@
   </div>
 
   <table class="datos" style="font-size: {{ tabla_font }};">
+    <colgroup>
+      {% for col in columnas %}<col style="width: {{ col.ancho }}%;">{% endfor %}
+    </colgroup>
     <thead>
-      <tr>{% for key, label in columnas %}<th>{{ label }}</th>{% endfor %}</tr>
+      <tr>{% for col in columnas %}<th>{{ col.label }}</th>{% endfor %}</tr>
     </thead>
     <tbody>
       {% for fila in filas %}
-      <tr>{% for celda in fila %}<td>{{ celda.valor|default:"—" }}</td>{% endfor %}</tr>
+      <tr>{% for celda in fila %}<td>{% if celda.vacio %}<span class="vacio">—</span>{% else %}{{ celda.valor }}{% endif %}</td>{% endfor %}</tr>
       {% empty %}
       <tr><td colspan="{{ columnas|length }}" class="empty">No hay activos para los criterios seleccionados.</td></tr>
       {% endfor %}

@@ -101,7 +101,12 @@
                {% if seccion.nombre == "Teléfono fijo" %}data-tipos="telefono_fijo"{% endif %}
                {% if seccion.nombre == "Monitor" %}data-tipos="monitor"{% endif %}>
             <fieldset class="sa-fieldset">
-              <legend>{{ seccion.nombre }}</legend>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <legend class="mb-0">{{ seccion.nombre }}</legend>
+                <button type="button" class="seccion-toggle">
+                  <span class="toggle-label">Marcar todos</span>
+                </button>
+              </div>
               <div class="row g-2">
                 {% for campo in seccion.campos %}
                 <div class="col-12 col-md-6">
@@ -217,6 +222,39 @@
   // Antes de enviar, habilitar todos los inputs para que lleguen correctamente
   form.addEventListener('submit', function () {
     campoChecks.forEach(function (chk) { chk.disabled = false; });
+  });
+
+  // Marcar / desmarcar todos los campos de una sección
+  function setToggleState(btn, allChecked) {
+    btn.querySelector('.toggle-label').textContent = allChecked ? 'Desmarcar todos' : 'Marcar todos';
+    btn.classList.toggle('is-all-checked', allChecked);
+  }
+
+  document.querySelectorAll('.seccion-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const fieldset = btn.closest('fieldset');
+      const checks = fieldset.querySelectorAll('.campo-check');
+      const allChecked = Array.from(checks).every(function (chk) { return chk.checked; });
+      checks.forEach(function (chk) {
+        chk.checked = !allChecked;
+        chk.disabled = false;
+      });
+      setToggleState(btn, !allChecked);
+    });
+  });
+
+  // Actualizar el botón según el estado de los checkboxes de su sección
+  document.querySelectorAll('.seccion-col').forEach(function (col) {
+    const btn = col.querySelector('.seccion-toggle');
+    const checks = col.querySelectorAll('.campo-check');
+    function refreshToggleLabel() {
+      const allChecked = Array.from(checks).every(function (chk) { return chk.checked; });
+      setToggleState(btn, allChecked);
+    }
+    checks.forEach(function (chk) {
+      chk.addEventListener('change', refreshToggleLabel);
+    });
+    refreshToggleLabel();
   });
 
   updateAction();

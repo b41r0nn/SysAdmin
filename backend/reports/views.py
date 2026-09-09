@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import os
+import re
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -475,16 +476,7 @@ def inventario_pdf(request):
     if filtrar_por_tipo:
         activos_qs = activos_qs.filter(tipo_dispositivo__in=tipos_solicitados)
 
-    columnas = [(c, CAMPOS_INVENTARIO[c][0]) for c in campos]
-
-    columnas_count = len(columnas)
-    if columnas_count > 25:
-        tabla_font = "6pt"
-    elif columnas_count > 15:
-        tabla_font = "7pt"
-    else:
-        tabla_font = "8.5pt"
-
+    # Construir filas: cada fila es un activo, cada celda un campo
     filas = []
     for activo in activos_qs:
         asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
@@ -493,12 +485,65 @@ def inventario_pdf(request):
             raw = CAMPOS_INVENTARIO[c][1](activo, asignacion)
             if c == "estado":
                 valor = mark_safe(f'<span class="badge {activo.estado}">{raw}</span>')
+                vacio = False
             elif c == "valor_compra" and raw is not None:
                 valor = f"${raw:,.0f} COP"
+                vacio = False
             else:
-                valor = raw if raw not in (None, "") else "—"
-            fila.append({"valor": valor})
+                vacio = raw in (None, "")
+                valor = "—" if vacio else raw
+            fila.append({"valor": valor, "vacio": vacio})
         filas.append(fila)
+
+    # Podar columnas sin datos en ninguna fila (patrón de Snipe-IT/GLPI:
+    # un campo vacío para todo el universo no aporta y ensancha el reporte)
+    if filas:
+        keep_idx = [
+            i for i in range(len(campos))
+            if any(not fila[i]["vacio"] for fila in filas)
+        ]
+        if len(keep_idx) < len(campos):
+            campos = [campos[i] for i in keep_idx]
+            filas = [[fila[i] for i in keep_idx] for fila in filas]
+
+    columnas_count = len(campos)
+    if columnas_count > 25:
+        tabla_font = "6pt"
+    elif columnas_count > 15:
+        tabla_font = "7pt"
+    else:
+        tabla_font = "8.5pt"
+
+    # Anchos dinámicos según contenido (estilo GLPI Protocols Manager:
+    # "dynamic column widths"). El peso usa el token más largo (no la suma
+    # de caracteres), porque las celdas envuelven por palabra. Se normaliza
+    # a 100% con table-layout: fixed para que nada se salga de la página.
+    TOKEN_CAPS = {
+        "id": 6, "estado": 15, "valor_compra": 15, "observaciones": 26,
+        "fecha_compra": 11, "fecha_vencimiento_garantia": 11,
+        "fecha_asignacion": 11, "fecha_creacion": 17,
+        "ultima_actualizacion": 17, "documento_usuario": 12,
+    }
+
+    def _peso_columna(campo, idx):
+        tokens = [t for t in re.split(r"\s+", CAMPOS_INVENTARIO[campo][0]) if t]
+        for fila in filas:
+            texto = re.sub(r"<[^>]+>", "", str(fila[idx]["valor"]))
+            tokens.extend(t for t in re.split(r"\s+", texto) if t)
+        mayor = max((len(t) for t in tokens), default=4)
+        cap = TOKEN_CAPS.get(campo, 22)
+        return min(max(mayor + 1, 6), cap)
+
+    pesos = [_peso_columna(c, idx) for idx, c in enumerate(campos)]
+    total_peso = sum(pesos) or 1
+    columnas = [
+        {
+            "key": c,
+            "label": CAMPOS_INVENTARIO[c][0],
+            "ancho": round(pesos[idx] / total_peso * 100, 2),
+        }
+        for idx, c in enumerate(campos)
+    ]
 
     tipos_a_resumir = (
         [(key, label) for key, label in TIPOS if key in tipos_solicitados]

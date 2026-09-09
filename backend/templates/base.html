@@ -25,6 +25,13 @@
             <div class="sidebar-brand">
                 <img src="{% static 'img/logo_redihos_mark.png' %}" alt="REDIHOS" class="brand-logo">
             </div>
+            <div class="sa-wordmark">
+                <div class="sa-wordmark-text">
+                    <span class="sa-wordmark-sys">Sys</span><span class="sa-wordmark-admin">Admin</span>
+                </div>
+                <div class="sa-wordmark-bar"></div>
+                <div class="sa-wordmark-sub">Gestión de Activos TI</div>
+            </div>
             <nav class="nav flex-column">
                 <a class="nav-link {% if request.resolver_match.app_name == 'core' %}active{% endif %}" href="{% url 'core:dashboard' %}">
                     <i class="bi bi-speedometer2 me-2"></i>Página Principal

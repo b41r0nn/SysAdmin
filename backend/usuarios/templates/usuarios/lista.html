@@ -9,9 +9,14 @@
     <h1 class="page-title">Usuarios</h1>
     <p class="page-subtitle">Personas para asignacion de activos.</p>
   </div>
-  <a href="{% url 'usuarios:crear' %}" class="btn btn-primary">
-    <i class="bi bi-person-plus-fill"></i> Nuevo usuario
-  </a>
+  <div class="d-flex gap-2">
+    <a href="{% url 'usuarios:importar' %}" class="btn btn-outline-primary">
+      <i class="bi bi-file-earmark-excel"></i> Importar desde Excel
+    </a>
+    <a href="{% url 'usuarios:crear' %}" class="btn btn-primary">
+      <i class="bi bi-person-plus-fill"></i> Nuevo usuario
+    </a>
+  </div>
 </div>
 
 <!-- Stats rápidas -->
