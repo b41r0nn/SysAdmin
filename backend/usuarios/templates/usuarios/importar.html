@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Importar usuarios — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'usuarios:lista' %}" class="text-decoration-none">Usuarios</a>
+    </li>
+    <li class="breadcrumb-item active">Importar desde Excel</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-7">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-file-earmark-excel"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Importar usuarios desde Excel</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Se lee la primera hoja del archivo. La fila 1 debe tener los encabezados.
+          </p>
+        </div>
+      </div>
+
+      <div class="alert alert-info py-2 mb-4" style="font-size:.83rem;">
+        <strong>Columnas reconocidas</strong> (sin importar orden ni mayúsculas):
+        Nombre Completo · Identificación · Cargo · Área · Número Celular · Correo Corporativo.
+        Las demás columnas se ignoran. El nombre se reordena: primeras 2 palabras se toman
+        como apellidos y el resto como nombres.
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Archivo</legend>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Archivo Excel <span class="text-danger">*</span></label>
+              <input type="file" name="archivo" class="form-control" accept=".xlsx" required>
+              <div class="form-text">Solo .xlsx — las filas sin datos se omiten, nada se guarda hasta confirmar.</div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'usuarios:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-upload me-2"></i>Subir y previsualizar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

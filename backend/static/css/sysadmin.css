@@ -53,6 +53,38 @@ body {
   gap: 12px;
 }
 
+/* Wordmark "SysAdmin" debajo del logo del sidebar */
+.sa-wordmark {
+  text-align: center;
+  margin: 4px 0 18px 0;
+}
+
+.sa-wordmark-text {
+  font-family: 'Sora', sans-serif;
+  font-weight: 700;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.sa-wordmark-sys { color: #FFFFFF; }
+.sa-wordmark-admin { color: #5B9CD6; }
+
+.sa-wordmark-bar {
+  width: 70px;
+  height: 3px;
+  background: var(--sa-accent, #F18020);
+  margin: 8px auto 6px auto;
+  border-radius: 2px;
+}
+
+.sa-wordmark-sub {
+  font-family: 'Sora', sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #94A3B8;
+}
+
 .brand-icon {
   width: 44px;
   height: 44px;
@@ -279,6 +311,42 @@ img.sa-watermark {
   font-weight: 700;
   color: #64748b;
   padding: 0 8px;
+}
+
+/* Chip "Marcar / Desmarcar todos" por sección */
+.seccion-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--sa-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  background: var(--sa-primary);
+  border: 1px solid var(--sa-primary);
+  border-radius: 999px;
+  padding: 4px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.seccion-toggle:hover {
+  background: var(--sa-primary-dark);
+  border-color: var(--sa-primary-dark);
+}
+
+.seccion-toggle:active {
+  transform: scale(0.96);
+}
+
+.seccion-toggle.is-all-checked {
+  background: var(--sa-accent);
+  border-color: var(--sa-accent);
+}
+
+.seccion-toggle.is-all-checked:hover {
+  background: #d96f1b;
+  border-color: #d96f1b;
 }
 
 .search-input-group {
@@ -566,6 +634,10 @@ img.sa-watermark {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
+  }
+
+  .sa-wordmark {
+    display: none;
   }
 
   .sidebar .nav {
