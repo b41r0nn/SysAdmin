@@ -27,4 +27,9 @@ urlpatterns = [
 
     # ── Exportar Excel ────────────────────────────────────────────────────────
     path("exportar/opciones/", views.exportar_opciones, name="exportar_opciones"),
+
+    # ── Importar Activos ───────────────────────────────────────────────────────
+    path("importar/", views.importar_activos, name="importar"),
+    path("importar/confirmar/", views.confirmar_importar_activos, name="importar_confirmar"),
+    path("importar/plantilla/", views.descargar_plantilla_activos, name="importar_plantilla"),
 ]

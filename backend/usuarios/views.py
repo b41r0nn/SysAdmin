@@ -2,6 +2,9 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q
+from django.http import HttpResponse
+import openpyxl
+
 from .models import Usuario
 from .forms import UsuarioForm
 
@@ -274,3 +277,113 @@ def toggle_estado_usuario(request, pk):
             usuario.activar()
             messages.success(request, f"Usuario «{usuario.nombre_completo}» activado.")
     return redirect("usuarios:detalle", pk=usuario.pk)
+
+
+@login_required
+def descargar_plantilla_usuarios(request):
+    """Descarga plantilla Excel con headers y fila de ejemplo para importación de usuarios."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Plantilla Usuarios"
+
+    headers = [
+        "Nombre Completo",
+        "Identificación",
+        "Cargo",
+        "Área",
+        "Número Celular",
+        "Correo Corporativo",
+    ]
+
+    header_font = openpyxl.styles.Font(bold=True, color="FFFFFF")
+    header_fill = openpyxl.styles.PatternFill(start_color="0156A6", end_color="0156A6", fill_type="solid")
+    header_alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = openpyxl.styles.Border(
+        left=openpyxl.styles.Side(style="thin"),
+        right=openpyxl.styles.Side(style="thin"),
+        top=openpyxl.styles.Side(style="thin"),
+        bottom=openpyxl.styles.Side(style="thin"),
+    )
+
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    # Fila de ejemplo
+    ejemplo = [
+        "Calle Rivera Bairon Nicolas",  # Nombre Completo (apellidos primero, luego nombres)
+        "100200300",                    # Identificación (documento único)
+        "Analista de Sistemas",         # Cargo
+        "Tecnología",                   # Área
+        "3001234567",                   # Número Celular
+        "bcalle@redihos.com",           # Correo Corporativo
+    ]
+
+    for col_idx, valor in enumerate(ejemplo, 1):
+        cell = ws.cell(row=2, column=col_idx, value=valor)
+        cell.border = thin_border
+        cell.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top")
+
+    # Segunda fila de ejemplo
+    ejemplo2 = [
+        "Lopez Gomez Marta",
+        "200300400",
+        "Contadora",
+        "Finanzas",
+        "3104567890",
+        "mlopez@redihos.com",
+    ]
+
+    for col_idx, valor in enumerate(ejemplo2, 1):
+        cell = ws.cell(row=3, column=col_idx, value=valor)
+        cell.border = thin_border
+        cell.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top")
+
+    for col_idx in range(1, 7):
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = 28
+
+    # Hoja de instrucciones
+    ws_inst = wb.create_sheet("Instrucciones")
+    instrucciones = [
+        ["INSTRUCCIONES DE USO"],
+        [""],
+        ["1. Complete la hoja 'Plantilla Usuarios' copiando y pegando sus datos."],
+        ["2. No elimine ni reordene las columnas; solo agregue filas debajo de los ejemplos."],
+        ["3. El archivo debe guardarse como .xlsx (Excel 2007+)"],
+        [""],
+        ["CAMPOS OBLIGATORIOS:"],
+        ["  - Identificación: único, máximo 50 caracteres (clave para evitar duplicados)"],
+        ["  - Nombre Completo: formato 'Apellidos Nombres' (ej. 'Calle Rivera Bairon Nicolas')"],
+        ["     El sistema reordena automáticamente: primeras 2 palabras = apellidos,"],
+        ["     resto = nombres → 'Bairon Nicolas Calle Rivera'"],
+        [""],
+        ["CAMPOS OPCIONALES:"],
+        ["  - Cargo, Área: texto libre"],
+        ["  - Número Celular: solo dígitos, sin espacios ni guiones (ej. 3001234567)"],
+        ["  - Correo Corporativo: formato email válido"],
+        [""],
+        ["IMPORTANTE:"],
+        ["  - La Identificación es única. Si ya existe en el sistema, la fila se omitirá."],
+        ["  - Las filas sin Identificación o sin Nombre se marcarán como error."],
+        ["  - No modifique los encabezados; el sistema los lee por nombre exacto."],
+        ["  - Columnas extra se ignoran; no modifique el orden de las columnas."],
+    ]
+
+    for row_idx, line in enumerate(instrucciones, 1):
+        cell = ws_inst.cell(row=row_idx, column=1, value=line[0])
+        if row_idx == 1:
+            cell.font = openpyxl.styles.Font(bold=True, size=14, color="0156A6")
+        cell.alignment = openpyxl.styles.Alignment(wrap_text=True)
+
+    ws_inst.column_dimensions["A"].width = 100
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="plantilla_importar_usuarios.xlsx"'
+    wb.save(response)
+    return response

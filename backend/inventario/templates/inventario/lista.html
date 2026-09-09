@@ -9,7 +9,10 @@
     <h1 class="page-title">Inventario</h1>
     <p class="page-subtitle">Gestion de activos tecnologicos.</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'inventario:importar' %}" class="btn btn-outline-primary">
+      <i class="bi bi-file-earmark-excel"></i> Importar desde Excel
+    </a>
     <a href="{% url 'inventario:catalogo_lista' %}" class="btn btn-outline-secondary">
       <i class="bi bi-journal-bookmark-fill"></i> Catalogo
     </a>

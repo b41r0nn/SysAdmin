@@ -8,6 +8,7 @@ urlpatterns = [
     path("nuevo/", views.crear_usuario, name="crear"),
     path("importar/", views.importar_usuarios, name="importar"),
     path("importar/confirmar/", views.confirmar_importar_usuarios, name="importar_confirmar"),
+    path("importar/plantilla/", views.descargar_plantilla_usuarios, name="importar_plantilla"),
     path("<int:pk>/", views.detalle_usuario, name="detalle"),
     path("<int:pk>/editar/", views.editar_usuario, name="editar"),
     path("<int:pk>/toggle/", views.toggle_estado_usuario, name="toggle_estado"),
