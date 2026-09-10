@@ -6,11 +6,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from inventario.models import ActaAsignacion, Asignacion, Activo
+from licencias.models import LicenciaSoftware
 from mantenimiento.models import PlanMantenimiento
 from notificaciones.models import Notificacion
 from notificaciones.services import (
     _detectar_actas,
     _detectar_garantias,
+    _detectar_licencias,
     _detectar_mantenimiento,
     _detectar_ocs,
     generar_notificaciones,
@@ -206,6 +208,57 @@ class DetectarMantenimientoTests(TestCase):
         _detectar_mantenimiento(u)
         count2 = Notificacion.objects.filter(usuario=u, tipo="mantenimiento").count()
         self.assertEqual(count1, count2)
+
+
+class DetectarLicenciasTests(TestCase):
+    def _licencia(self, **kw):
+        defaults = {"nombre": "Software Test"}
+        defaults.update(kw)
+        return LicenciaSoftware.objects.create(**defaults)
+
+    def test_licencia_vencida_genera_notificacion(self):
+        u = _user("superadmin")
+        self._licencia(fecha_vencimiento=HOY - timedelta(days=3))
+        _detectar_licencias(u)
+        self.assertEqual(Notificacion.objects.filter(usuario=u, tipo="licencia").count(), 1)
+
+    def test_licencia_por_vencer_genera_notificacion(self):
+        u = _user("superadmin")
+        self._licencia(fecha_vencimiento=HOY + timedelta(days=5))
+        _detectar_licencias(u)
+        self.assertEqual(Notificacion.objects.filter(usuario=u, tipo="licencia").count(), 1)
+
+    def test_software_y_contrato_ambos_disparan(self):
+        u = _user("superadmin")
+        LicenciaSoftware.objects.create(
+            nombre="Windows", tipo="volumen", fecha_vencimiento=HOY - timedelta(days=1)
+        )
+        LicenciaSoftware.objects.create(
+            nombre="Contrato soporte HP", tipo="contrato", fecha_vencimiento=HOY + timedelta(days=3)
+        )
+        _detectar_licencias(u)
+        self.assertEqual(Notificacion.objects.filter(usuario=u, tipo="licencia").count(), 2)
+
+    def test_sin_vencimiento_no_genera(self):
+        u = _user("superadmin")
+        self._licencia()
+        _detectar_licencias(u)
+        self.assertFalse(Notificacion.objects.filter(usuario=u, tipo="licencia").exists())
+
+    def test_cancelada_no_genera(self):
+        u = _user("superadmin")
+        self._licencia(estado="cancelada", fecha_vencimiento=HOY - timedelta(days=2))
+        _detectar_licencias(u)
+        self.assertFalse(Notificacion.objects.filter(usuario=u, tipo="licencia").exists())
+
+    def test_idempotencia(self):
+        u = _user("superadmin")
+        self._licencia(fecha_vencimiento=HOY - timedelta(days=2))
+        _detectar_licencias(u)
+        c1 = Notificacion.objects.filter(usuario=u, tipo="licencia").count()
+        _detectar_licencias(u)
+        c2 = Notificacion.objects.filter(usuario=u, tipo="licencia").count()
+        self.assertEqual(c1, c2)
 
 
 class DetectarActasTests(TestCase):

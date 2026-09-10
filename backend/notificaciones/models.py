@@ -7,6 +7,7 @@ TIPOS = [
     ("mantenimiento", "Mantenimiento"),
     ("acta", "Acta de asignación"),
     ("ocs", "Equipos OCS"),
+    ("licencia", "Licencias / contratos"),
     ("aviso", "Aviso del sistema"),
 ]
 
