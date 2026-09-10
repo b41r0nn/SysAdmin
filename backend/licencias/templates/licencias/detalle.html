@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Licencia {{ licencia.nombre }} — Licencias{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'licencias:lista' %}" class="text-decoration-none">Licencias</a>
+    </li>
+    <li class="breadcrumb-item active">#{{ licencia.pk }}</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-3 d-flex align-items-center justify-content-between">
+  <div>
+    <h1 class="page-title">{{ licencia.nombre }}
+      {% if licencia.version %}<span class="text-muted" style="font-size:1rem;"> v{{ licencia.version }}</span>{% endif %}
+    </h1>
+    <p class="text-muted mb-0">
+      {{ licencia.get_tipo_display }} · {{ licencia.proveedor|default:"Proveedor no registrado" }}
+    </p>
+  </div>
+  <span class="sa-badge {{ badge_estado }}">{{ licencia.estado_efectivo_display }}</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-diamond"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ licencia.cantidad }}</div>
+        <div class="stat-label">Cantidad</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-pc-display"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ licencia.activos.count }}</div>
+        <div class="stat-label">Equipos cubiertos</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+        <i class="bi bi-calendar-event"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ licencia.fecha_vencimiento|date:"d/m/Y"|default:"—" }}</div>
+        <div class="stat-label">Vencimiento</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon {% if licencia.costo %}bg-success bg-opacity-10 text-success{% else %}bg-secondary bg-opacity-10 text-secondary{% endif %}">
+        <i class="bi bi-cash-coin"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{% if licencia.costo %}${{ licencia.costo|floatformat:0 }} COP{% else %}—{% endif %}</div>
+        <div class="stat-label">Costo</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sa-card p-4 mb-4">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+    Detalle
+  </h6>
+  <dl class="row mb-0" style="font-size:.9rem;">
+    <dt class="col-sm-3 text-muted fw-semibold">Clave / serial</dt>
+    <dd class="col-sm-9">{{ licencia.clave|default:"—" }}</dd>
+    <dt class="col-sm-3 text-muted fw-semibold">Fecha de compra</dt>
+    <dd class="col-sm-9">{{ licencia.fecha_compra|date:"d/m/Y"|default:"—" }}</dd>
+    <dt class="col-sm-3 text-muted fw-semibold">Responsable</dt>
+    <dd class="col-sm-9">{{ licencia.responsable|default:"—" }}</dd>
+    <dt class="col-sm-3 text-muted fw-semibold">Estado manual</dt>
+    <dd class="col-sm-9">{{ licencia.get_estado_display }}</dd>
+    <dt class="col-sm-3 text-muted fw-semibold">Observaciones</dt>
+    <dd class="col-sm-9">{{ licencia.observaciones|default:"—"|linebreaksbr }}</dd>
+  </dl>
+</div>
+
+{% if licencia.activos.all %}
+<div class="sa-card p-4 mb-4">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+    Equipos cubiertos
+  </h6>
+  <div class="d-flex flex-wrap gap-2">
+    {% for activo in licencia.activos.all %}
+    <a href="{% url 'inventario:detalle' activo.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pc-display"></i> {{ activo }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="mt-4 d-flex gap-2 flex-wrap">
+  <a href="{% url 'licencias:editar' licencia.pk %}" class="btn btn-outline-secondary">
+    <i class="bi bi-pencil-square"></i> Editar
+  </a>
+  <a href="{% url 'licencias:eliminar' licencia.pk %}" class="btn btn-outline-danger">
+    <i class="bi bi-trash"></i> Eliminar
+  </a>
+</div>
+{% endblock %}

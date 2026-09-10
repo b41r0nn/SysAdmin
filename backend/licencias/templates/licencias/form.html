@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — Licencias{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'licencias:lista' %}" class="text-decoration-none">Licencias</a>
+    </li>
+    {% if licencia %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'licencias:detalle' licencia.pk %}" class="text-decoration-none">#{{ licencia.pk }}</a>
+      </li>
+    {% endif %}
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-9">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-diamond"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">{{ titulo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Datos del producto, clave/serial, cobertura y vigencia.
+          </p>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Software *</label>
+            {{ form.nombre }}
+            {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Versión</label>
+            {{ form.version }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Tipo *</label>
+            {{ form.tipo }}
+          </div>
+          <div class="col-12 col-md-7">
+            <label class="form-label fw-semibold">Proveedor / editor</label>
+            {{ form.proveedor }}
+          </div>
+          <div class="col-12 col-md-5">
+            <label class="form-label fw-semibold">Clave / serial</label>
+            {{ form.clave }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Cantidad *</label>
+            {{ form.cantidad }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Costo (COP)</label>
+            {{ form.costo }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Fecha de compra</label>
+            {{ form.fecha_compra }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold">Vencimiento</label>
+            {{ form.fecha_vencimiento }}
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Estado manual</label>
+            {{ form.estado }}
+            <div class="text-muted" style="font-size:.72rem;">Vencidas / por vencer se calculan automáticamente.</div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Responsable</label>
+            {{ form.responsable }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Equipos cubiertos</label>
+            {{ form.activos }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Observaciones</label>
+            {{ form.observaciones }}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle me-2"></i>Guardar
+          </button>
+          <a href="{% url 'licencias:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
