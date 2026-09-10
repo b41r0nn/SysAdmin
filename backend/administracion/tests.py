@@ -124,3 +124,98 @@ class RegistroAuditoriaTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Alta de usuario PRUEBA")
         self.assertNotContains(response, "Sesión iniciada")
+
+
+class AdministracionCuentasTests(TestCase):
+    def setUp(self):
+        self.super = crear_usuario("superadmin", "sa_ctas")
+        self.tech = crear_usuario("tecnico", "tec_ctas")
+        self.client.force_login(self.super)
+
+    def test_lista_cuentas_exige_permiso_administracion(self):
+        self.client.force_login(self.tech)
+        resp = self.client.get(reverse("administracion:cuentas"))
+        self.assertRedirects(resp, reverse("core:dashboard"))
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("administracion:cuentas"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "sa_ctas")
+
+    def test_crear_cuenta_genera_password_temporal(self):
+        resp = self.client.post(
+            reverse("administracion:crear_cuenta"),
+            {"username": "nuevo_cta", "email": "nuevo@redihos.com", "rol": "tecnico"},
+            follow=True,
+        )
+        self.assertRedirects(resp, reverse("administracion:cuentas"))
+        self.assertTrue(CustomUser.objects.filter(username="nuevo_cta").exists())
+        self.assertContains(resp, "Contraseña temporal")
+
+    def test_staff_y_superuser_solo_para_superadmin(self):
+        self.client.post(
+            reverse("administracion:crear_cuenta"),
+            {"username": "adm_cta", "email": "adm@redihos.com", "rol": "admin"},
+        )
+        adm = CustomUser.objects.get(username="adm_cta")
+        self.assertFalse(adm.is_superuser)
+        self.assertFalse(adm.is_staff)
+
+        self.client.post(
+            reverse("administracion:cambiar_rol", args=[adm.pk]), {"rol": "superadmin"}
+        )
+        adm.refresh_from_db()
+        self.assertEqual(adm.rol, "superadmin")
+        self.assertTrue(adm.is_superuser)
+        self.assertTrue(adm.is_staff)
+
+        self.client.post(
+            reverse("administracion:cambiar_rol", args=[adm.pk]), {"rol": "tecnico"}
+        )
+        adm.refresh_from_db()
+        self.assertEqual(adm.rol, "tecnico")
+        self.assertFalse(adm.is_superuser)
+        self.assertFalse(adm.is_staff)
+
+    def test_toggle_desactiva_y_reactiva(self):
+        cuenta = crear_usuario("tecnico", "tog_cta")
+        self.client.post(reverse("administracion:toggle_cuenta", args=[cuenta.pk]))
+        cuenta.refresh_from_db()
+        self.assertFalse(cuenta.is_active)
+        self.client.post(reverse("administracion:toggle_cuenta", args=[cuenta.pk]))
+        cuenta.refresh_from_db()
+        self.assertTrue(cuenta.is_active)
+
+    def test_no_te_desactivas_a_ti_mismo(self):
+        self.client.post(reverse("administracion:toggle_cuenta", args=[self.super.pk]))
+        self.super.refresh_from_db()
+        self.assertTrue(self.super.is_active)
+
+    def test_cambiar_rol(self):
+        cuenta = crear_usuario("tecnico", "rol_cta")
+        self.client.post(reverse("administracion:cambiar_rol", args=[cuenta.pk]), {"rol": "admin"})
+        cuenta.refresh_from_db()
+        self.assertEqual(cuenta.rol, "admin")
+        self.assertFalse(cuenta.is_staff)
+
+    def test_no_te_quitas_superadmin_a_ti_mismo(self):
+        resp = self.client.post(
+            reverse("administracion:cambiar_rol", args=[self.super.pk]), {"rol": "tecnico"}
+        )
+        self.super.refresh_from_db()
+        self.assertEqual(self.super.rol, "superadmin")
+        self.assertContains(resp, "No puedes quitarte")
+
+    def test_resetear_password_permite_login_con_temporal(self):
+        creada = crear_usuario("tecnico", "pwd_cta")
+        resp = self.client.post(
+            reverse("administracion:resetear_password", args=[creada.pk]), follow=True
+        )
+        temporal = None
+        for m in resp.context["messages"]:
+            texto = str(m)
+            if "reiniciada" in texto:
+                temporal = texto.split("Temporal: ")[1].split(" ")[0]
+        self.assertIsNotNone(temporal)
+        self.client.logout()
+        self.assertTrue(self.client.login(username="pwd_cta", password=temporal))
