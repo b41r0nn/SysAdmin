@@ -8,6 +8,7 @@ TIPOS_LICENCIA = [
     ("individual", "Individual"),
     ("oem", "OEM / Preinstalada"),
     ("suscripcion", "Suscripción"),
+    ("contrato", "Contrato de servicio"),
 ]
 
 ESTADOS_LICENCIA = [

@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from accounts.permisos import PERMISOS_POR_ROL
 from inventario.models import ActaAsignacion, Activo
+from licencias.models import DIAS_AVISO_VENCIMIENTO, LicenciaSoftware
 from mantenimiento.models import PlanMantenimiento
 from notificaciones.models import Notificacion
 from yule.models import EquipoOCS
@@ -135,6 +136,36 @@ def _detectar_ocs(user):
         )
 
 
+def _detectar_licencias(user):
+    hoy = timezone.localdate()
+    limite = hoy + timedelta(days=DIAS_AVISO_VENCIMIENTO)
+    licencias = LicenciaSoftware.objects.filter(
+        fecha_vencimiento__isnull=False,
+    ).exclude(estado="cancelada")
+    for lic in licencias:
+        link = reverse("licencias:detalle", args=[lic.pk])
+        version = f" {lic.version}" if lic.version else ""
+        objetokey = f"licencia:{lic.pk}"
+        if lic.fecha_vencimiento < hoy:
+            _crear(
+                user,
+                "licencia",
+                f"Licencia vencida · {lic.nombre}",
+                f"La licencia {lic.nombre}{version} venció el {lic.fecha_vencimiento:%d/%m/%Y}.",
+                link=link,
+                objetokey=objetokey,
+            )
+        elif lic.fecha_vencimiento <= limite:
+            _crear(
+                user,
+                "licencia",
+                f"Licencia por vencer · {lic.nombre}",
+                f"La licencia {lic.nombre}{version} vence el {lic.fecha_vencimiento:%d/%m/%Y}.",
+                link=link,
+                objetokey=objetokey,
+            )
+
+
 def generar_mantenimiento(user):
     if _puede_ver(user, "mantenimiento"):
         return _detectar_mantenimiento(user)
@@ -168,4 +199,6 @@ def generar_notificaciones(user):
         _detectar_garantias(user)
         _detectar_actas(user)
         _detectar_ocs(user)
+    if _puede_ver(user, "licencias"):
+        _detectar_licencias(user)
     generar_mantenimiento(user)
