@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-09 · v1.1.0 + post-release importación masiva · Etapas 0-7B + Documentos Completas
+> Documento actualizado: 2026-09-10 · v1.4.0 + Fase 1/2/3/4 · 142 tests OK
 
 ---
 
@@ -10,21 +10,29 @@
 | 0 | Fundación Docker+Django+Nginx | ✅ COMPLETA |
 | 1 | accounts — Login/auth/sesión | ✅ COMPLETA |
 | 2 | usuarios — BD personas | ✅ COMPLETA |
-| 3 | inventario — Activos | ✅ COMPLETA · import masiva + plantillas v1.1.0+ |
+| 3 | inventario — Activos | ✅ COMPLETA · import masiva + plantillas v1.1.0+ · etiquetas QR (Fase 2) |
 | 4 | reports — Reportes | ✅ COMPLETA · export configurables Excel/PDF post-v1.1.0 |
 | 5 | mantenimiento — Órdenes | ✅ COMPLETA |
 | 6 | passwords — Vault | ✅ COMPLETA |
 | 7B | yule — Sincronización OCS | ✅ COMPLETA |
 | 8 | documentos — Repositorio documental | ✅ COMPLETA v1.1.0 |
+| Fase 1 | administracion — Roles + permisos + auditoría | ✅ COMPLETA 2026-09-10 |
+| Fase 2 | inventario — Etiquetas QR | ✅ COMPLETA 2026-09-10 |
+| Fase 3 | notificaciones + checklist + criticidad + calendario + reportar | ✅ COMPLETA 2026-09-10 |
+| Fase 4 EXTRA | Tests de cobertura (todas las apps) | ✅ COMPLETA 2026-09-10 · 153 tests |
+| Fase 4 (plan) | Helpdesk / Tickets (app `soporte`) | ✅ COMPLETA 2026-09-10 · 167 tests |
+| Fase 5 | Licencias de software (app `licencias`) | ✅ COMPLETA 2026-09-10 · 186 tests |
+| Fase 6 | Préstamos de equipos (app `prestamos`) | ✅ COMPLETA 2026-09-10 · 202 tests |
 
 ---
 
 ## 🔴 TAREAS CRÍTICAS PENDIENTES
 
-1. **Deploy v1.1.0 en servidor**
-   - Ejecutar `migrate` para aplicar migraciones pendientes de `inventario` y `documentos`
+1. **Deploy v1.1.0 + Fase 1/2 en servidor**
+   - Ejecutar `migrate` para aplicar migraciones pendientes de `administracion` (0001_initial) y `accounts` (rol)
    - Reiniciar contenedor Django
-   - Verificar módulo Documentos y autocompletado de catálogo en activos
+   - Verificar módulo Administración (auditoría + configuración), sidebar por rol y etiquetas QR
+   - `qrcode==8.2` es dependencia nueva → reconstruir imagen Docker (`pip install` vía requirements)
 
 2. **Validar reportes configurables**
    - Probar `/inventario/exportar/opciones/` en Excel y PDF
@@ -36,7 +44,62 @@
    - Verificar vista previa, badges de estado, confirmación
    - Verificar race guard (duplicados entre preview y confirmar)
 
-4. **Tests**: No hay tests automatizados (TODO futuro)
+4. **Tests automatizados activos**: 202/202 tests OK (todas las apps — Fases 1-6, plan completo). Ejecutar con `manage.py test`.
+
+5. ~~drift de migraciones~~ → **RESUELTO 2026-09-10**: se generaron y aplicaron `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` con módulos nuevos). `makemigrations --check` → *No changes detected*.
+
+6. **BD local dev reconstruida el 2026-09-10**: el `db.sqlite3` previo tenía historial de migraciones inconsistente (sin `accounts_customuser` ni datos de negocio). Se reconstruyó de cero: `migrate` (42 migraciones), superuser `admin` (rol `superadmin`) y singleton `ConfiguracionSistema`. Credencial dev generada localmente, **no versionada** (no registrar en commits ni en `.env.example`).
+
+---
+
+## ✅ FASE 1 — Módulo de Administración (roles + permisos + auditoría) [Completada 2026-09-10]
+
+- Matriz de permisos `accounts/permisos.py` (`PERMISOS_POR_ROL`) + decorador `@requiere_permiso(módulo, nivel)` en TODAS las vistas (usuarios, inventario, reports, mantenimiento, passwords, documentos, yule→inventario).
+- Roles en `CustomUser.rol` (superadmin/admin/tecnico/lectura) con migración + data migration.
+- Nueva app **`administracion`**: `RegistroAuditoria` (con signals login/logout), `ConfiguracionSistema` (singleton, usado en etiquetas QR y actas), vistas `auditoria/` y `configuracion/`, template tag `tiene_permiso` + sidebar condicional.
+- WeasyPrint movido a imports locales (desbloquea `makemigrations`/`check`/`test` local sin GTK).
+- Tests: `accounts/tests.py`, `administracion/tests.py`.
+
+## ✅ FASE 2 — Etiquetas QR para activos [Completada 2026-09-10]
+
+- Dependencia nueva: `qrcode==8.2` (PNG puro, sin GTK). QR cifra la URL absoluta de la ficha del activo (`inventario/detalle`).
+- Endpoints nuevos en `inventario` (todos `@requiere_permiso("inventario", "lectura")`):
+  - `GET /inventario/<pk>/qr/` → PNG del código QR (usado en la ficha del activo).
+  - `GET /inventario/<pk>/etiqueta/` → PDF de etiqueta individual (92×58 mm).
+  - `GET/POST /inventario/etiquetas/` → página de selección masiva → PDF con hasta 8 etiquetas por hoja A4.
+- Plantillas: `inventario/etiqueta_pdf.html` (standalone WeasyPrint, patrón `acta_pdf.html`) y `inventario/etiquetas_seleccion.html` (web con checkboxes, selector "todos" y contador).
+- Integración: botón en `lista.html`, icono QR por fila en `partials/tabla.html`, vista previa del QR + botón en `detalle.html`.
+- La cabecera de la etiqueta usa `ConfiguracionSistema.nombre_empresa` y NIT de la Fase 1.
+- Tests: `inventario/tests.py` (10 nuevos: permisos, PNG válido, PDF mockeado sin WeasyPrint real, selección masiva, render de plantilla con QR real).
+## ✅ FASE 3 — Sistema de notificaciones por usuario [Completada 2026-09-10]
+
+- Nueva app **`notificaciones`**: modelo `Notificacion`, detectores perezosos, vistas de bandeja y marcar leídas.
+- **Detectores** (corren al consultar bandeja/campana, idempotentes via `get_or_create`):
+  - `garantia` — activos con garantía vencida (≤ hoy) o por vencer (≤ 30 días). Excluye dados de baja.
+  - `mantenimiento` — `PlanMantenimiento.proxima_ejecucion` atrasada o próxima (7 días). Solo `estado="activo"`.
+  - `acta` — `ActaAsignacion` sin firma escaneada.
+  - `ocs` — `EquipoOCS` sin `activo_local` vinculado.
+- **Permisos por rol**: cada detector solo corre si el rol tiene acceso al módulo relevante (`_puede_ver` usa `PERMISOS_POR_ROL`).
+- **Fix aplicado**: `_detectar_actas` usa `Q(escaneado_firmado="") | Q(escaneado_firmado__isnull=True)` (FileField almacena `""`, no NULL).
+- **Campana HTMX** en sidebar: badge de no leídas cargado al cargar la página (`hx-trigger="load"`).
+- **Vistas**: `lista_notificaciones`, `cantidad`, `marcar_leida`, `marcar_todas_leidas` — todas `@login_required`, sin `@requiere_permiso`.
+- Tests: `notificaciones/tests.py` (31 tests — modelo, detectores, idempotencia, vistas, permisos).
+- Suite completa: 61/61 tests OK, `manage.py check` 0 issues.
+
+## ✅ FASE 4 — Tests de cobertura [Completada 2026-09-10]
+
+- Tests para las 7 apps sin cobertura previa (81 tests nuevos):
+  - `core/tests.py` (3): dashboard login/status/context.
+  - `usuarios/tests.py` (12): CRUD + plantilla Excel + permisos.
+  - `mantenimiento/tests.py` (16): planes, órdenes (cerrar/ya cerrada), repuestos + permisos.
+  - `documentos/tests.py` (11): CRUD documentos/categorías + protección categoría + permisos.
+  - `passwords/tests.py` (17): vaults, credenciales con cifrado Fernet, acceso con código Argon2, export, logs + permisos.
+  - `reports/tests.py` (12): index, 5 Excel, 2 PDF (WeasyPrint mockeado vía `patch.dict("sys.modules")`) + permisos.
+  - `yule/tests.py` (10): models + vistas (reemplaza placeholder).
+- **Bug real corregido**: `passwords/views.py` — `_log_action` corría después de `delete()` (FK apuntaba a objeto borrado → `ValueError: save() prohibited`). Ahora el log se escribe antes del borrado (`vault_eliminar`, `credencial_eliminar`).
+- Detalle: en ModelForm, un campo con `blank=False` y `default` sigue siendo `required`; los tests ahora envían `estado`/`orden` donde corresponde.
+- Suite completa: **142/142 tests OK**, `manage.py check` 0 issues.
+
 ## CRONOGRAMA ETAPAS 6 Y 7 (PROPUESTA vs REALIDAD)
 
 ### ✅ ETAPA 6 — passwords (Completada)
@@ -247,23 +310,9 @@ SysAdmin/
     ├── mantenimiento/           ← ETAPA 5 COMPLETA
     ├── passwords/               ← ETAPA 6 COMPLETA
     ├── yule/                    ← ETAPA 7B COMPLETA
-    └── documentos/              ← ETAPA 8 COMPLETA v1.1.0
-        ├── __init__.py
-        ├── admin.py
-        ├── apps.py
-        ├── forms.py
-        ├── models.py
-        ├── urls.py
-        ├── views.py
-        ├── migrations/
-        │   ├── __init__.py
-        │   └── 0001_initial.py
-        └── templates/documentos/
-            ├── lista.html
-            ├── form.html
-            ├── categorias_lista.html
-            ├── confirmar_eliminar.html
-            └── confirmar_eliminar_categoria.html
+    ├── documentos/              ← ETAPA 8 COMPLETA v1.1.0
+    ├── administracion/          ← FASE 1: auditoría + configuración + roles
+    └── notificaciones/          ← FASE 3: notificaciones por usuario
 
     └── yule/                    ← ETAPA 7B COMPLETA
         ├── __init__.py
@@ -307,6 +356,8 @@ INSTALLED_APPS = [
     "passwords",
     "yule",              # ← ETAPA 7B: Sincronización OCS
     "documentos",        # ← ETAPA 8: Repositorio documental v1.1.0
+    "administracion",    # ← FASE 1: Auditoría + configuración + roles
+    "notificaciones",    # ← FASE 3: Notificaciones por usuario
 ]
 ```
 
@@ -562,6 +613,7 @@ python-decouple==3.8
 Pillow==10.3.0
 django-htmx==1.17.3
 whitenoise==6.6.0
+qrcode==8.2
 ```
 
 ---
@@ -815,6 +867,88 @@ Pendiente únicamente aplicar patches en servidor y hacer `makemigrations + migr
 ---
 
 ## CHANGELOG RECIENTE
+
+### 2026-09-10 — Corrección BD local + drift de migraciones
+
+- `db.sqlite3` local estaba roto: historial de migraciones inconsistente pre-existente (falta `accounts.0001`/`accounts.0002` y la tabla `accounts_customuser`; apps antiguas creadas por syncdb), sin datos de negocio. Se reconstruyó de cero con `migrate` → **42 migraciones aplicadas** en orden.
+- Superuser dev `admin` (rol `superadmin`) y singleton `ConfiguracionSistema` creados. La BD antigua quedó respaldada en `backend/db.sqlite3.legacy_20260910`.
+- Drift resuelto: `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` sincronizados con los módulos nuevos de las Fases 4-6). `makemigrations --check` → *No changes detected*.
+- Suite completa **202/202 OK** · `manage.py check` 0 issues · `makemigrations --check` sin drift.
+
+### 2026-09-10 — Fase 4: Tests de cobertura
+
+- Tests para `core`, `usuarios`, `mantenimiento`, `documentos`, `passwords`, `reports`, `yule` (81 nuevos).
+- Fix producción: `passwords/views.py` registraba `AccesoLog` después de borrar el objeto (vault/credencial) → `ValueError: save() prohibited`; el log ahora precede al `delete()`.
+- PDFs de `reports` probados con WeasyPrint mockeado en `sys.modules` (patrón Fase 2, sin GTK).
+- Suite completa: 142/142 tests OK, `manage.py check` 0 issues.
+
+### 2026-09-10 — Fase 3: Mantenimiento completo (checklist + criticidad + calendario + reportar)
+
+- **Notificaciones**: app `notificaciones` con detectores perezosos (garantía, mantenimiento, actas, OCS), vistas bandeja/cantidad/marcar_leida, campana HTMX en sidebar. Fix `_detectar_actas` (field vacío `""` detectado además de NULL). Mgmt command `generar_notificaciones_mantenimiento`.
+- **Checklist**: modelo `ChecklistItem` (plan plantilla → copia a orden al crear). Formset de items en crear/editar plan. Toggle completado vía HTMX (`partials/checklist_orden.html`) con barra de progreso en detalle de orden.
+- **Criticidad**: campo `criticidad` (`baja/media/alta`) en `PlanMantenimiento` con badge de color en tabla de planes y en el detalle del plan.
+- **Estado `reportada`** añadido a `OrdenMantenimiento`.
+- **Calendario**: FullCalendar (CDN) + endpoint JSON `calendario_eventos` mostrando ordenes y planes preventivos con colores por estado/criticidad.
+- **Portal de reporte**: `/mantenimiento/reportar/` — `@login_required`, sin permiso de módulo. Crea `OrdenMantenimiento` con estado `reportada`, tipo `correctivo`, prioridad `alta`. Enlace visible en sidebar para todos los usuarios autenticados.
+- 12 tests nuevos (checklist plan→orden 3, toggle 1, command idempotente 1, reporte portal 4, calendario 2) → suite total **153/153** OK.
+- Migración: `mantenimiento/0002_..._criticidad_and_more.py` generada con `sysadmin.settings._tmp_scratch` (SQLite temporal, eliminado después).
+
+### 2026-09-10 — Fase 6: Préstamos de equipos (app `prestamos`)
+
+- Modelo `Prestamo`: activo FK (PROTECT) a `inventario.Activo`, solicitante FK (PROTECT) a usuario, fecha_prestamo (default hoy), fecha_devolucion_prevista, fecha_devolucion, destino, observaciones; índice `(fecha_prestamo, fecha_devolucion_prevista)`.
+- Estado calculado: devuelto > vencido (prevista pasada) > activo; `dias_retraso` para vencidos.
+- Validación `PrestamoForm`: bloquea un segundo préstamo vigente del mismo equipo y previstas anteriores al préstamo.
+- CRUD + "Registrar devolución" (POST idempotente); sin vista de eliminar (se preserva el historial).
+- Módulo `prestamos` en `PERMISOS_POR_ROL`: superadmin/admin/tecnico = escritura; lectura = lectura. Sidebar tras Licencias.
+- Migración `prestamos/0001_initial` generada y validada en BD limpia temporal (`_tmp_scratch`, eliminada).
+- 16 tests en `prestamos/tests.py` → suite total **202/202** OK, `manage.py check` 0 issues.
+- 🏁 **Plan por fases completado (1-6).**
+
+### 2026-09-10 — Fase 5: Licencias de software (app `licencias`)
+
+- Modelo `LicenciaSoftware`: nombre, version, proveedor, clave/serial, tipo (volumen/individual/oem/suscripcion), cantidad, fechas compra/vencimiento, costo, estado (activa/cancelada), responsable, observaciones, timestamps.
+- M2M opcional `activos` → `inventario.Activo` con related_name `licencias`.
+- Estado efectivo computado (`estado_efectivo`): cancelada > vencida (> fecha) > por_vencer (≤7 días) > activa; filtro de lista por estado efectivo.
+- CRUD completo + detalle con equipos cubiertos + eliminar con confirmación.
+- Migración `licencias/0001_initial` generada y validada en BD limpia temporal (`_tmp_scratch`, eliminada).
+- Módulo `licencias` en `PERMISOS_POR_ROL`: superadmin/admin = escritura; tecnico/lectura = lectura. Sidebar entre Mantenimiento y Documentos.
+- Exports Excel (openpyxl) y PDF (weasyprint lazy) con patrón `CAMPOS_LICENCIAS` (mismo estándar que `CAMPOS_INVENTARIO`).
+- Nuevo filtro genérico `get_item` en `accounts/templatetags/permisos_extras.py`.
+- 19 tests en `licencias/tests.py` → suite total **186/186** OK, `manage.py check` 0 issues.
+
+### 2026-09-10 — Fase 4 (plan): Helpdesk / Tickets (app `soporte`)
+
+- Modelo `Ticket`: asunto, descripcion, prioridad, estado (abierto/en_proceso/resuelto/cerrado/escalado), solicitante FK (PROTECT), asignado_a FK (SET_NULL), índice (estado, fecha_creacion).
+- Módulo `soporte` añadido a `PERMISOS_POR_ROL`: superadmin/admin/tecnico = escritura; lectura = lectura. `crear_ticket` es portal abierto (`@login_required`).
+- `asignar_ticket` guarda asignación, pasa a `en_proceso` y notifica al técnico vía `notificaciones.services.aviso_usuario` (idempotente; reasignar no duplica).
+- `escalar_ticket` crea `OrdenMantenimiento` (correctivo/abierta) con nueva FK opcional `ticket` en `OrdenMantenimiento`, heredando la prioridad; el ticket pasa a `escalado` y no se puede duplicar la orden.
+- Sidebar: enlace "Soporte" condicional por rol.
+- 14 tests en `soporte/tests.py` → suite total **167/167** OK, `manage.py check` 0 issues.
+- Migraciones: `soporte/0001_initial` + `mantenimiento/0003_ordenmantenimiento_ticket` (generadas con BD temporal `_tmp_scratch`, eliminada).
+
+### 2026-09-10 — Fase 4 EXTRA: Tests de cobertura (todas las apps)
+
+- Tests nuevos: core (3), usuarios (12), mantenimiento (16), documentos (11), passwords (17), reports (12), yule (10) → 81 tests.
+- Fix producción: `passwords/views.py` `AccesoLog` registrado antes del `delete()` (corregido durante la escritura de tests de passwords).
+- Mock de WeasyPrint en tests de reports: `patch.dict("sys.modules", {"weasyprint": _FakeWeasyprint})`.
+- Suite completa: 153/153 tests OK, `manage.py check` 0 issues.
+
+### 2026-09-10 — Fase 2: Etiquetas QR para activos
+
+- `qrcode==8.2` (PNG puro, sin GTK). QR cifra URL absoluta de la ficha.
+- Endpoints: `/<pk>/qr/` (PNG), `/<pk>/etiqueta/` (PDF 92×58 mm), `/etiquetas/` (selección masiva → PDF A4, 8 por hoja).
+- Plantillas: `etiqueta_pdf.html` (WeasyPrint) y `etiquetas_seleccion.html` (web).
+- Integración: botón en lista, icono QR por fila en tabla, vista previa + botón en detalle.
+- 10 tests en `inventario/tests.py`.
+
+### 2026-09-10 — Fase 1: Módulo de Administración (roles + permisos + auditoría)
+
+- Roles `superadmin`/`admin`/`tecnico`/`lectura` + matriz `PERMISOS_POR_ROL`.
+- Decorador `@requiere_permiso` en todas las vistas de todos los módulos.
+- App `administracion`: `RegistroAuditoria` (signals login/logout), `ConfiguracionSistema` (singleton).
+- Sidebar condicional por rol (template tag `tiene_permiso`).
+- WeasyPrint con imports locales (herramientas de desarrollo habilitadas sin GTK).
+- Suite completa: 30 tests OK (accounts + administracion + inventario + yule).
 
 ### 2026-06-05 — Yule 7B Completada
 
