@@ -1,0 +1,45 @@
+{% if orden.checklist_items.all %}
+<div class="sa-card p-4 mt-4" id="card-checklist-{{ orden.id }}">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="fw-semibold mb-0 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+      Checklist de ejecucion
+    </h6>
+    <span id="progreso-checklist-{{ orden.id }}" class="fw-semibold" style="font-size:.85rem;">
+      {{ orden.checklist_items_completados }}/{{ orden.checklist_items.count }}
+    </span>
+  </div>
+  <div class="progress mb-3" style="height:.55rem;">
+    <div id="barra-checklist-{{ orden.id }}"
+         class="progress-bar {% if orden.checklist_items_completados == orden.checklist_items.count %}bg-success{% endif %}"
+         role="progressbar"
+         style="width:{% widthratio orden.checklist_items_completados orden.checklist_items.count 100 %}%"></div>
+  </div>
+  <ul class="list-group list-group-flush">
+    {% for item in orden.checklist_items.all %}
+    <li class="list-group-item d-flex align-items-center gap-3 px-0 {% if item.completado %}text-muted{% endif %}">
+      <form method="post"
+            action="{% url 'mantenimiento:toggle_checklist' item.pk %}"
+            hx-post="{% url 'mantenimiento:toggle_checklist' item.pk %}"
+            hx-target="#card-checklist-{{ orden.id }}"
+            hx-swap="outerHTML"
+            class="mb-0">
+        {% csrf_token %}
+        <input type="hidden" name="item" value="{{ item.pk }}">
+        <div class="form-check">
+          <input type="checkbox"
+                 class="form-check-input"
+                 {% if item.completado %}checked{% endif %}
+                 onchange="this.form.requestSubmit()">
+        </div>
+      </form>
+      <span {% if item.completado %}style="text-decoration:line-through;"{% endif %}>
+        {{ item.descripcion }}
+      </span>
+      {% if item.completado %}
+        <i class="bi bi-check-circle-fill text-success ms-auto"></i>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

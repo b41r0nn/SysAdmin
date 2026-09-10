@@ -44,6 +44,11 @@
             {% if form.tipo.errors %}<div class="invalid-feedback d-block">{{ form.tipo.errors|join:", " }}</div>{% endif %}
           </div>
           <div class="col-12 col-md-3">
+            <label class="form-label fw-semibold">Criticidad</label>
+            {{ form.criticidad }}
+            {% if form.criticidad.errors %}<div class="invalid-feedback d-block">{{ form.criticidad.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-3">
             <label class="form-label fw-semibold">Estado</label>
             {{ form.estado }}
           </div>
@@ -69,6 +74,38 @@
           </div>
         </div>
 
+        <div class="mt-4">
+          <h6 class="fw-semibold mb-2" style="font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--sa-muted,#64748b);">
+            Checklist de actividades
+          </h6>
+          <p class="text-muted mb-3" style="font-size:.8rem;">
+            Estos items se copian como plantilla a cada orden de mantenimiento generada desde este plan.
+          </p>
+          {{ fset.management_form }}
+          <div id="fila-checklist-plan">
+            {% for f in fset %}
+              <div class="checklist-fila d-flex gap-2 align-items-center mb-2">
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <div class="flex-grow-1">
+                  {{ f.descripcion }}
+                  {% if f.descripcion.errors %}<div class="invalid-feedback d-block">{{ f.descripcion.errors|join:", " }}</div>{% endif %}
+                </div>
+                {% if fset.can_delete %}
+                  <div class="form-check form-switch">
+                    <label class="form-check-label" for="{{ f.DELETE.id_for_label }}">
+                      {{ f.DELETE }}
+                      <span class="text-danger"><i class="bi bi-trash"></i></span>
+                    </label>
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarFilaChecklist()">
+            <i class="bi bi-plus-circle"></i> Agregar item
+          </button>
+        </div>
+
         <div class="d-flex gap-2 mt-4">
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-check2-circle me-2"></i>Guardar
@@ -79,4 +116,31 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function agregarFilaChecklist() {
+    const total = document.getElementById("id_form-TOTAL_FORMS");
+    const contenedor = document.getElementById("fila-checklist-plan");
+    const filas = contenedor.querySelectorAll(".checklist-fila");
+    const template = filas.length ? filas[filas.length - 1] : null;
+    if (!template) return;
+    const idx = parseInt(total.value, 10);
+    const clon = template.cloneNode(true);
+    clon.querySelectorAll("input, select, textarea").forEach((el) => {
+      const nombre = el.name ? el.name.replace(/^form-\d+/, `form-${idx}`) : el.name;
+      const idAttr = el.id ? el.id.replace(/^id_form-\d+/, `id_form-${idx}`) : el.id;
+      el.name = nombre;
+      el.id = idAttr;
+      if (el.type === "checkbox") {
+        el.checked = false;
+      } else if (el.type !== "hidden") {
+        el.value = "";
+      }
+    });
+    contenedor.appendChild(clon);
+    total.value = idx + 1;
+  }
+</script>
 {% endblock %}

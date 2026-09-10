@@ -13,7 +13,16 @@
 </nav>
 
 <div class="page-header">
-  <h1 class="page-title">Plan: {{ plan.get_tipo_display }} · {{ plan.activo.serial }}</h1>
+  <div class="d-flex align-items-center gap-3">
+    <h1 class="page-title mb-0">Plan: {{ plan.get_tipo_display }} · {{ plan.activo.serial }}</h1>
+    {% if plan.criticidad == "alta" %}
+      <span class="sa-badge danger"><i class="bi bi-exclamation-triangle"></i> Critica</span>
+    {% elif plan.criticidad == "baja" %}
+      <span class="sa-badge success">Baja</span>
+    {% else %}
+      <span class="sa-badge warning">Media</span>
+    {% endif %}
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -52,6 +61,24 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="sa-card p-4 mb-4">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+    Checklist (plantilla)
+  </h6>
+  {% if plan.checklist_items.all %}
+    <ol class="mb-0" style="font-size:.9rem;">
+      {% for item in plan.checklist_items.all %}
+        <li class="mb-1">{{ item.descripcion }}</li>
+      {% endfor %}
+    </ol>
+    <p class="text-muted mt-3 mb-0" style="font-size:.75rem;">
+      Se copia automaticamente a cada orden generada desde este plan.
+    </p>
+  {% else %}
+    <div class="text-muted">Este plan no tiene checklist definido.</div>
+  {% endif %}
 </div>
 
 <div class="sa-card">
@@ -95,8 +122,8 @@
 </div>
 
 <div class="mt-4 d-flex gap-2">
-  <a href="{% url 'mantenimiento:crear_orden' %}" class="btn btn-primary">
-    <i class="bi bi-plus-circle"></i> Nueva orden
+  <a href="{% url 'mantenimiento:crear_orden' %}?plan={{ plan.id }}" class="btn btn-primary">
+    <i class="bi bi-plus-circle"></i> Nueva orden desde este plan
   </a>
   <a href="{% url 'mantenimiento:editar_plan' plan.id %}" class="btn btn-outline-secondary">
     <i class="bi bi-pencil-square"></i> Editar
