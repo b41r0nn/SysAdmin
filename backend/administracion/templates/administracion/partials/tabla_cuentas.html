@@ -1,0 +1,76 @@
+<div class="sa-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th class="px-3">Usuario</th>
+          <th>Correo</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th>Último acceso</th>
+          <th class="text-end pe-3">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cuentas %}
+        <tr>
+          <td class="px-3">
+            <span class="fw-semibold">{{ c.username }}</span>
+            {% if c == user %}<span class="badge bg-info bg-opacity-10 text-info" style="font-size:.7rem;">tú</span>{% endif %}
+          </td>
+          <td style="font-size:.85rem;">{{ c.email|default:"—" }}</td>
+          <td>
+            {% if c.rol == "superadmin" %}
+              <span class="badge bg-danger bg-opacity-10 text-danger">{{ c.get_rol_display }}</span>
+            {% elif c.rol == "admin" %}
+              <span class="badge bg-warning bg-opacity-10 text-warning">{{ c.get_rol_display }}</span>
+            {% elif c.rol == "tecnico" %}
+              <span class="badge bg-primary bg-opacity-10 text-primary">{{ c.get_rol_display }}</span>
+            {% else %}
+              <span class="badge bg-secondary bg-opacity-10 text-secondary">{{ c.get_rol_display }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if c.is_active %}
+              <span class="badge bg-success bg-opacity-10 text-success">Activa</span>
+            {% else %}
+              <span class="badge bg-danger bg-opacity-10 text-danger">Inactiva</span>
+            {% endif %}
+          </td>
+          <td class="text-muted" style="font-size:.82rem;">
+            {{ c.last_login|date:"d/m/Y H:i"|default:"nunca" }}
+          </td>
+          <td class="text-end pe-3 text-nowrap">
+            <a href="{% url 'administracion:cambiar_rol' c.pk %}" class="btn btn-sm btn-outline-secondary" title="Cambiar rol">
+              <i class="bi bi-shield-shaded"></i>
+            </a>
+            <form method="post" action="{% url 'administracion:toggle_cuenta' c.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit"
+                      class="btn btn-sm {% if c.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}"
+                      title="{% if c.is_active %}Desactivar{% else %}Activar{% endif %}"
+                      onclick="return confirm('{% if c.is_active %}¿Desactivar{% else %}¿Activar{% endif %} la cuenta {{ c.username }}?');">
+                {% if c.is_active %}<i class="bi bi-person-x"></i>{% else %}<i class="bi bi-person-check"></i>{% endif %}
+              </button>
+            </form>
+            <form method="post" action="{% url 'administracion:resetear_password' c.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-warning" title="Resetear contraseña"
+                      onclick="return confirm('¿Resetear la contraseña de {{ c.username }}?');">
+                <i class="bi bi-key"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-5">
+            <i class="bi bi-people fs-2 d-block mb-2"></i>
+            No hay cuentas que coincidan.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
