@@ -10,6 +10,9 @@
     <p class="page-subtitle">Gestion de activos tecnologicos.</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'inventario:etiquetas' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-qr-code"></i> Etiquetas QR
+    </a>
     <a href="{% url 'inventario:importar' %}" class="btn btn-outline-primary">
       <i class="bi bi-file-earmark-excel"></i> Importar desde Excel
     </a>
