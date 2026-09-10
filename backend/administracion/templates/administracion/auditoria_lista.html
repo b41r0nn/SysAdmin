@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item active">Auditoría</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+  <div>
+    <h4 class="fw-bold mb-1">Registro de auditoría</h4>
+    <p class="text-muted mb-0" style="font-size:.85rem;">Inicios de sesión y acciones registradas en el sistema.</p>
+  </div>
+</div>
+
+<div class="sa-card p-3 mb-4">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-12 col-md-3">
+      <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Módulo</label>
+      <select name="modulo" class="form-select form-select-sm">
+        {% for value, label in modulos %}
+          <option value="{{ value }}" {% if filtro_modulo == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Acción</label>
+      <select name="accion" class="form-select form-select-sm">
+        <option value="">Todas las acciones</option>
+        {% for a in acciones %}
+          <option value="{{ a }}" {% if filtro_accion == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Buscar</label>
+      <input type="text" name="q" value="{{ filtro_q }}" class="form-control form-control-sm"
+             placeholder="Usuario, detalle, objeto...">
+    </div>
+    <div class="col-12 col-md-2 d-flex gap-2">
+      <button type="submit" class="btn btn-sm btn-primary w-100">
+        <i class="bi bi-funnel me-1"></i>Filtrar
+      </button>
+      <a href="{% url 'administracion:lista_auditoria' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-x-lg"></i>
+      </a>
+    </div>
+  </form>
+</div>
+
+<div class="sa-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th class="px-3">Fecha</th>
+          <th>Usuario</th>
+          <th>Módulo</th>
+          <th>Acción</th>
+          <th>Objeto</th>
+          <th>Detalle</th>
+          <th class="text-end pe-3">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in registros %}
+        <tr>
+          <td class="px-3 text-nowrap" style="font-size:.82rem;">
+            {{ r.fecha|date:"d/m/Y H:i" }}
+          </td>
+          <td>
+            {% if r.usuario %}
+              <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                <i class="bi bi-person me-1"></i>{{ r.usuario.username }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge bg-primary bg-opacity-10 text-primary">{{ r.modulo }}</span>
+          </td>
+          <td><code>{{ r.accion }}</code></td>
+          <td style="font-size:.82rem;">
+            {% if r.objeto_tipo %}{{ r.objeto_tipo }} #{{ r.objeto_id }}{% else %}—{% endif %}
+          </td>
+          <td class="text-muted" style="font-size:.82rem;">{{ r.detalle|truncatechars:60 }}</td>
+          <td class="text-end pe-3 text-muted" style="font-size:.82rem;">
+            {% if r.ip %}{{ r.ip }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-5">
+            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+            No hay registros de auditoría que coincidan.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if registros.has_other_pages %}
+  <nav class="p-3 border-top">
+    <ul class="pagination mb-0 justify-content-center">
+      {% if registros.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ registros.previous_page_number }}{% if filtro_modulo %}&modulo={{ filtro_modulo }}{% endif %}{% if filtro_accion %}&accion={{ filtro_accion }}{% endif %}{% if filtro_q %}&q={{ filtro_q }}{% endif %}">Anterior</a>
+      </li>
+      {% endif %}
+      <li class="page-item disabled">
+        <span class="page-link">Página {{ registros.number }} de {{ registros.paginator.num_pages }}</span>
+      </li>
+      {% if registros.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ registros.next_page_number }}{% if filtro_modulo %}&modulo={{ filtro_modulo }}{% endif %}{% if filtro_accion %}&accion={{ filtro_accion }}{% endif %}{% if filtro_q %}&q={{ filtro_q }}{% endif %}">Siguiente</a>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,6 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -8,15 +6,7 @@ from openpyxl import Workbook
 
 from .forms import CredencialForm, VaultForm
 from .models import AccesoLog, Credencial, Vault, ESTADOS_CREDENCIAL
-
-
-def _is_admin(user):
-    return user.is_superuser or user.is_staff
-
-
-def _require_admin(request):
-    if not _is_admin(request.user):
-        raise PermissionDenied
+from accounts.permisos import requiere_permiso
 
 
 def _log_action(vault, usuario, accion, credencial=None, detalle=""):
@@ -29,9 +19,8 @@ def _log_action(vault, usuario, accion, credencial=None, detalle=""):
     )
 
 
-@login_required
+@requiere_permiso("passwords", "lectura")
 def index(request):
-    _require_admin(request)
 
     vaults = Vault.objects.annotate(total_credenciales=Count("credenciales")).order_by("nombre")
     return render(request, "passwords/index.html", {
@@ -39,9 +28,8 @@ def index(request):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "escritura")
 def vault_crear(request):
-    _require_admin(request)
 
     if request.method == "POST":
         form = VaultForm(request.POST)
@@ -63,9 +51,8 @@ def vault_crear(request):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "escritura")
 def vault_editar(request, pk):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=pk)
     if request.method == "POST":
@@ -86,14 +73,13 @@ def vault_editar(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "escritura")
 def vault_eliminar(request, pk):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=pk)
     if request.method == "POST":
-        vault.delete()
         _log_action(vault, request.user, "vault_eliminado")
+        vault.delete()
         messages.warning(request, "Vault eliminado.")
         return redirect("passwords:index")
 
@@ -105,9 +91,8 @@ def vault_eliminar(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "lectura")
 def credenciales_lista(request, vault_id):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     qs = Credencial.objects.filter(vault=vault).order_by("-fecha_creacion")
@@ -132,9 +117,8 @@ def credenciales_lista(request, vault_id):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "escritura")
 def credencial_crear(request, vault_id):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     if request.method == "POST":
@@ -159,9 +143,8 @@ def credencial_crear(request, vault_id):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "escritura")
 def credencial_editar(request, vault_id, pk):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     credencial = get_object_or_404(Credencial, pk=pk, vault=vault)
@@ -184,15 +167,14 @@ def credencial_editar(request, vault_id, pk):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "escritura")
 def credencial_eliminar(request, vault_id, pk):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     credencial = get_object_or_404(Credencial, pk=pk, vault=vault)
     if request.method == "POST":
-        credencial.delete()
         _log_action(vault, request.user, "credencial_eliminada", credencial=credencial)
+        credencial.delete()
         messages.warning(request, "Credencial eliminada.")
         return redirect("passwords:credenciales_lista", vault_id=vault.id)
 
@@ -204,9 +186,8 @@ def credencial_eliminar(request, vault_id, pk):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "lectura")
 def credencial_secreto(request, vault_id, pk):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     credencial = get_object_or_404(Credencial, pk=pk, vault=vault)
@@ -228,9 +209,8 @@ def credencial_secreto(request, vault_id, pk):
     })
 
 
-@login_required
+@requiere_permiso("passwords", "lectura")
 def credenciales_export(request, vault_id):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     credenciales = Credencial.objects.filter(vault=vault).order_by("-fecha_creacion")
@@ -261,9 +241,8 @@ def credenciales_export(request, vault_id):
     return response
 
 
-@login_required
+@requiere_permiso("passwords", "lectura")
 def logs(request, vault_id):
-    _require_admin(request)
 
     vault = get_object_or_404(Vault, pk=vault_id)
     qs = AccesoLog.objects.filter(vault=vault).select_related("credencial", "usuario")

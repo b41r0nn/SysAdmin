@@ -47,6 +47,11 @@ INSTALLED_APPS = [
     'reports',
     'yule',
     'documentos',
+    'administracion',
+    'notificaciones',
+    'soporte',
+    'licencias',
+    'prestamos',
 ]
 
 MIDDLEWARE = [

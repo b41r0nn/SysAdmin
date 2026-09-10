@@ -7,6 +7,7 @@ import openpyxl
 
 from .models import Usuario
 from .forms import UsuarioForm
+from accounts.permisos import requiere_permiso
 
 # ── Importación masiva desde Excel ───────────────────────────────────────────
 # Nombres de columna aceptados del archivo (case-insensitive). Cada entrada:
@@ -100,7 +101,7 @@ def _parsear_excel_usuarios(archivo):
     return filas, advertencias
 
 
-@login_required
+@requiere_permiso("usuarios", "escritura")
 def importar_usuarios(request):
     if request.method == "POST":
         archivo = request.FILES.get("archivo")
@@ -138,7 +139,7 @@ def importar_usuarios(request):
     return render(request, "usuarios/importar.html")
 
 
-@login_required
+@requiere_permiso("usuarios", "escritura")
 def confirmar_importar_usuarios(request):
     if request.method != "POST":
         return redirect("usuarios:importar")
@@ -178,7 +179,7 @@ def confirmar_importar_usuarios(request):
     return redirect("usuarios:lista")
 
 
-@login_required
+@requiere_permiso("usuarios", "lectura")
 def lista_usuarios(request):
     q = request.GET.get("q", "").strip()
     area = request.GET.get("area", "").strip()
@@ -215,7 +216,7 @@ def lista_usuarios(request):
     return render(request, "usuarios/lista.html", context)
 
 
-@login_required
+@requiere_permiso("usuarios", "lectura")
 def detalle_usuario(request, pk):
     usuario = get_object_or_404(Usuario, pk=pk)
     from inventario.models import Asignacion
@@ -232,7 +233,7 @@ def detalle_usuario(request, pk):
     return render(request, "usuarios/detalle.html", context)
 
 
-@login_required
+@requiere_permiso("usuarios", "escritura")
 def crear_usuario(request):
     if request.method == "POST":
         form = UsuarioForm(request.POST, request.FILES)
@@ -246,7 +247,7 @@ def crear_usuario(request):
     return render(request, "usuarios/form.html", {"form": form, "titulo": "Nuevo usuario"})
 
 
-@login_required
+@requiere_permiso("usuarios", "escritura")
 def editar_usuario(request, pk):
     usuario = get_object_or_404(Usuario, pk=pk)
     if request.method == "POST":
@@ -265,7 +266,7 @@ def editar_usuario(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("usuarios", "escritura")
 def toggle_estado_usuario(request, pk):
     """Activa o desactiva un usuario. Nunca se elimina."""
     usuario = get_object_or_404(Usuario, pk=pk)
@@ -279,7 +280,7 @@ def toggle_estado_usuario(request, pk):
     return redirect("usuarios:detalle", pk=usuario.pk)
 
 
-@login_required
+@requiere_permiso("usuarios", "lectura")
 def descargar_plantilla_usuarios(request):
     """Descarga plantilla Excel con headers y fila de ejemplo para importación de usuarios."""
     wb = openpyxl.Workbook()
