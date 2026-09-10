@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket #{{ ticket.pk }} — Soporte{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'soporte:lista' %}" class="text-decoration-none">Tickets</a>
+    </li>
+    <li class="breadcrumb-item active">#{{ ticket.pk }}</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-3 d-flex align-items-center justify-content-between">
+  <div>
+    <h1 class="page-title">Ticket #{{ ticket.pk }} · {{ ticket.asunto }}</h1>
+    <p class="text-muted mb-0">Solicitado por {{ ticket.solicitante.username }} el {{ ticket.fecha_creacion|date:"d/m/Y H:i" }}</p>
+  </div>
+  <span class="sa-badge {% if ticket.estado == 'resuelto' %}success{% elif ticket.estado == 'cerrado' %}secondary{% elif ticket.estado == 'escalado' %}info{% elif ticket.estado == 'en_proceso' %}warning{% else %}danger{% endif %}">
+    {{ ticket.get_estado_display }}
+  </span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+        <i class="bi bi-flag"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ ticket.get_prioridad_display }}</div>
+        <div class="stat-label">Prioridad</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-person-badge"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ ticket.asignado_a.username|default:"—" }}</div>
+        <div class="stat-label">Asignado</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-person"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value text-truncate">{{ ticket.solicitante.username }}</div>
+        <div class="stat-label">Solicitante</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-success bg-opacity-10 text-success">
+        <i class="bi bi-calendar3"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ ticket.fecha_actualizacion|date:"d/m" }}</div>
+        <div class="stat-label">Actualizado</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sa-card p-4 mb-4">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+    Descripcion
+  </h6>
+  <p class="mb-0">{{ ticket.descripcion|default:"—"|linebreaksbr }}</p>
+</div>
+
+{% if ticket.ordenes.all %}
+<div class="sa-card p-4 mb-4">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+    Orden de mantenimiento asociada
+  </h6>
+  {% for orden in ticket.ordenes.all %}
+  <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-outline-primary">
+    <i class="bi bi-tools"></i> Orden #{{ orden.pk }} · {{ orden.get_estado_display }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="mt-4 d-flex gap-2 flex-wrap">
+  <form method="post" action="{% url 'soporte:asignar' ticket.pk %}" class="d-flex gap-2 align-items-center">
+    {% csrf_token %}
+    <select name="asignado_a" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Sin asignar</option>
+      {% for u in asignables %}
+        <option value="{{ u.pk }}" {% if ticket.asignado_a_id == u.pk %}selected{% endif %}>{{ u.username }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-person-check"></i> Asignar
+    </button>
+  </form>
+  <form method="post" action="{% url 'soporte:cambiar_estado' ticket.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="estado" value="resuelto">
+    <button type="submit" class="btn btn-success btn-sm" {% if ticket.estado == 'resuelto' %}disabled{% endif %}>
+      <i class="bi bi-check2-circle"></i> Resolver
+    </button>
+  </form>
+  <form method="post" action="{% url 'soporte:cambiar_estado' ticket.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="estado" value="cerrado">
+    <button type="submit" class="btn btn-outline-secondary btn-sm" {% if ticket.estado == 'cerrado' %}disabled{% endif %}>
+      <i class="bi bi-lock"></i> Cerrar
+    </button>
+  </form>
+  <a href="{% url 'soporte:escalar' ticket.pk %}" class="btn btn-outline-danger btn-sm">
+    <i class="bi bi-tools"></i> Escalar a orden de mantenimiento
+  </a>
+  <a href="{% url 'soporte:editar' ticket.pk %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-pencil-square"></i> Editar
+  </a>
+</div>
+{% endblock %}
