@@ -4,11 +4,13 @@ from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
+from accounts.permisos import requiere_permiso
+
 from .forms import CategoriaForm, DocumentoForm, FiltroDocumentoForm
 from .models import Categoria, Documento, TIPOS_DOCUMENTO
 
 
-@login_required
+@requiere_permiso("documentos", "lectura")
 def lista_documentos(request):
     qs = Documento.objects.select_related("categoria", "creado_por").all()
 
@@ -40,7 +42,7 @@ def lista_documentos(request):
     return render(request, "documentos/lista.html", ctx)
 
 
-@login_required
+@requiere_permiso("documentos", "escritura")
 def crear_documento(request):
     if request.method == "POST":
         form = DocumentoForm(request.POST, request.FILES)
@@ -58,7 +60,7 @@ def crear_documento(request):
     return render(request, "documentos/form.html", {"form": form, "titulo": "Nuevo Documento"})
 
 
-@login_required
+@requiere_permiso("documentos", "escritura")
 def editar_documento(request, pk):
     documento = get_object_or_404(Documento, pk=pk)
     if request.method == "POST":
@@ -79,7 +81,7 @@ def editar_documento(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("documentos", "escritura")
 def eliminar_documento(request, pk):
     documento = get_object_or_404(Documento, pk=pk)
     if request.method == "POST":
@@ -90,7 +92,7 @@ def eliminar_documento(request, pk):
     return render(request, "documentos/confirmar_eliminar.html", {"documento": documento})
 
 
-@login_required
+@requiere_permiso("documentos", "lectura")
 def descargar_documento(request, pk):
     documento = get_object_or_404(Documento, pk=pk, activo=True)
     if not documento.archivo:
@@ -103,13 +105,13 @@ def descargar_documento(request, pk):
 
 # ── Categorías ────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("documentos", "lectura")
 def lista_categorias(request):
     ctx = {"categorias": Categoria.objects.all()}
     return render(request, "documentos/categorias_lista.html", ctx)
 
 
-@login_required
+@requiere_permiso("documentos", "escritura")
 def crear_categoria(request):
     if request.method == "POST":
         form = CategoriaForm(request.POST)
@@ -122,7 +124,7 @@ def crear_categoria(request):
     return render(request, "documentos/form_categoria.html", {"form": form, "titulo": "Nueva Categoría"})
 
 
-@login_required
+@requiere_permiso("documentos", "escritura")
 def editar_categoria(request, pk):
     categoria = get_object_or_404(Categoria, pk=pk)
     if request.method == "POST":
@@ -140,7 +142,7 @@ def editar_categoria(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("documentos", "escritura")
 def eliminar_categoria(request, pk):
     categoria = get_object_or_404(Categoria, pk=pk)
     if request.method == "POST":

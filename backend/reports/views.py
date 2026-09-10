@@ -12,7 +12,6 @@ from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.safestring import mark_safe
-import weasyprint
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
@@ -21,6 +20,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.units import pixels_to_EMU
 from PIL import Image as PILImage
+from accounts.permisos import requiere_permiso
 
 from inventario.models import Activo, Asignacion, Movimiento, TIPOS, ESTADOS
 from mantenimiento.models import OrdenMantenimiento
@@ -443,7 +443,7 @@ def _style_summary_sheet(ws, title):
 
 # ── Vistas ───────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def index(request):
     today = timezone.now().date()
     rango_fin = _parse_date(request.GET.get("fin")) or today
@@ -455,8 +455,10 @@ def index(request):
     return render(request, "reports/index.html", context)
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def inventario_pdf(request):
+    import weasyprint
+
     # Selección de columnas
     campos_solicitados = request.GET.getlist("campos")
     campos = [c for c in campos_solicitados if c in CAMPOS_INVENTARIO] or list(CAMPOS_INVENTARIO.keys())
@@ -596,8 +598,10 @@ def inventario_pdf(request):
     return response
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def usuarios_pdf(request):
+    import weasyprint
+
     usuarios = (
         Usuario.objects.annotate(
             activos_asignados=Count("asignaciones", filter=Q(asignaciones__activa=True))
@@ -619,7 +623,7 @@ def usuarios_pdf(request):
     return response
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def inventario_excel(request):
     wb = Workbook()
     ws = wb.active
@@ -796,7 +800,7 @@ def inventario_excel(request):
     return response
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def usuarios_excel(request):
     wb = Workbook()
 
@@ -863,7 +867,7 @@ def usuarios_excel(request):
     return response
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def costos_excel(request):
     today = timezone.now().date()
     costos = _build_costos(today)
@@ -916,7 +920,7 @@ def costos_excel(request):
     return response
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def movimientos_excel(request):
     today = timezone.now().date()
     rango_fin = _parse_date(request.GET.get("fin")) or today
@@ -961,7 +965,7 @@ def movimientos_excel(request):
     return response
 
 
-@login_required
+@requiere_permiso("reportes", "lectura")
 def mantenimiento_excel(request):
     today = timezone.now().date()
     rango_fin = _parse_date(request.GET.get("fin")) or today

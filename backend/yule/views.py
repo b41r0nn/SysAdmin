@@ -2,7 +2,6 @@ import logging
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
@@ -11,6 +10,7 @@ from django.views.decorators.http import require_POST
 from .client import build_client
 from .models import EquipoOCS, SincronizacionLog, ConfiguracionYule
 from .sync import sincronizar_equipos_ocs, verificar_equipos_sin_match, buscar_posibles_matches
+from accounts.permisos import requiere_permiso
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def _mask_token(value: str) -> str:
     return f"{value[:2]}***{value[-4:]}"
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def index(request):
     """Vista principal de Yule - Status de configuración"""
     client = build_client()
@@ -63,7 +63,7 @@ def index(request):
     return render(request, "yule/index.html", context)
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def equipos_lista(request):
     """Lista de todos los equipos OCS sincronizados"""
     equipos = EquipoOCS.objects.all()
@@ -117,7 +117,7 @@ def equipos_lista(request):
     return render(request, "yule/equipos_lista.html", context)
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def equipo_detalle(request, pk):
     """Detalle de un equipo OCS"""
     equipo = get_object_or_404(EquipoOCS, pk=pk)
@@ -145,13 +145,9 @@ def equipo_detalle(request, pk):
     return render(request, "yule/equipo_detalle.html", context)
 
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 @require_POST
 def sincronizar(request):
-    """Inicia sincronización manual con OCS"""
-    if not request.user.is_staff and not request.user.is_superuser:
-        messages.error(request, "Solo administradores pueden sincronizar")
-        return redirect("yule:index")
     
     logger.info(f"Sincronización iniciada por {request.user.username}")
     
@@ -165,7 +161,7 @@ def sincronizar(request):
     return redirect("yule:index")
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def historial_sincronizaciones(request):
     """Historial de sincronizaciones"""
     logs = SincronizacionLog.objects.all()
@@ -183,7 +179,7 @@ def historial_sincronizaciones(request):
     return render(request, "yule/historial_sincronizaciones.html", context)
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def equipos_sin_match(request):
     """Vista especial para equipos sin vincular a activos"""
     equipos = verificar_equipos_sin_match()
@@ -196,7 +192,7 @@ def equipos_sin_match(request):
     return render(request, "yule/equipos_sin_match.html", context)
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def test_conexion_ocs(request):
     """API para testear conexión OCS"""
     client = build_client()

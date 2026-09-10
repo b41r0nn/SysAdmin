@@ -1,4 +1,5 @@
 {% load static %}
+{% load permisos_extras %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -33,30 +34,82 @@
                 <div class="sa-wordmark-sub">Gestión de Activos TI</div>
             </div>
             <nav class="nav flex-column">
+                {% tiene_permiso 'usuarios' 'lectura' as puede_usuarios %}
+                {% tiene_permiso 'inventario' 'lectura' as puede_inventario %}
+                {% tiene_permiso 'reportes' 'lectura' as puede_reportes %}
+                {% tiene_permiso 'mantenimiento' 'lectura' as puede_mantenimiento %}
+                {% tiene_permiso 'documentos' 'lectura' as puede_documentos %}
+                {% tiene_permiso 'passwords' 'lectura' as puede_passwords %}
+                {% tiene_permiso 'administracion' 'lectura' as puede_administracion %}
+                {% tiene_permiso 'soporte' 'lectura' as puede_soporte %}
+                {% tiene_permiso 'licencias' 'lectura' as puede_licencias %}
+                {% tiene_permiso 'prestamos' 'lectura' as puede_prestamos %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'core' %}active{% endif %}" href="{% url 'core:dashboard' %}">
                     <i class="bi bi-speedometer2 me-2"></i>Página Principal
                 </a>
+                <a class="nav-link {% if request.resolver_match.app_name == 'notificaciones' %}active{% endif %}" href="{% url 'notificaciones:lista' %}">
+                    <i class="bi bi-bell me-2"></i>Notificaciones
+                    <span id="notif-count"
+                          hx-get="{% url 'notificaciones:cantidad' %}"
+                          hx-trigger="load"
+                          hx-swap="innerHTML"></span>
+                </a>
+                <a class="nav-link {% if request.resolver_match.url_name == 'reportar' %}active{% endif %}" href="{% url 'mantenimiento:reportar' %}">
+                    <i class="bi bi-bug me-2"></i>Reportar falla
+                </a>
+                {% if puede_usuarios %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'usuarios' %}active{% endif %}" href="{% url 'usuarios:lista' %}">
                     <i class="bi bi-people me-2"></i>Usuarios
                 </a>
+                {% endif %}
+                {% if puede_inventario %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'inventario' %}active{% endif %}" href="{% url 'inventario:lista' %}">
                     <i class="bi bi-laptop me-2"></i>Inventario
                 </a>
+                {% endif %}
+                {% if puede_reportes %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}">
                     <i class="bi bi-file-earmark-bar-graph me-2"></i>Reportes
                 </a>
+                {% endif %}
+                {% if puede_mantenimiento %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'mantenimiento' %}active{% endif %}" href="{% url 'mantenimiento:lista_planes' %}">
                     <i class="bi bi-tools me-2"></i>Mantenimiento
                 </a>
+                {% endif %}
+                {% if puede_licencias %}
+                <a class="nav-link {% if request.resolver_match.app_name == 'licencias' %}active{% endif %}" href="{% url 'licencias:lista' %}">
+                    <i class="bi bi-diamond me-2"></i>Licencias
+                </a>
+                {% endif %}
+                {% if puede_prestamos %}
+                <a class="nav-link {% if request.resolver_match.app_name == 'prestamos' %}active{% endif %}" href="{% url 'prestamos:lista' %}">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Préstamos
+                </a>
+                {% endif %}
+                {% if puede_documentos %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'documentos' %}active{% endif %}" href="{% url 'documentos:lista' %}">
                     <i class="bi bi-folder me-2"></i>Documentos
                 </a>
+                {% endif %}
+                {% if puede_soporte %}
+                <a class="nav-link {% if request.resolver_match.app_name == 'soporte' %}active{% endif %}" href="{% url 'soporte:lista' %}">
+                    <i class="bi bi-life-preserver me-2"></i>Soporte
+                </a>
+                {% endif %}
+                {% if puede_inventario %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'yule' %}active{% endif %}" href="{% url 'yule:index' %}">
                     <i class="bi bi-diagram-3 me-2"></i>Yule (OCS)
                 </a>
-                {% if user.is_staff or user.is_superuser %}
+                {% endif %}
+                {% if puede_passwords %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'passwords' %}active{% endif %}" href="{% url 'passwords:index' %}">
                     <i class="bi bi-key me-2"></i>Passwords
+                </a>
+                {% endif %}
+                {% if puede_administracion %}
+                <a class="nav-link {% if request.resolver_match.app_name == 'administracion' %}active{% endif %}" href="{% url 'administracion:lista_auditoria' %}">
+                    <i class="bi bi-shield-lock me-2"></i>Administración
                 </a>
                 {% endif %}
             </nav>
