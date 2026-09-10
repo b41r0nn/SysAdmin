@@ -1,7 +1,7 @@
 # SysAdmin · Sistema de Gestión IT
 
-> **Versión:** 1.8.1 · **Fecha:** 2026-09-10 · **Estado:** Etapas 0-8 + Fases 1-6 (plan completo)  
-> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets y préstamos
+> **Versión:** 1.9.0 · **Fecha:** 2026-09-10 · **Estado:** Etapas 0-8 + Fases 1-6 (plan completo)  
+> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets, préstamos, detección de vencimiento de licencias y gestión de cuentas
 
 ---
 
@@ -493,6 +493,13 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-09-10 — v1.9.0 · Detección de vencimiento de licencias + Gestión de cuentas
+
+- ✅ Ejecutados los **9 commits del sprint** (grupo §13 del resumen de sesión): `1565d08`→`5094cba` (security, QR, mantenimiento, soporte, licencias, prestamos, cobertura, drift, docs). Working tree limpio, suite 203/203 previo a commits.
+- ✅ **Detector de licencias en notificaciones** (`c9f18ac`): nuevo tipo `licencia` en la campana + choice `contrato` en `TIPOS_LICENCIA`. `_detectar_licencias` marca vencidas / por vencer (≤7 días), excluye canceladas y sin fecha; integrdo en `generar_notificaciones` solo para roles con acceso a `licencias`. Migraciones `licencias/0002` + `notificaciones/0002`. 6 tests nuevos.
+- ✅ **Gestión de cuentas de usuario** (`36d58bb`): `/administracion/cuentas/` — listado con búsqueda HTMX, crear con contraseña temporal (una sola vez), cambiar rol, activar/desactivar y resetear contraseña. `is_superuser`/`is_staff` **solo para rol `superadmin`**. Guardas anti auto-desmoción/auto-desactivación. 8 tests nuevos.
+- ✅ Verificación final: suite **217/217 OK** · `manage.py check` 0 issues · `makemigrations --check` sin cambios · `.env` y `db.sqlite3` no versionados.
 
 ### 2026-09-10 — Fase 4: Tests de cobertura
 
