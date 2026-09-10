@@ -1,7 +1,7 @@
 # SysAdmin · Sistema de Gestión IT
 
-> **Versión:** 1.1.0 · **Fecha:** 2026-09-09 · **Estado:** Etapas 0-7B + Documentos Completas + Importación Masiva  
-> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG y repositorio de documentos
+> **Versión:** 1.8.1 · **Fecha:** 2026-09-10 · **Estado:** Etapas 0-8 + Fases 1-6 (plan completo)  
+> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets y préstamos
 
 ---
 
@@ -18,6 +18,15 @@
 | 🔑 Contraseñas   | `passwords`     | ✅ Completa | 6     |
 | 🔄 Yule (OCS)    | `yule`          | ✅ Completa | 7B    |
 | 📁 Documentos    | `documentos`    | ✅ Completa | 8     |
+| 🛡️ Administración | `administracion` | ✅ Completa | Fase 1 |
+| 🔳 Etiquetas QR  | `inventario`    | ✅ Completa | Fase 2 |
+| 🔔 Notificaciones | `notificaciones` | ✅ Completa | Fase 3 |
+| 📅 Calendario mantenimiento | `mantenimiento` | ✅ Completa | Fase 3 |
+| 📋 Portal de reporte de fallas | `mantenimiento` | ✅ Completa | Fase 3 |
+| 🎫 Helpdesk / Tickets | `soporte` | ✅ Completa | Fase 4 |
+| 💠 Licencias de software | `licencias` | ✅ Completa | Fase 5 |
+| 🔁 Préstamos de equipos | `prestamos` | ✅ Completa | Fase 6 |
+| 🧪 Tests de cobertura | todas las apps | ✅ Completa | Fase 4 |
 
 ---
 
@@ -270,6 +279,7 @@ Gestión completa de activos IT con soporte para múltiples tipos de dispositivo
 - ✅ Seguimiento de garantía
 - ✅ Historial de movimientos
 - ✅ Actas de asignación en PDF
+- ✅ **Etiquetas QR imprimibles** (etiqueta individual, selección masiva de hasta 8 por hoja A4 y código QR integrado en la ficha del activo)
 - ✅ Exportación a Excel
 - ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
 - ✅ **Plantilla Excel** con 39 columnas, 2 ejemplos (Portátil/Celular) y hoja Instrucciones
@@ -424,12 +434,12 @@ OCS_VERIFY_SSL=True
 
 ## 📋 Tareas Críticas Pendientes
 
-1. **Deploy v1.1.0 en servidor**
-   - Ejecutar `migrate` para aplicar migraciones de inventario y documentos
+1. **Deploy en servidor**
+   - Ejecutar `migrate` (42 migraciones; nuevas: `licencias`, `prestamos`, `soporte`, `mantenimiento` 0002/0003, `administracion` 0002, `yule` 0002, `passwords` 0002/0003, etc.)
    - Reiniciar contenedor Django
-   - Verificar módulo Documentos y catálogo de activos
+   - Verificar módulos Fases 1-6 (tickets, licencias, préstamos) y validación manual de reportes configurables + importación masiva + etiquetas QR
 
-2. **Tests**: Suite de tests automatizados (TODO futuro)
+2. **Tests**: Suite automatizada — ✅ **202/202 OK** (Fases 1-6, plan completo)
 
 ---
 
@@ -483,6 +493,84 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-09-10 — Fase 4: Tests de cobertura
+
+- ✅ Tests para las 7 apps sin cobertura: `core`, `usuarios`, `mantenimiento`, `documentos`, `passwords`, `reports`, `yule` (81 tests nuevos)
+- ✅ CRUD completo + permisos por rol + login required en cada módulo
+- ✅ PDFs de `reports` probados con WeasyPrint mockeado en `sys.modules` (sin GTK)
+- ✅ Fix bug producción: `passwords` registraba `AccesoLog` después de borrar el vault/credencial → `ValueError: save() prohibited`; el log ahora se escribe antes del `delete()`
+- ✅ Suite completa: **153/153 tests OK**, `manage.py check` 0 issues
+
+### 2026-09-10 — v1.5.0 · Fase 3 completa (checklist + criticidad + calendario + reportar)
+
+- ✅ **Checklist por orden**: `ChecklistItem` con plantilla en `PlanMantenimiento`; al crear una orden con plan asociado se copian los items como lista de chequeo; toggle HTMX con barra de progreso en el detalle de orden
+- ✅ **Criticidad de planes**: campo `criticidad` (`baja/media/alta`) con badge de color en la tabla de planes y el detalle del plan
+- ✅ **Calendario de mantenimiento**: FullCalendar CDN + endpoint JSON con ordenes (por fecha de apertura) y planes preventivos (por proxima ejecucion), colores por estado/criticidad
+- ✅ **Portal de reporte de fallas**: `/mantenimiento/reportar/` accesible para cualquier usuario autenticado (rol lectura incluido); crea orden en estado `reportada`, tipo `correctivo`, prioridad `alta`
+- ✅ **Management command** `generar_notificaciones_mantenimiento` (idempotente: 1 notificación por usuario, sin duplicados al correr 2 veces)
+- ✅ 12 tests nuevos en `mantenimiento/tests.py` → suite total **153/153 OK**
+- ✅ Migración `mantenimiento/0002_planmantenimiento_criticidad_and_more`
+
+### 2026-09-10 — v1.6.0 · Fase 4: Helpdesk / Tickets (app `soporte`)
+
+- ✅ Nueva app `soporte`: modelo `Ticket` (asunto, descripcion, prioridad, estado abierto/en_proceso/resuelto/cerrado/escalado, solicitante, asignado_a)
+- ✅ Portal de creación abierto a cualquier usuario autenticado (`@login_required`); lista/detalle exigen `soporte` lectura; asignar/editar/escalar exigen escritura (módulo nuevo en `PERMISOS_POR_ROL`)
+- ✅ Notificación tipo `aviso` al asignar un ticket (`aviso_usuario`, idempotente por `objetokey=ticket:{pk}` — sin duplicados al reasignar)
+- ✅ **Escalar ticket → orden de mantenimiento**: botón en el detalle que crea `OrdenMantenimiento` correctiva/abierta con FK `ticket` y prioridad heredada; el ticket pasa a estado `escalado` (no permite duplicar la orden)
+- ✅ FK opcional `ticket` en `OrdenMantenimiento` (SET_NULL)
+- ✅ Sidebar: enlace "Soporte" condicional por rol
+- ✅ 14 tests nuevos en `soporte/tests.py` → suite total **167/167 OK**
+- ✅ Migraciones `soporte/0001_initial` + `mantenimiento/0003_ordenmantenimiento_ticket`
+
+### 2026-09-10 — v1.7.0 · Fase 5: Licencias de software (app `licencias`)
+
+- ✅ Nueva app `licencias`: modelo `LicenciaSoftware` (nombre, versión, proveedor, clave/serial, tipo, cantidad, fecha compra/vencimiento, costo, estado, responsable, equipos cubiertos M2M a `inventario.Activo`, observaciones)
+- ✅ Estado efectivo calculado: `activa / por_vencer (≤7d) / vencida / cancelada` derivado de vencimiento y estado manual
+- ✅ CRUD completo: lista con filtros + estadísticas + detalle + crear/editar/eliminar (confirmación)
+- ✅ Exportación **Excel** con headers REDIHOS azul + **PDF** vía WeasyPrint (mock en tests) — patrón `CAMPOS_LICENCIAS` extraíble
+- ✅ Módulo `licencias` añadido a `PERMISOS_POR_ROL`: superadmin/admin = escritura; tecnico/lectura = lectura
+- ✅ Sidebar: enlace "Licencias" entre Mantenimiento y Documentos
+- ✅ Filtro genérico `get_item` para dict en plantillas (`accounts/templatetags/permisos_extras.py`)
+- ✅ 19 tests en `licencias/tests.py` → suite total **186/186 OK**
+- ✅ Migración `licencias/0001_initial` (generada y validada en BD limpia temporal)
+
+### 2026-09-10 — v1.8.0 · Fase 6: Préstamos de equipos (app `prestamos`)
+
+- ✅ Nueva app `prestamos`: modelo `Prestamo` (activo FK a `inventario.Activo`, solicitante FK a usuario, fecha préstamo, devolución prevista/real, destino, observaciones)
+- ✅ Estado calculado: `devuelto > vencido (prevista pasada) > activo`; `dias_retraso` para vencidos
+- ✅ Validación de préstamo vigente: un equipo no puede prestarse dos veces mientras no se registre devolución
+- ✅ CRUD + "Registrar devolución" (POST, idempotente) — sin eliminar para preservar el historial
+- ✅ Lista con filtros (búsqueda + estado) y estadísticas (total/activos/vencidos/devueltos)
+- ✅ Módulo `prestamos` añadido a `PERMISOS_POR_ROL`: superadmin/admin/tecnico = escritura; lectura = lectura
+- ✅ Sidebar: enlace "Préstamos" tras Licencias
+- ✅ 16 tests en `prestamos/tests.py` → suite total **202/202 OK** · `manage.py check` 0 issues
+- ✅ Migración `prestamos/0001_initial` (generada y validada en BD limpia temporal)
+- 🏁 **Plan por fases completado** (1-6)
+
+### 2026-09-10 — v1.8.1 · Corrección de BD local + drift de migraciones
+
+- ✅ `db.sqlite3` local reconstruida de cero (historial de migraciones inconsistente pre-existente sin `accounts_customuser` y sin datos de negocio): `migrate` aplica las **42 migraciones** en orden; superuser dev `admin` (superadmin) y singleton `ConfiguracionSistema` creados. BD antigua respaldada en `backend/db.sqlite3.legacy_20260910`.
+- ✅ Drift resuelto: `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` con los módulos Fases 4-6); `makemigrations --check` → *No changes detected*.
+- ✅ Suite completa **202/202 OK** · `manage.py check` 0 issues.
+
+### 2026-09-10 — Fase 2: Etiquetas QR para activos
+
+- ✅ Código QR por activo (URL de la ficha) en PNG
+- ✅ PDF de etiqueta individual (92×58 mm) con datos del equipo
+- ✅ Selección masiva de activos → PDF con hasta 8 etiquetas por hoja A4
+- ✅ Vista previa del QR en la ficha del activo + botones en lista y tabla
+- ✅ Dependencia nueva `qrcode==8.2`
+- ✅ Registro de fases en `FASES.md`
+
+### 2026-09-10 — Fase 1: Módulo de Administración (roles, permisos y auditoría)
+
+- ✅ Roles `superadmin`/`admin`/`tecnico`/`lectura` + matriz de permisos
+- ✅ Decorador `@requiere_permiso` aplicado en todas las vistas de los módulos
+- ✅ Nueva app `administracion`: auditoría de eventos (incl. login/logout) y configuración del sistema
+- ✅ Sidebar condicional por rol (template tag `tiene_permiso`)
+- ✅ WeasyPrint con imports locales (herramientas de desarrollo locales habilitadas)
+- ✅ Tests automatizados: 61/61 OK (suite completa en `accounts`, `administracion`, `inventario`, `notificaciones`, `yule`)
 
 ### 2026-09-09 — Post-v1.1.0: Importación masiva Activos + Usuarios + Plantillas Excel
 
@@ -545,5 +633,5 @@ Para documentación técnica completa, ver **SYSADMIN_HANDOFF.md**
 
 ---
 
-**Última actualización:** 2026-09-09  
+**Última actualización:** 2026-09-10  
 **Proyecto:** 100% Funcional · Listo para producción
