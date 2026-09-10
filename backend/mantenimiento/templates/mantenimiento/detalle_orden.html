@@ -17,7 +17,7 @@
     <h1 class="page-title">Orden #{{ orden.id }}</h1>
     <p class="text-muted mb-0">{{ orden.activo.marca }} {{ orden.activo.modelo }}</p>
   </div>
-  <span class="sa-badge {% if orden.estado == 'cerrada' %}success{% elif orden.estado == 'en_proceso' %}warning{% else %}danger{% endif %}">
+  <span class="sa-badge {% if orden.estado == 'cerrada' %}success{% elif orden.estado == 'en_proceso' %}warning{% elif orden.estado == 'reportada' %}danger{% elif orden.estado == 'cancelada' %}secondary{% else %}info{% endif %}">
     {{ orden.get_estado_display }}
   </span>
 </div>
@@ -147,6 +147,8 @@
   <div class="text-muted">No hay repuestos asociados.</div>
   {% endif %}
 </div>
+
+{% include "mantenimiento/partials/checklist_orden.html" %}
 
 <div class="mt-4 d-flex gap-2">
   <form method="post" action="{% url 'mantenimiento:cerrar_orden' orden.pk %}">

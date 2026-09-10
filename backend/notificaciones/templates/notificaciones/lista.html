@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Notificaciones — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a>
+    </li>
+    <li class="breadcrumb-item active">Notificaciones</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-4">
+  <div>
+    <h1 class="page-title">
+      <i class="bi bi-bell me-2 text-primary"></i>Notificaciones
+    </h1>
+    <p class="page-subtitle">Alertas del sistema y del mantenimiento de tus activos.</p>
+  </div>
+  {% if total_no_leidas %}
+  <form method="post" action="{% url 'notificaciones:marcar_todas' %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-primary">
+      <i class="bi bi-check2-all me-1"></i> Marcar todas como leídas
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="sa-card mb-4 p-3">
+  <h6 class="fw-semibold mb-3 text-primary">
+    <i class="bi bi-bell-fill me-2"></i>No leídas
+    <span class="sa-badge danger ms-1">{{ total_no_leidas }}</span>
+  </h6>
+
+  {% if no_leidas %}
+    {% for n in no_leidas %}
+    <div class="d-flex align-items-start gap-3 p-3 {% if not forloop.last %}border-bottom{% endif %}"
+         style="{% if forloop.first %}border-top:0;{% endif %}">
+      <div class="flex-shrink-0">
+        <div class="rounded-circle d-flex align-items-center justify-content-center"
+             style="width:38px;height:38px;background:#dbeafe;color:#2563eb;">
+          {% if n.tipo == "garantia" %}
+            <i class="bi bi-shield-check"></i>
+          {% elif n.tipo == "mantenimiento" %}
+            <i class="bi bi-tools"></i>
+          {% elif n.tipo == "acta" %}
+            <i class="bi bi-file-earmark-text"></i>
+          {% elif n.tipo == "ocs" %}
+            <i class="bi bi-diagram-3"></i>
+          {% else %}
+            <i class="bi bi-info-circle"></i>
+          {% endif %}
+        </div>
+      </div>
+      <div class="flex-grow-1">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="fw-semibold" style="font-size:.9rem;">{{ n.titulo }}</span>
+          <span class="sa-badge warning text-uppercase" style="font-size:.6rem;">{{ n.get_tipo_display }}</span>
+        </div>
+        <p class="mb-1 text-muted" style="font-size:.82rem;">{{ n.mensaje }}</p>
+        <div class="text-muted" style="font-size:.72rem;">{{ n.fecha_creacion|date:"d/m/Y H:i" }}</div>
+      </div>
+      <div class="flex-shrink-0 d-flex flex-column gap-1 align-items-end">
+        <span class="sa-badge danger">•</span>
+        <form method="post" action="{% url 'notificaciones:marcar_leida' n.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline-secondary">Marcar leída</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="text-center text-muted py-4">
+      <i class="bi bi-check-circle display-6 d-block mb-2 opacity-25"></i>
+      <p class="mb-0" style="font-size:.875rem;">No tienes notificaciones pendientes.</p>
+    </div>
+  {% endif %}
+</div>
+
+<h6 class="fw-semibold mb-3 text-muted">
+  <i class="bi bi-archive me-2"></i>Leídas (últimas 50)
+</h6>
+<div class="sa-card overflow-hidden">
+  {% if leidas %}
+  <div class="table-responsive">
+    <table class="table table-hover sa-table mb-0">
+      <thead>
+        <tr>
+          <th>Notificación</th>
+          <th>Fecha</th>
+          <th class="text-end">Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n in leidas %}
+        <tr>
+          <td>
+            <div class="fw-semibold" style="font-size:.85rem;">{{ n.titulo }}</div>
+            <div class="text-muted" style="font-size:.78rem;">{{ n.mensaje }}</div>
+          </td>
+          <td style="font-size:.8rem;">{{ n.fecha_creacion|date:"d/m/Y H:i" }}</td>
+          <td class="text-end">
+            {% if n.link %}
+            <a href="{{ n.link }}" class="btn btn-sm btn-outline-primary" title="Ver">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center text-muted py-4">
+    <p class="mb-0" style="font-size:.875rem;">Aún no hay notificaciones leídas.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

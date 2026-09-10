@@ -17,9 +17,16 @@ ESTADOS_ORDEN = [
     ("en_proceso", "En proceso"),
     ("cerrada", "Cerrada"),
     ("cancelada", "Cancelada"),
+    ("reportada", "Reportada"),
 ]
 
 PRIORIDADES = [
+    ("baja", "Baja"),
+    ("media", "Media"),
+    ("alta", "Alta"),
+]
+
+CRITICIDADES = [
     ("baja", "Baja"),
     ("media", "Media"),
     ("alta", "Alta"),
@@ -33,6 +40,7 @@ class PlanMantenimiento(models.Model):
         related_name="planes_mantenimiento",
     )
     tipo = models.CharField(max_length=20, choices=TIPOS_MANTENIMIENTO)
+    criticidad = models.CharField(max_length=20, choices=CRITICIDADES, default="media")
     frecuencia_dias = models.PositiveIntegerField(null=True, blank=True)
     fecha_inicio = models.DateField(null=True, blank=True)
     proxima_ejecucion = models.DateField(null=True, blank=True)
@@ -58,6 +66,14 @@ class OrdenMantenimiento(models.Model):
         related_name="ordenes",
         null=True,
         blank=True,
+    )
+    ticket = models.ForeignKey(
+        "soporte.Ticket",
+        on_delete=models.SET_NULL,
+        related_name="ordenes",
+        null=True,
+        blank=True,
+        verbose_name="Ticket de soporte",
     )
     activo = models.ForeignKey(
         "inventario.Activo",
@@ -86,6 +102,10 @@ class OrdenMantenimiento(models.Model):
     def __str__(self):
         return f"{self.get_tipo_display()} · {self.activo.serial}"
 
+    @property
+    def checklist_items_completados(self):
+        return self.checklist_items.filter(completado=True).count()
+
 
 class Repuesto(models.Model):
     orden = models.ForeignKey(
@@ -107,3 +127,34 @@ class Repuesto(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.cantidad})"
+
+
+class ChecklistItem(models.Model):
+    plan = models.ForeignKey(
+        PlanMantenimiento,
+        on_delete=models.CASCADE,
+        related_name="checklist_items",
+        null=True,
+        blank=True,
+        verbose_name="Plan (plantilla)",
+    )
+    orden = models.ForeignKey(
+        OrdenMantenimiento,
+        on_delete=models.CASCADE,
+        related_name="checklist_items",
+        null=True,
+        blank=True,
+        verbose_name="Orden (copia)",
+    )
+    descripcion = models.CharField(max_length=250)
+    completado = models.BooleanField(default=False)
+    posicion = models.PositiveIntegerField(default=0)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["posicion", "id"]
+        verbose_name = "Ítem de checklist"
+        verbose_name_plural = "Ítems de checklist"
+
+    def __str__(self):
+        return self.descripcion

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Reportar falla — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a>
+    </li>
+    <li class="breadcrumb-item active">Reportar falla</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-8">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-danger bg-opacity-10 text-danger" style="width:44px;height:44px;">
+          <i class="bi bi-tools"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Reportar falla o novedad</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Describe el problema del equipo y el equipo de TI creara la orden de mantenimiento.
+          </p>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Equipo</label>
+            {{ form.activo }}
+            {% if form.activo.errors %}<div class="invalid-feedback d-block">{{ form.activo.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Prioridad</label>
+            {{ form.prioridad }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Descripcion de la falla</label>
+            {{ form.descripcion }}
+            {% if form.descripcion.errors %}<div class="invalid-feedback d-block">{{ form.descripcion.errors|join:", " }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-bug me-2"></i>Reportar falla
+          </button>
+          <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

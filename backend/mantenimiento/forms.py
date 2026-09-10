@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import OrdenMantenimiento, PlanMantenimiento, Repuesto
+from .models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repuesto
 
 
 class PlanMantenimientoForm(forms.ModelForm):
@@ -9,6 +9,7 @@ class PlanMantenimientoForm(forms.ModelForm):
         fields = [
             "activo",
             "tipo",
+            "criticidad",
             "frecuencia_dias",
             "fecha_inicio",
             "proxima_ejecucion",
@@ -19,12 +20,33 @@ class PlanMantenimientoForm(forms.ModelForm):
         widgets = {
             "activo": forms.Select(attrs={"class": "form-select"}),
             "tipo": forms.Select(attrs={"class": "form-select"}),
+            "criticidad": forms.Select(attrs={"class": "form-select"}),
             "frecuencia_dias": forms.NumberInput(attrs={"class": "form-control"}),
             "fecha_inicio": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "proxima_ejecucion": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "estado": forms.Select(attrs={"class": "form-select"}),
             "responsable": forms.TextInput(attrs={"class": "form-control"}),
             "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+        }
+
+
+class ChecklistItemForm(forms.ModelForm):
+    class Meta:
+        model = ChecklistItem
+        fields = ["descripcion"]
+        widgets = {
+            "descripcion": forms.TextInput(attrs={"class": "form-control"}),
+        }
+
+
+class ReporteFallaForm(forms.ModelForm):
+    class Meta:
+        model = OrdenMantenimiento
+        fields = ["activo", "prioridad", "descripcion"]
+        widgets = {
+            "activo": forms.Select(attrs={"class": "form-select"}),
+            "prioridad": forms.Select(attrs={"class": "form-select"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
         }
 
 

@@ -6,6 +6,7 @@
         <tr>
           <th>Activo</th>
           <th>Tipo</th>
+          <th>Criticidad</th>
           <th>Frecuencia</th>
           <th>Proxima ejecucion</th>
           <th class="text-center">Estado</th>
@@ -21,6 +22,15 @@
           </td>
           <td>
             <span class="sa-badge primary">{{ plan.get_tipo_display }}</span>
+          </td>
+          <td>
+            {% if plan.criticidad == "alta" %}
+              <span class="sa-badge danger">Critica</span>
+            {% elif plan.criticidad == "baja" %}
+              <span class="sa-badge success">Baja</span>
+            {% else %}
+              <span class="sa-badge warning">Media</span>
+            {% endif %}
           </td>
           <td style="font-size:.85rem;">
             {% if plan.frecuencia_dias %}Cada {{ plan.frecuencia_dias }} dias{% else %}—{% endif %}

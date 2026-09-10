@@ -6,6 +6,10 @@ app_name = "mantenimiento"
 
 urlpatterns = [
     path("", views.lista_planes, name="lista_planes"),
+    path("calendario/", views.calendario, name="calendario"),
+    path("calendario/eventos/", views.calendario_eventos, name="calendario_eventos"),
+    path("reportar/", views.reportar, name="reportar"),
+    path("checklist/<int:pk>/toggle/", views.toggle_checklist, name="toggle_checklist"),
     path("planes/<int:pk>/", views.detalle_plan, name="detalle_plan"),
     path("planes/nuevo/", views.crear_plan, name="crear_plan"),
     path("planes/<int:pk>/editar/", views.editar_plan, name="editar_plan"),

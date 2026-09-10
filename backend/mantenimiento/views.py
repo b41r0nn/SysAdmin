@@ -4,11 +4,21 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import DecimalField, F, Q, Sum
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from accounts.permisos import requiere_permiso
 
-from .forms import OrdenMantenimientoForm, PlanMantenimientoForm, RepuestoForm
+from .forms import (
+    ChecklistItemForm,
+    OrdenMantenimientoForm,
+    PlanMantenimientoForm,
+    ReporteFallaForm,
+    RepuestoForm,
+)
 from .models import (
+    ChecklistItem,
     OrdenMantenimiento,
     PlanMantenimiento,
     Repuesto,
@@ -16,12 +26,19 @@ from .models import (
     ESTADOS_PLAN,
     ESTADOS_ORDEN,
     PRIORIDADES,
+    CRITICIDADES,
+)
+
+from django.forms import modelformset_factory
+
+ChecklistItemFormSet = modelformset_factory(
+    ChecklistItem, form=ChecklistItemForm, extra=3, can_delete=True
 )
 
 
 # ── Planes ───────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("mantenimiento", "lectura")
 def lista_planes(request):
     qs = PlanMantenimiento.objects.select_related("activo")
 
@@ -66,7 +83,7 @@ def lista_planes(request):
     return render(request, "mantenimiento/lista_planes.html", context)
 
 
-@login_required
+@requiere_permiso("mantenimiento", "lectura")
 def detalle_plan(request, pk):
     plan = get_object_or_404(PlanMantenimiento, pk=pk)
     ordenes = plan.ordenes.select_related("activo").all().order_by("-fecha_apertura")
@@ -79,47 +96,70 @@ def detalle_plan(request, pk):
     })
 
 
-@login_required
+def _formset_checklist(request, plan=None):
+    qs = plan.checklist_items.all() if plan else ChecklistItem.objects.none()
+    if request.method == "POST" and "form-TOTAL_FORMS" in request.POST:
+        return ChecklistItemFormSet(request.POST, queryset=qs)
+    return ChecklistItemFormSet(queryset=qs)
+
+
+def _checklist_enviado(request):
+    return request.method == "POST" and "form-TOTAL_FORMS" in request.POST
+
+
+@requiere_permiso("mantenimiento", "escritura")
 def crear_plan(request):
     if request.method == "POST":
         form = PlanMantenimientoForm(request.POST)
-        if form.is_valid():
+        fset = _formset_checklist(request)
+        fset_valido = fset.is_valid() if _checklist_enviado(request) else True
+        if form.is_valid() and fset_valido:
             plan = form.save()
             _set_proxima_ejecucion(plan)
+            if _checklist_enviado(request):
+                _guardar_checklist_items(fset, plan)
             messages.success(request, "Plan de mantenimiento creado correctamente.")
             return redirect("mantenimiento:detalle_plan", pk=plan.pk)
         messages.error(request, "Corrige los errores del formulario.")
     else:
         form = PlanMantenimientoForm()
+        fset = _formset_checklist(request)
 
     return render(request, "mantenimiento/form_plan.html", {
         "form": form,
+        "fset": fset,
         "titulo": "Nuevo plan",
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def editar_plan(request, pk):
     plan = get_object_or_404(PlanMantenimiento, pk=pk)
     if request.method == "POST":
         form = PlanMantenimientoForm(request.POST, instance=plan)
-        if form.is_valid():
+        fset = _formset_checklist(request, plan)
+        fset_valido = fset.is_valid() if _checklist_enviado(request) else True
+        if form.is_valid() and fset_valido:
             plan = form.save()
             _set_proxima_ejecucion(plan)
+            if _checklist_enviado(request):
+                _guardar_checklist_items(fset, plan)
             messages.success(request, "Plan de mantenimiento actualizado.")
             return redirect("mantenimiento:detalle_plan", pk=plan.pk)
         messages.error(request, "Corrige los errores del formulario.")
     else:
         form = PlanMantenimientoForm(instance=plan)
+        fset = _formset_checklist(request, plan)
 
     return render(request, "mantenimiento/form_plan.html", {
         "form": form,
+        "fset": fset,
         "titulo": "Editar plan",
         "plan": plan,
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def toggle_plan(request, pk):
     plan = get_object_or_404(PlanMantenimiento, pk=pk)
     if request.method == "POST":
@@ -135,7 +175,7 @@ def toggle_plan(request, pk):
 
 # ── Ordenes ─────────────────────────────────────────────────────────────────-
 
-@login_required
+@requiere_permiso("mantenimiento", "lectura")
 def lista_ordenes(request):
     qs = OrdenMantenimiento.objects.select_related("activo", "plan")
 
@@ -183,7 +223,7 @@ def lista_ordenes(request):
     return render(request, "mantenimiento/lista_ordenes.html", context)
 
 
-@login_required
+@requiere_permiso("mantenimiento", "lectura")
 def detalle_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
     repuestos = orden.repuestos.all().order_by("nombre")
@@ -198,17 +238,28 @@ def detalle_orden(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def crear_orden(request):
     if request.method == "POST":
         form = OrdenMantenimientoForm(request.POST)
         if form.is_valid():
             orden = form.save()
+            _copiar_checklist_plantilla(orden)
             messages.success(request, "Orden de mantenimiento creada correctamente.")
             return redirect("mantenimiento:detalle_orden", pk=orden.pk)
         messages.error(request, "Corrige los errores del formulario.")
     else:
-        form = OrdenMantenimientoForm(initial={"fecha_apertura": timezone.now().date()})
+        initial = {}
+        plan_pk = request.GET.get("plan")
+        if plan_pk:
+            plan = get_object_or_404(PlanMantenimiento, pk=plan_pk)
+            initial = {
+                "plan": plan,
+                "activo": plan.activo,
+                "tipo": plan.tipo,
+                "descripcion": f"Ejecutar plan {plan.get_tipo_display()} del activo {plan.activo.serial}.",
+            }
+        form = OrdenMantenimientoForm(initial=initial)
 
     return render(request, "mantenimiento/form_orden.html", {
         "form": form,
@@ -216,7 +267,7 @@ def crear_orden(request):
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def editar_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
     if request.method == "POST":
@@ -236,7 +287,7 @@ def editar_orden(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def cerrar_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
     if request.method == "POST":
@@ -251,7 +302,7 @@ def cerrar_orden(request, pk):
     return redirect("mantenimiento:detalle_orden", pk=orden.pk)
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def eliminar_plan(request, pk):
     plan = get_object_or_404(PlanMantenimiento, pk=pk)
     if request.method == "POST":
@@ -264,7 +315,7 @@ def eliminar_plan(request, pk):
     return redirect("mantenimiento:detalle_plan", pk=plan.pk)
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def eliminar_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
     if request.method == "POST":
@@ -274,7 +325,7 @@ def eliminar_orden(request, pk):
     return redirect("mantenimiento:detalle_orden", pk=orden.pk)
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def crear_repuesto(request, orden_pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=orden_pk)
     if request.method == "POST":
@@ -297,7 +348,7 @@ def crear_repuesto(request, orden_pk):
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def editar_repuesto(request, pk):
     repuesto = get_object_or_404(Repuesto, pk=pk)
     if request.method == "POST":
@@ -319,7 +370,7 @@ def editar_repuesto(request, pk):
     })
 
 
-@login_required
+@requiere_permiso("mantenimiento", "escritura")
 def eliminar_repuesto(request, pk):
     repuesto = get_object_or_404(Repuesto, pk=pk)
     orden_id = repuesto.orden_id
@@ -328,6 +379,107 @@ def eliminar_repuesto(request, pk):
         messages.success(request, "Repuesto eliminado.")
         return redirect("mantenimiento:detalle_orden", pk=orden_id)
     return redirect("mantenimiento:detalle_orden", pk=orden_id)
+
+
+# ── Checklist ───────────────────────────────────────────────────────────────
+
+@requiere_permiso("mantenimiento", "escritura")
+def toggle_checklist(request, pk):
+    item = get_object_or_404(ChecklistItem, pk=pk, orden__isnull=False)
+    if request.method == "POST":
+        item.completado = not item.completado
+        item.save(update_fields=["completado"])
+    return render(request, "mantenimiento/partials/checklist_orden.html", {
+        "orden": item.orden,
+    })
+
+
+# ── Calendario ──────────────────────────────────────────────────────────────
+
+@requiere_permiso("mantenimiento", "lectura")
+def calendario(request):
+    return render(request, "mantenimiento/calendario.html")
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def calendario_eventos(request):
+    colores_estado = {
+        "abierta": "#0d6efd",
+        "en_proceso": "#ffc107",
+        "cerrada": "#198754",
+        "cancelada": "#6c757d",
+        "reportada": "#dc3545",
+    }
+    colores_criticidad = {
+        "baja": "#198754",
+        "media": "#ffc107",
+        "alta": "#dc3545",
+    }
+    eventos = []
+
+    for orden in OrdenMantenimiento.objects.select_related("activo").all():
+        eventos.append({
+            "title": f"Orden #{orden.id} · {orden.activo.serial}",
+            "start": orden.fecha_apertura.isoformat(),
+            "url": reverse("mantenimiento:detalle_orden", args=[orden.pk]),
+            "color": colores_estado.get(orden.estado, "#0d6efd"),
+        })
+
+    for plan in PlanMantenimiento.objects.select_related("activo").filter(
+        estado="activo", proxima_ejecucion__isnull=False
+    ):
+        eventos.append({
+            "title": f"Plan {plan.get_tipo_display()} · {plan.activo.serial}",
+            "start": plan.proxima_ejecucion.isoformat(),
+            "url": reverse("mantenimiento:detalle_plan", args=[plan.pk]),
+            "color": colores_criticidad.get(plan.criticidad, "#ffc107"),
+        })
+
+    return JsonResponse(eventos, safe=False)
+
+
+# ── Portal de reporte ───────────────────────────────────────────────────────
+
+@login_required
+def reportar(request):
+    if request.method == "POST":
+        form = ReporteFallaForm(request.POST)
+        if form.is_valid():
+            orden = form.save(commit=False)
+            orden.tipo = "correctivo"
+            orden.estado = "reportada"
+            orden.fecha_apertura = timezone.now().date()
+            orden.save()
+            messages.success(request, "Falla reportada. El equipo de TI se encargará.")
+            return redirect("core:dashboard")
+        messages.error(request, "Corrige los errores del formulario.")
+    else:
+        form = ReporteFallaForm(initial={"prioridad": "alta"})
+
+    return render(request, "mantenimiento/form_reporte.html", {"form": form})
+
+
+def _guardar_checklist_items(fset, plan):
+    for item in fset.save(commit=False):
+        item.plan_id = plan.pk
+        item.save()
+    for item in fset.deleted_objects:
+        item.delete()
+    for i, item in enumerate(plan.checklist_items.all().order_by("posicion", "id")):
+        if item.posicion != i:
+            item.posicion = i
+            item.save(update_fields=["posicion"])
+
+
+def _copiar_checklist_plantilla(orden):
+    if not orden.plan_id:
+        return
+    for item in orden.plan.checklist_items.all().order_by("posicion", "id"):
+        ChecklistItem.objects.create(
+            orden=orden,
+            descripcion=item.descripcion,
+            posicion=item.posicion,
+        )
 
 
 def _set_proxima_ejecucion(plan):

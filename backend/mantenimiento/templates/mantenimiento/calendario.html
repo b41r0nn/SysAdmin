@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Calendario de mantenimiento — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <div>
+    <h1 class="page-title">Calendario de mantenimiento</h1>
+    <p class="page-subtitle">Ordenes (por fecha de apertura) y planes preventivos (por proxima ejecucion).</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Planes
+    </a>
+  </div>
+</div>
+
+<div class="sa-card p-3">
+  <div id="calendario"></div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var cal = new FullCalendar.Calendar(document.getElementById("calendario"), {
+      initialView: "dayGridMonth",
+      locale: "es",
+      headerToolbar: {
+        left: "prev,next today",
+        center: "title",
+        right: "dayGridMonth,listWeek"
+      },
+      height: "auto",
+      events: {
+        url: "{% url 'mantenimiento:calendario_eventos' %}",
+        method: "GET"
+      },
+      eventClick: function (info) {
+        if (info.event.url) {
+          window.location.href = info.event.url;
+        }
+      }
+    });
+    cal.render();
+  });
+</script>
+{% endblock %}
