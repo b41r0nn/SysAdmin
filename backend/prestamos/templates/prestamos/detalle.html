@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Préstamo #{{ prestamo.pk }} — Préstamos{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'prestamos:lista' %}" class="text-decoration-none">Préstamos</a>
+    </li>
+    <li class="breadcrumb-item active">#{{ prestamo.pk }}</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-3 d-flex align-items-center justify-content-between">
+  <div>
+    <h1 class="page-title">{{ prestamo.activo }}</h1>
+    <p class="text-muted mb-0">Préstamo a {{ prestamo.solicitante.username }} · {{ prestamo.fecha_prestamo|date:"d/m/Y" }}</p>
+  </div>
+  <span class="sa-badge {{ badge_estado }}">{{ prestamo.estado_display }}</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+        <i class="bi bi-calendar-plus"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ prestamo.fecha_prestamo|date:"d/m/Y" }}</div>
+        <div class="stat-label">Fecha de préstamo</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+        <i class="bi bi-calendar-event"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ prestamo.fecha_devolucion_prevista|date:"d/m/Y"|default:"—" }}</div>
+        <div class="stat-label">Devolución prevista</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-success bg-opacity-10 text-success">
+        <i class="bi bi-check2-square"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value">{{ prestamo.fecha_devolucion|date:"d/m/Y"|default:"Pendiente" }}</div>
+        <div class="stat-label">Fecha de devolución</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sa-stat-card">
+      <div class="stat-icon bg-info bg-opacity-10 text-info">
+        <i class="bi bi-person"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-value text-truncate">{{ prestamo.solicitante.username }}</div>
+        <div class="stat-label">Solicitante</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex gap-3 align-items-start flex-wrap">
+  <a href="{% url 'inventario:detalle' prestamo.activo.pk %}" class="btn btn-outline-primary">
+    <i class="bi bi-pc-display"></i> Ficha del equipo
+  </a>
+
+  <div class="sa-card p-4 flex-fill" style="min-width:280px;">
+    <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+      Detalle
+    </h6>
+    <dl class="row mb-0" style="font-size:.9rem;">
+      <dt class="col-sm-4 text-muted fw-semibold">Destino / motivo</dt>
+      <dd class="col-sm-8">{{ prestamo.destino|default:"—" }}</dd>
+      <dt class="col-sm-4 text-muted fw-semibold">Observaciones</dt>
+      <dd class="col-sm-8">{{ prestamo.observaciones|default:"—"|linebreaksbr }}</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="mt-4 d-flex gap-2 flex-wrap">
+  {% if prestamo.estado == "devuelto" %}
+    <form method="post" action="{% url 'prestamos:devolver' prestamo.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-success" disabled>
+        <i class="bi bi-check2-square"></i> Ya devuelto {{ prestamo.fecha_devolucion|date:"d/m/Y" }}
+      </button>
+    </form>
+  {% else %}
+    <form method="post" action="{% url 'prestamos:devolver' prestamo.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-check2-square"></i> Registrar devolución
+      </button>
+    </form>
+  {% endif %}
+  <a href="{% url 'prestamos:editar' prestamo.pk %}" class="btn btn-outline-secondary">
+    <i class="bi bi-pencil-square"></i> Editar
+  </a>
+</div>
+{% endblock %}
