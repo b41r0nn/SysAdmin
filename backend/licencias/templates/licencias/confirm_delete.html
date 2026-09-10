@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — Licencias{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'licencias:lista' %}" class="text-decoration-none">Licencias</a>
+    </li>
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-md-6">
+    <div class="sa-card p-4 text-center">
+      <i class="bi bi-exclamation-triangle display-4 text-danger d-block mb-3"></i>
+      <h5 class="fw-bold">{{ titulo }}</h5>
+      <p class="text-muted mb-4">{{ mensaje }}</p>
+      <form method="post">
+        {% csrf_token %}
+        <div class="d-flex gap-2 justify-content-center">
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-trash me-2"></i>Eliminar
+          </button>
+          <a href="{% url 'licencias:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

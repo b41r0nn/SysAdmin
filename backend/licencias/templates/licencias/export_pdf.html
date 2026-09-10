@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm 18mm 10mm;
+    @bottom-center { content: element(footer); }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", Arial, Helvetica, sans-serif; color: #1F2937; font-size: 8.5pt; margin: 0; }
+  .banner { display: flex; align-items: stretch; width: 100%; }
+  .banner .logo-plate { background: #FFFFFF; padding: 8px 18px; display: flex; align-items: center; border-bottom: 3px solid #F18020; }
+  .banner .logo-plate img { height: 40px; width: auto; display: block; }
+  .banner .title-block { flex: 1; background: linear-gradient(135deg, #0156A6 0%, #013D7A 100%); color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 6px 18px; border-bottom: 3px solid #F18020; }
+  .banner .title-block .titulo { font-size: 14pt; font-weight: bold; letter-spacing: .4px; }
+  .banner .title-block .subtitulo { font-size: 7.5pt; opacity: .85; margin-top: 2px; }
+  #footer { position: running(footer); width: 100%; }
+  .footbar { display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 7pt; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 3px; }
+  .footbar .page-num::after { content: counter(page) " / " counter(pages); }
+
+  .datos {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    table-layout: fixed;
+  }
+  .datos th, .datos td {
+    border: 1px solid #E5E7EB;
+    padding: 3px 4px;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+  .datos th {
+    background: #0156A6;
+    color: #fff;
+    font-size: inherit;
+    font-weight: bold;
+    vertical-align: middle;
+    text-align: center;
+  }
+  .datos td { background: #FFFFFF; color: #1F2937; }
+  .datos tr:nth-child(even) td { background: #F8FAFC; }
+  .datos tr { page-break-inside: avoid; }
+  .datos .vacio { color: #C3CAD3; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 6.5pt; font-weight: bold; white-space: nowrap; }
+  .badge.activa { background: #DCFCE7; color: #15803D; }
+  .badge.por_vencer { background: #FEF3C7; color: #B45309; }
+  .badge.vencida { background: #FEE2E2; color: #B91C1C; }
+  .badge.cancelada { background: #F1F5F9; color: #64748B; }
+  .empty { text-align: center; color: #6B7280; padding: 20px; }
+
+  .resumen { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 110px; background: #F8FAFC; border: 1px solid #E5E7EB; border-left: 4px solid #0156A6; border-radius: 4px; padding: 8px 10px; }
+  .stat .label { font-size: 7.5pt; color: #6B7280; text-transform: uppercase; letter-spacing: .3px; }
+  .stat .value { font-size: 15pt; font-weight: bold; color: #013D7A; }
+  .stat.accent { border-left-color: #F18020; }
+</style>
+</head>
+<body>
+  <div class="banner">
+    <div class="logo-plate"><img src="file://{{ logo_path }}"></div>
+    <div class="title-block">
+      <div class="titulo">REPORTE DE LICENCIAS DE SOFTWARE</div>
+      <div class="subtitulo">Generado: {{ generado|date:"d/m/Y H:i" }} · SysAdmin · Confidencial, uso interno</div>
+    </div>
+  </div>
+  <div id="footer">
+    <div class="footbar"><div>REDIHOS S.A.S. — Confidencial, uso interno</div><div class="page-num"></div></div>
+  </div>
+
+  <table class="datos">
+    <colgroup>
+      {% for col in columnas %}<col style="width: {{ 100|default:8.3 }}%;">{% endfor %}
+    </colgroup>
+    <thead>
+      <tr>{% for col in columnas %}<th>{{ col.label }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for fila in filas %}
+      <tr>{% for celda in fila %}<td>{% if celda.vacio %}<span class="vacio">—</span>{% else %}{{ celda.valor }}{% endif %}</td>{% endfor %}</tr>
+      {% empty %}
+      <tr><td colspan="{{ columnas|length }}" class="empty">No hay licencias para los criterios seleccionados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="resumen">
+    <div class="stat">
+      <div class="label">Total licencias</div>
+      <div class="value">{{ totales.total }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Activas</div>
+      <div class="value">{{ totales.activas }}</div>
+    </div>
+    <div class="stat accent">
+      <div class="label">Por vencer</div>
+      <div class="value">{{ totales.por_vencer }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Vencidas</div>
+      <div class="value">{{ totales.vencidas }}</div>
+    </div>
+    {% if totales.valor %}
+    <div class="stat accent">
+      <div class="label">Valor total</div>
+      <div class="value">{{ totales.valor }}</div>
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
