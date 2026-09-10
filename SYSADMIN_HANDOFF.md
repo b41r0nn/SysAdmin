@@ -23,28 +23,26 @@
 | Fase 4 (plan) | Helpdesk / Tickets (app `soporte`) | ✅ COMPLETA 2026-09-10 · 167 tests |
 | Fase 5 | Licencias de software (app `licencias`) | ✅ COMPLETA 2026-09-10 · 186 tests |
 | Fase 6 | Préstamos de equipos (app `prestamos`) | ✅ COMPLETA 2026-09-10 · 202 tests |
+| v1.9.0 | Detector vencimiento de licencias en notificaciones | ✅ COMPLETA 2026-09-10 · `c9f18ac` |
+| v1.9.0 | Gestión de cuentas de usuario `/administracion/cuentas/` | ✅ COMPLETA 2026-09-10 · `36d58bb` |
+| — | Commits del sprint §13 (9) ejecutados | ✅ COMPLETA 2026-09-10 · `1565d08`→`5094cba` |
 
 ---
 
 ## 🔴 TAREAS CRÍTICAS PENDIENTES
 
-1. **Deploy v1.1.0 + Fase 1/2 en servidor**
-   - Ejecutar `migrate` para aplicar migraciones pendientes de `administracion` (0001_initial) y `accounts` (rol)
-   - Reiniciar contenedor Django
-   - Verificar módulo Administración (auditoría + configuración), sidebar por rol y etiquetas QR
-   - `qrcode==8.2` es dependencia nueva → reconstruir imagen Docker (`pip install` vía requirements)
+1. **Deploy v1.1.0 + Fases 1-6 + v1.9.0 en servidor**
+   - Ejecutar `migrate` para aplicar migraciones pendientes de todas las etapas/fases (incluye `licencias/0002` y `notificaciones/0002` de las features de cierre)
+   - Reconstruir imagen Docker (dependencia nueva `qrcode==8.2`)
+   - `collectstatic --noinput` y reiniciar contenedor Django
+   - Configurar `SECRET_KEY` y `PASSWORDS_ENCRYPTION_KEY` reales en `.env`
+   - Verificar módulo Administración (auditoría + configuración + **Cuentas**), sidebar por rol, etiquetas QR y detector de licencias en la campana de notificaciones
 
-2. **Validar reportes configurables**
-   - Probar `/inventario/exportar/opciones/` en Excel y PDF
-   - Verificar filtro por tipo de dispositivo y columnas seleccionadas
-   - Ajustar diseño del PDF si es necesario
+2. **Decidir manejo de `admin.py`**: la mayoría de apps registran modelos sin restricciones (borrado/CRUD completo vía /admin/). Solo `administracion` (auditoría) y `yule/SincronizacionLog` son read-only. Decidir `unregister` vs `has_delete_permission`.
 
-3. **Validar importación masiva**
-   - Probar `/inventario/importar/` y `/usuarios/importar/` con plantillas descargadas
-   - Verificar vista previa, badges de estado, confirmación
-   - Verificar race guard (duplicados entre preview y confirmar)
+3. **Usuarios legados**: cuentas creadas antes de la migración de roles o vía `createsuperuser` pueden tener `rol != superadmin` con `is_staff=True` → aún entran a /admin/. Validador manual.
 
-4. **Tests automatizados activos**: 202/202 tests OK (todas las apps — Fases 1-6, plan completo). Ejecutar con `manage.py test`.
+4. **Tests automatizados activos**: 217/217 tests OK (todas las apps — Fases 1-6 + features de cierre). Ejecutar con `manage.py test`.
 
 5. ~~drift de migraciones~~ → **RESUELTO 2026-09-10**: se generaron y aplicaron `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` con módulos nuevos). `makemigrations --check` → *No changes detected*.
 
@@ -867,6 +865,13 @@ Pendiente únicamente aplicar patches en servidor y hacer `makemigrations + migr
 ---
 
 ## CHANGELOG RECIENTE
+
+### 2026-09-10 — v1.9.0 · Cierre del plan por fases (11 commits ejecutados)
+
+- Ejecutados los **9 commits del sprint** (agrupación §13 del resumen): `1565d08` (security), `f329696` (etiquetas QR, alerta "hasta 24 por hoja A4"), `e4dcac2` (mantenimiento), `9f6524f` (soporte), `d9dd3b9` (licencias), `4a17326` (prestamos), `d8b7033` (cobertura), `4c52b9d` (drift migraciones), `5094cba` (docs v1.8.1).
+- **Detector de licencias en notificaciones** (`c9f18ac`): nuevo tipo `licencia` en `Notificacion.TIPOS` y choice `contrato` en `TIPOS_LICENCIA`. `_detectar_licencias` marca vencidas/póximo-vencimiento a 7 días (excluye canceladas y sin fecha), con `objetokey="licencia:<pk>"` e idempotencia. Migraciones `licencias/0002` y `notificaciones/0002`. 6 tests nuevos.
+- **Gestión de cuentas de usuario** (`36d58bb`): `/administracion/cuentas/` con listado + búsqueda HTMX, crear (password temporal mostrada una sola vez), cambiar rol, activar/desactivar (guardas anti auto-desmoción/auto-desactivación) y resetear contraseña. **`is_superuser`/`is_staff` solo para rol `superadmin`** (el rol app `admin` queda en `/administracion/`, NO entra a `/admin/`). Vistas `lista_cuentas`, `crear_cuenta`, `cambiar_rol_cuenta`, `toggle_cuenta`, `resetear_password`; forms `CuentaForm`/`CuentaRolForm`; templates `cuentas_lista`/`cuenta_form`/`cuenta_rol`/`partials/tabla_cuentas` + botón "Cuentas" en auditoría. 8 tests nuevos.
+- **Verificación final**: suite **217/217 OK** · `manage.py check` 0 issues · `makemigrations --check` sin cambios · working tree limpio · `.env` y `db.sqlite3` no versionados.
 
 ### 2026-09-10 — Corrección BD local + drift de migraciones
 

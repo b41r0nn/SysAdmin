@@ -1,8 +1,8 @@
 # Resumen de Sprint — SysAdmin
 **Fecha:** 10 de septiembre de 2026  
-**Versión al cierre:** `v1.8.1`  
+**Versión al cierre:** `v1.9.0`  
 **Estado:** Etapas 0-8 ✅ · Plan por fases 1-6 ✅ COMPLETO  
-**Commits:** NINGUNO — todos los cambios quedan en el working tree (55 archivos, ver §13)
+**Commits:** 11 ejecutados (9 del sprint §13 + 2 features de cierre → v1.9.0). Working tree limpio. Suite **217/217 OK**.
 
 ---
 
@@ -187,20 +187,40 @@ Patrones técnicos clave del sprint:
 
 ## 13. Estado de Git y Commits Recomendados
 
-- **Ningún commit realizado** (regla del proyecto). Working tree con **55 archivos**: 27 modificados + 28 nuevos/untracked (apps completas `administracion/`, `soporte/`, `licencias/`, `prestamos/`, `notificaciones/`, `accounts/permisos.py` + templatetags, migraciones de cada fase, tests).
-- `db.sqlite3` y `_tmp_scratch` (ya eliminado) no versionados.
-- `db.sqlite3.legacy_20260910` (backup BD antigua) queda **untracked**; decidir si versionarlo o borrarlo. Recommend: no versionar (dato sensible), eliminar tras confirmar estabilidad.
+Los 9 commits del sprint **fueron ejecutados y verificados** en esta sesión de cierre:
 
-**Agrupación sugerida de commits** (decisión del arquitecto):
-1. `feat(security): roles y permisos @requiere_permiso + auditoría + ConfiguracionSistema` (Fase 1)
-2. `feat(inventario): etiquetas QR individuales y masivas` (Fase 2)
-3. `feat(mantenimiento): notificaciones, checklist, criticidad, calendario y portal de reporte` (Fase 3)
-4. `feat(soporte): helpdesk de tickets con asignación, estados y escalado a mantenimiento` (Fase 4)
-5. `feat(licencias): inventario de licencias con vencimientos y exports` (Fase 5)
-6. `feat(prestamos): préstamos de equipos con devolución y estados` (Fase 6)
-7. `test: cobertura total 202/202` (incluye tests de todas las apps)
-8. `fix(migraciones): rebuild BD dev + yule/0002 + administracion/0002` (o integraciones de migraciones)
-9. `docs: README v1.8.1 + FASES.md + SYSADMIN_HANDOFF.md`
+| # | Commit | Descripción |
+|---|--------|-------------|
+| 1 | `1565d08` | feed(security): roles + permisos + auditoría |
+| 2 | `f329696` | feat(inventario): etiquetas QR individuales y masivas |
+| 3 | `e4dcac2` | feat(mantenimiento): notificaciones, checklist, criticidad, calendario y portal |
+| 4 | `9f6524f` | feat(soporte): helpdesk de tickets con escalado a mantenimiento |
+| 5 | `d9dd3b9` | feat(licencias): inventario de licencias con vencimientos y exports |
+| 6 | `4a17326` | feat(prestamos): préstamos de equipos con devolución y estados |
+| 7 | `d8b7033` | test: cobertura total 202/202 |
+| 8 | `4c52b9d` | fix(migraciones): drift yule/0002 + administracion/0002 |
+| 9 | `5094cba` | docs: README v1.8.1, FASES, handoff y resumen de sesión |
+
+- Antes de los commits: suite **203/203 OK**, `check` 0 issues, `makemigrations --check` sin cambios.
+- `db.sqlite3` y `.env` **no versionados**; `db.sqlite3.legacy_20260910` quedó untracked.
+- Alerta de etiquetas QR corregida en el camino → "hasta 24 por hoja A4" (C2 `f329696`).
+
+---
+
+## 15. Features de Cierre (post-commits §13) → v1.9.0
+
+Tras la revisión, se implementaron y commitean 2 features nuevas sobre `5094cba`:
+
+1. **`c9f18ac`** feat(licencias): detectar vencimiento de licencias y contratos en notificaciones
+   - Choice `contrato` en `TIPOS_LICENCIA` + tipo `licencia` en `Notificacion.TIPOS`.
+   - Detector `_detectar_licencias` (vencida + por_vencer ≤ 7 días, excluye canceladas y sin fecha) integrado en `generar_notificaciones` (solo rol con acceso a `licencias`).
+   - Migraciones `licencias/0002` y `notificaciones/0002`. 6 tests nuevos.
+2. **`36d58bb`** feat(administracion): gestión de cuentas de usuario (crear/rol/activar/resetear)
+   - `/administracion/cuentas/` con listado HTMX, crear (contraseña temporal una vez), cambiar rol, activar/desactivar (sin auto-desmoción ni auto-desactivación) y resetear password.
+   - `is_superuser`/`is_staff` = SOLO rol `superadmin` (rol app `admin` no entra a `/admin/` de Django). 8 tests nuevos.
+   - Sidebar: sin cambios (punto 1 de revisión, Opción A).
+
+**Verificación final:** suite **217/217 OK** (203 + 6 + 8) · `check` 0 issues · `makemigrations --check` sin cambios · working tree limpio.
 
 ---
 
@@ -217,4 +237,4 @@ Patrones técnicos clave del sprint:
 ---
 
 **Preparado por:** Asistente SysAdmin  
-**Próxima sesión sugerida:** commitear los cambios (agrupación §13), desplegar en servidor (§12) y validar en producción el flujo end-to-end.
+**Próxima sesión sugerida:** desplegar en servidor (§12) y validar en producción el flujo end-to-end; decidir el manejo de `admin.py` (apps sin restricciones de borrado en /admin/); revisar usuarios legados con `is_staff`.
