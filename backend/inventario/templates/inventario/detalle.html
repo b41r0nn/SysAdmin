@@ -19,6 +19,13 @@
     <img src="{{ activo.foto_activo.url }}" alt="{{ activo.marca }} {{ activo.modelo }}"
          class="img-fluid rounded" style="width:100%;max-width:300px;">
     {% endif %}
+    <div class="sa-card p-3 text-center mt-3">
+      <img src="{% url 'inventario:qr_imagen' activo.pk %}" alt="Código QR"
+           class="img-fluid rounded" style="width:160px;height:160px;">
+      <div class="text-muted mt-2" style="font-size:.8rem;">
+        Codigo QR del activo — escaneelo para ver la ficha
+      </div>
+    </div>
   </div>
 
   <div class="col-md-9">
@@ -186,6 +193,9 @@
 <div class="d-flex gap-2 mb-4">
   <a href="{% url 'inventario:editar' activo.id %}" class="btn btn-primary">
     <i class="bi bi-pencil-square"></i> Editar
+  </a>
+  <a href="{% url 'inventario:etiqueta' activo.pk %}" class="btn btn-outline-secondary" target="_blank">
+    <i class="bi bi-qr-code"></i> Etiqueta QR
   </a>
   <a href="{% url 'inventario:asignar' activo.id %}" class="btn btn-outline-secondary">
     <i class="bi bi-person-plus"></i> Asignar

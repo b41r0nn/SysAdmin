@@ -12,6 +12,11 @@ urlpatterns = [
     path("<int:pk>/editar/", views.editar_activo, name="editar"),
     path("<int:pk>/baja/", views.toggle_baja_activo, name="baja"),
 
+    # ── Etiquetas QR ───────────────────────────────────────────────────────────
+    path("<int:pk>/qr/", views.qr_imagen, name="qr_imagen"),
+    path("<int:pk>/etiqueta/", views.qr_etiqueta_pdf, name="etiqueta"),
+    path("etiquetas/", views.qr_etiquetas_masivas, name="etiquetas"),
+
     # ── 3C: Movimientos + Actas ───────────────────────────────────────────────
     path("<int:pk>/asignar/", views.asignar_activo, name="asignar"),
     path("<int:pk>/devolver/", views.devolver_activo, name="devolver"),

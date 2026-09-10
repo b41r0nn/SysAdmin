@@ -1,5 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
+import base64
+import io
+
+import qrcode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -8,22 +12,23 @@ from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 import openpyxl
-import weasyprint
+
+from administracion.models import ConfiguracionSistema
 
 from .forms import (
     ActivoForm, CatalogoModeloForm, AsignacionForm,
     DevolucionForm, TrasladoForm, SubirActaForm,
 )
 from .models import Activo, Asignacion, CatalogoModelo, Movimiento, ActaAsignacion, TIPOS, ESTADOS
-
-from .models import CatalogoModelo
+from accounts.permisos import requiere_permiso
 
 
 # ── Lista ──────────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def lista_activos(request):
     qs = Activo.objects.all()
 
@@ -69,7 +74,7 @@ def lista_activos(request):
 
 # ── Detalle ────────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def detalle_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion_activa = activo.asignaciones.filter(activa=True).first()
@@ -90,7 +95,7 @@ def detalle_activo(request, pk):
 
 # ── Crear ──────────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def crear_activo(request):
     if request.method == "POST":
         form = ActivoForm(request.POST, request.FILES)
@@ -108,7 +113,7 @@ def crear_activo(request):
 
 # ── Editar ─────────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def editar_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     if request.method == "POST":
@@ -127,7 +132,7 @@ def editar_activo(request, pk):
 
 # ── Baja (toggle) ──────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def toggle_baja_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     if request.method == "POST":
@@ -146,7 +151,7 @@ def toggle_baja_activo(request, pk):
 
 # ── Movimientos ───────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def asignar_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     if activo.estado != "disponible":
@@ -184,7 +189,7 @@ def asignar_activo(request, pk):
         "form": form, "titulo": "Asignar Activo", "activo": activo, "accion": "Asignar"
     })
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def devolver_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion = activo.asignaciones.filter(activa=True).first()
@@ -224,7 +229,7 @@ def devolver_activo(request, pk):
         "form": form, "titulo": "Devolver Activo", "activo": activo, "accion": "Devolver"
     })
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def trasladar_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion_actual = activo.asignaciones.filter(activa=True).first()
@@ -283,8 +288,10 @@ def trasladar_activo(request, pk):
 
 # ── Actas PDF ──────────────────────────────────────────────────────────────────
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def generar_acta_pdf(request, asignacion_pk):
+    import weasyprint
+
     asignacion = get_object_or_404(Asignacion, pk=asignacion_pk)
 
     html_string = render_to_string("inventario/acta_pdf.html", {"asignacion": asignacion})
@@ -305,7 +312,90 @@ def generar_acta_pdf(request, asignacion_pk):
     )
     return response
 
-@login_required
+
+# ── Etiquetas QR ───────────────────────────────────────────────────────────────
+
+def _qr_png_bytes(url):
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=7,
+        border=2,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _qr_data_uri(url):
+    return "data:image/png;base64," + base64.b64encode(_qr_png_bytes(url)).decode("ascii")
+
+
+def _etiqueta_context(request, activo):
+    config = ConfiguracionSistema.get_config()
+    return {
+        "serial": activo.serial,
+        "tipo": activo.get_tipo_dispositivo_display(),
+        "marca": activo.marca,
+        "modelo": activo.modelo,
+        "ubicacion": activo.ubicacion_fisica,
+        "estado": activo.get_estado_display(),
+        "qr": _qr_data_uri(
+            request.build_absolute_uri(reverse("inventario:detalle", args=[activo.pk]))
+        ),
+        "config": config,
+    }
+
+
+def _render_etiquetas_pdf(request, activos, filename):
+    import weasyprint
+
+    labels = [_etiqueta_context(request, a) for a in activos]
+    html_string = render_to_string("inventario/etiqueta_pdf.html", {"labels": labels})
+    pdf_bytes = weasyprint.HTML(
+        string=html_string, base_url=request.build_absolute_uri("/")
+    ).write_pdf()
+
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@requiere_permiso("inventario", "lectura")
+def qr_etiqueta_pdf(request, pk):
+    activo = get_object_or_404(Activo, pk=pk)
+    return _render_etiquetas_pdf(request, [activo], f"etiqueta_{activo.serial}.pdf")
+
+
+@requiere_permiso("inventario", "lectura")
+def qr_etiquetas_masivas(request):
+    if request.method == "POST":
+        ids = [pk for pk in request.POST.getlist("activos") if pk]
+        activos = Activo.objects.filter(pk__in=ids).order_by("serial")
+        if not activos:
+            messages.error(request, "Selecciona al menos un activo para generar etiquetas.")
+            return redirect("inventario:etiquetas")
+        return _render_etiquetas_pdf(request, activos, "etiquetas_qr.pdf")
+
+    activos = Activo.objects.all().order_by("serial")
+    return render(request, "inventario/etiquetas_seleccion.html", {"activos": activos})
+
+
+@requiere_permiso("inventario", "lectura")
+def qr_imagen(request, pk):
+    activo = get_object_or_404(Activo, pk=pk)
+    png = _qr_png_bytes(
+        request.build_absolute_uri(reverse("inventario:detalle", args=[activo.pk]))
+    )
+    response = HttpResponse(png, content_type="image/png")
+    response["Cache-Control"] = "public, max-age=86400"
+    return response
+
+@requiere_permiso("inventario", "escritura")
 def subir_acta_firmada(request, asignacion_pk):
     asignacion = get_object_or_404(Asignacion, pk=asignacion_pk)
     acta = getattr(asignacion, "acta", None)
@@ -336,7 +426,7 @@ def subir_acta_firmada(request, asignacion_pk):
 # CRUD — CatalogoModelo
 # ══════════════════════════════════════════════════════════════════════════════
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def catalogo_json(request):
     """Devuelve modelos de catálogo filtrados por tipo_dispositivo (JSON)."""
     tipo = request.GET.get("tipo", "").strip()
@@ -355,7 +445,7 @@ def catalogo_json(request):
     return JsonResponse({"catalogo": data})
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def lista_catalogo(request):
     from .models import TIPOS
     qs = CatalogoModelo.objects.all()
@@ -374,7 +464,7 @@ def lista_catalogo(request):
     return render(request, "inventario/catalogo_lista.html", ctx)
 
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def crear_catalogo(request):
     if request.method == "POST":
         form = CatalogoModeloForm(request.POST)
@@ -390,7 +480,7 @@ def crear_catalogo(request):
     return render(request, "inventario/form.html", {"form": form, "titulo": "Nuevo Modelo de Catálogo"})
 
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def editar_catalogo(request, pk):
     obj = get_object_or_404(CatalogoModelo, pk=pk)
     if request.method == "POST":
@@ -411,7 +501,7 @@ def editar_catalogo(request, pk):
 # Exportar inventario a Excel — selección de columnas
 # ══════════════════════════════════════════════════════════════════════════════
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def exportar_opciones(request):
     secciones = [
         {
@@ -673,7 +763,7 @@ def _parsear_excel_activos(archivo):
     return filas, advertencias
 
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def importar_activos(request):
     if request.method == "POST":
         archivo = request.FILES.get("archivo")
@@ -711,7 +801,7 @@ def importar_activos(request):
     return render(request, "inventario/importar.html")
 
 
-@login_required
+@requiere_permiso("inventario", "escritura")
 def confirmar_importar_activos(request):
     if request.method != "POST":
         return redirect("inventario:importar")
@@ -758,7 +848,7 @@ def confirmar_importar_activos(request):
     return redirect("inventario:lista")
 
 
-@login_required
+@requiere_permiso("inventario", "lectura")
 def descargar_plantilla_activos(request):
     """Descarga plantilla Excel con headers y fila de ejemplo."""
     wb = openpyxl.Workbook()

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Etiquetas QR — Inventario{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'inventario:lista' %}" class="text-decoration-none">Inventario</a>
+    </li>
+    <li class="breadcrumb-item active">Etiquetas QR</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-4">
+  <div>
+    <h1 class="page-title">Etiquetas QR</h1>
+    <p class="page-subtitle">Selecciona los activos para generar sus etiquetas imprimibles.</p>
+  </div>
+  <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Volver al inventario
+  </a>
+</div>
+
+<div class="sa-card p-3 mb-4">
+  <div class="alert alert-primary bg-primary-subtle border-0 d-flex align-items-center mb-0 py-2"
+       style="font-size:.875rem;">
+    <i class="bi bi-qr-code me-2 fs-5 text-primary"></i>
+    <span>Cada etiqueta incluye un codigo QR que enlaza a la ficha del activo. Etiquetas de 50 × 30 mm, hasta 24 por hoja A4.</span>
+  </div>
+</div>
+
+<form method="post" action="{% url 'inventario:etiquetas' %}">
+  {% csrf_token %}
+
+  <div class="sa-card overflow-hidden">
+    {% if activos %}
+    <div class="table-responsive">
+      <table class="table table-hover sa-table mb-0">
+        <thead>
+          <tr>
+            <th style="width:44px;">
+              <input type="checkbox" id="sel_todos" class="form-check-input" checked>
+            </th>
+            <th>Serial</th>
+            <th>Activo</th>
+            <th>Tipo</th>
+            <th>Ubicación</th>
+            <th class="text-center">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in activos %}
+          <tr>
+            <td>
+              <input type="checkbox" name="activos" value="{{ a.pk }}"
+                     class="form-check-input chk-activo" checked>
+            </td>
+            <td>
+              <span style="font-family:var(--sa-font-mono);font-size:.82rem;">{{ a.serial }}</span>
+            </td>
+            <td>
+              <div class="fw-semibold" style="font-size:.9rem;">{{ a.marca }} {{ a.modelo }}</div>
+            </td>
+            <td style="font-size:.875rem;">
+              <span class="sa-badge primary">{{ a.get_tipo_dispositivo_display }}</span>
+            </td>
+            <td style="font-size:.875rem;">{{ a.ubicacion_fisica|default:"—" }}</td>
+            <td class="text-center">
+              {% if a.estado == "disponible" %}
+                <span class="sa-badge success">{{ a.get_estado_display }}</span>
+              {% elif a.estado == "asignado" %}
+                <span class="sa-badge primary">{{ a.get_estado_display }}</span>
+              {% elif a.estado == "dado_de_baja" %}
+                <span class="sa-badge danger">{{ a.get_estado_display }}</span>
+              {% else %}
+                <span class="sa-badge warning">{{ a.get_estado_display }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-5 text-center text-muted">
+      <i class="bi bi-qr-code display-4 d-block mb-3 opacity-25"></i>
+      <p class="mb-0">No hay activos registrados para etiquetar.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if activos %}
+  <div class="mt-3 d-flex gap-3 align-items-center">
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-printer-fill me-1"></i> Generar etiquetas PDF
+    </button>
+    <span class="text-muted" id="contador" style="font-size:.9rem;"></span>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function actualizarContador() {
+    var n = document.querySelectorAll('.chk-activo:checked').length;
+    var el = document.getElementById('contador');
+    if (el) { el.textContent = n + ' activos seleccionados'; }
+  }
+  document.querySelectorAll('.chk-activo').forEach(function (c) {
+    c.addEventListener('change', actualizarContador);
+  });
+  var selTodos = document.getElementById('sel_todos');
+  if (selTodos) {
+    selTodos.addEventListener('change', function () {
+      document.querySelectorAll('.chk-activo').forEach(function (c) {
+        c.checked = selTodos.checked;
+      });
+      actualizarContador();
+    });
+  }
+  actualizarContador();
+</script>
+{% endblock %}

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Etiquetas QR — SysAdmin</title>
+  <style>
+    /* ─── Reset + Página ───────────────────────────────────────────────── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background: #fff;
+    }
+
+    /* ─── Etiqueta ────────────────────────────────────────────────────── */
+    .label {
+      display: inline-block;
+      width: 50mm;
+      height: 30mm;
+      border: 1px solid #94a3b8;
+      border-radius: 2mm;
+      padding: 2.2mm 2.6mm;
+      margin: 0 3mm 4mm 0;
+      vertical-align: top;
+      page-break-inside: avoid;
+    }
+
+    .label-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid #1a56db;
+      padding-bottom: 1.4mm;
+      margin-bottom: 1.8mm;
+    }
+
+    .label-company {
+      font-size: 5.4pt;
+      font-weight: 700;
+      color: #1a56db;
+      line-height: 1.25;
+    }
+
+    .label-company small {
+      display: block;
+      font-size: 4.2pt;
+      color: #64748b;
+      font-weight: 400;
+    }
+
+    .label-brand {
+      text-align: right;
+      font-size: 4pt;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
+    .label-body {
+      display: flex;
+      gap: 2.4mm;
+      align-items: center;
+    }
+
+    .qr {
+      width: 14mm;
+      height: 14mm;
+      flex-shrink: 0;
+    }
+
+    .qr img {
+      width: 100%;
+      height: 100%;
+    }
+
+    .data {
+      font-size: 5.2pt;
+      line-height: 1.25;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .data .field { margin-bottom: 1mm; }
+
+    .data .field:last-child { margin-bottom: 0; }
+
+    .k {
+      display: block;
+      font-size: 3.9pt;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #64748b;
+    }
+
+    .data .serial {
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: 700;
+      font-size: 6pt;
+      color: #0f172a;
+    }
+
+    .label-footer {
+      margin-top: 1.4mm;
+      border-top: 0.5px solid #e2e8f0;
+      padding-top: 1mm;
+      font-size: 3.8pt;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  {% for l in labels %}
+  <div class="label">
+    <div class="label-header">
+      <div class="label-company">
+        {{ l.config.nombre_empresa }}
+        {% if l.config.nit %}<small>NIT {{ l.config.nit }}</small>{% endif %}
+      </div>
+      <div class="label-brand">SysAdmin<br>Etiqueta de inventario</div>
+    </div>
+    <div class="label-body">
+      <div class="qr"><img src="{{ l.qr }}" alt="Código QR"></div>
+      <div class="data">
+        <div class="field">
+          <span class="k">Serial</span>
+          <span class="serial">{{ l.serial }}</span>
+        </div>
+        <div class="field">
+          <span class="k">Equipo</span>
+          {{ l.marca }} {{ l.modelo }}
+        </div>
+        <div class="field">
+          <span class="k">Tipo</span>
+          {{ l.tipo }}
+        </div>
+        <div class="field">
+          <span class="k">Ubicacion</span>
+          {{ l.ubicacion|default:"—" }}
+        </div>
+        <div class="field">
+          <span class="k">Estado</span>
+          {{ l.estado }}
+        </div>
+      </div>
+    </div>
+    <div class="label-footer">
+      Escanee el codigo QR para consultar la ficha completa del activo en SysAdmin.
+    </div>
+  </div>
+  {% endfor %}
+</body>
+</html>

@@ -85,6 +85,10 @@
           <td style="font-size:.875rem;">{{ a.ubicacion_fisica|default:"—" }}</td>
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
+              <a href="{% url 'inventario:etiqueta' a.pk %}"
+                 class="btn btn-sm btn-outline-secondary" title="Etiqueta QR" target="_blank">
+                <i class="bi bi-qr-code"></i>
+              </a>
               <a href="{% url 'inventario:detalle' a.pk %}"
                  class="btn btn-sm btn-outline-primary" title="Ver ficha">
                 <i class="bi bi-eye"></i>
