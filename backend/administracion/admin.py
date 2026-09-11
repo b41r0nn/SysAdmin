@@ -40,6 +40,7 @@ class ConfiguracionSistemaAdmin(admin.ModelAdmin):
         "email_contacto",
         "fecha_actualizacion",
     )
+    exclude = ("smtp_password_cifrado",)
 
     def has_add_permission(self, request):
         return not ConfiguracionSistema.objects.exists()

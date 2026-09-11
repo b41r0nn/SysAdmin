@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from accounts.permisos import PERMISOS_POR_ROL, requiere_permiso
-from notificaciones.services import aviso_usuario
+from notificaciones.services import aviso_usuario, encolar_email
 
 from .forms import (
     ChecklistItemForm,
@@ -475,6 +475,7 @@ def _notificar_tecnico(orden):
     )
     for user in tecnicos:
         aviso_usuario(user, titulo, mensaje, link=link, objetokey=f"orden:{orden.pk}")
+        encolar_email(user.email, titulo, mensaje)
 
 
 def _guardar_checklist_items(fset, plan):

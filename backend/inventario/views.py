@@ -19,12 +19,14 @@ from django.utils import timezone
 import openpyxl
 
 from administracion.models import ConfiguracionSistema
+from notificaciones.services import encolar_email
 
 from .forms import (
     ActivoForm, CatalogoModeloForm, AsignacionForm,
     DevolucionForm, TrasladoForm, SubirActaForm,
 )
 from .models import Activo, Asignacion, CatalogoModelo, Movimiento, ActaAsignacion, TIPOS, ESTADOS
+from .services import acta_pdf_bytes
 from accounts.permisos import requiere_permiso
 
 
@@ -177,7 +179,17 @@ def asignar_activo(request, pk):
                 usuario_destino=asignacion.usuario
             )
             
-            ActaAsignacion.objects.create(asignacion=asignacion)
+            acta = ActaAsignacion.objects.create(asignacion=asignacion)
+            encolar_email(
+                asignacion.usuario.correo,
+                f"Acta de asignación #{acta.pk} · {activo.serial}",
+                f"Hola {asignacion.usuario.nombre_completo},\n"
+                f"te asignamos el activo {activo.marca} {activo.modelo} "
+                f"(serial {activo.serial}).\n"
+                f"Adjuntamos el acta para que la firmes y la reenvíes a Sistemas.",
+                adjunto_tipo="acta",
+                adjunto_objeto_id=acta.pk,
+            )
             
             activo.estado = "asignado"
             activo.save()
@@ -277,7 +289,17 @@ def trasladar_activo(request, pk):
                 usuario_destino=usuario_destino
             )
             
-            ActaAsignacion.objects.create(asignacion=nueva_asignacion)
+            acta = ActaAsignacion.objects.create(asignacion=nueva_asignacion)
+            encolar_email(
+                usuario_destino.correo,
+                f"Acta de asignación #{acta.pk} · {activo.serial}",
+                f"Hola {usuario_destino.nombre_completo},\n"
+                f"te fue trasladado el activo {activo.marca} {activo.modelo} "
+                f"(serial {activo.serial}).\n"
+                f"Adjuntamos el acta para que la firmes y la reenvíes a Sistemas.",
+                adjunto_tipo="acta",
+                adjunto_objeto_id=acta.pk,
+            )
             
             messages.success(request, f"Activo trasladado a {usuario_destino.nombre_completo}.")
             return redirect("inventario:detalle", pk=activo.pk)
@@ -292,14 +314,9 @@ def trasladar_activo(request, pk):
 
 @requiere_permiso("inventario", "lectura")
 def generar_acta_pdf(request, asignacion_pk):
-    import weasyprint
-
     asignacion = get_object_or_404(Asignacion, pk=asignacion_pk)
 
-    html_string = render_to_string("inventario/acta_pdf.html", {"asignacion": asignacion})
-    pdf_bytes = weasyprint.HTML(
-        string=html_string, base_url=request.build_absolute_uri("/")
-    ).write_pdf()
+    pdf_bytes = acta_pdf_bytes(asignacion)
 
     # ── Persist PDF in ActaAsignacion if not already saved ─────────────────
     acta = getattr(asignacion, "acta", None)

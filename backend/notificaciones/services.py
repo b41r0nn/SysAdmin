@@ -1,15 +1,19 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.core.mail import EmailMessage, get_connection
+from django.db.models import F, Q
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.permisos import PERMISOS_POR_ROL
+from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Activo
+from inventario.services import acta_pdf_bytes
 from licencias.models import DIAS_AVISO_VENCIMIENTO, LicenciaSoftware
 from mantenimiento.models import PlanMantenimiento
-from notificaciones.models import Notificacion
+from notificaciones.models import Notificacion, NotificacionEmail
 from yule.models import EquipoOCS
 
 
@@ -202,3 +206,106 @@ def generar_notificaciones(user):
     if _puede_ver(user, "licencias"):
         _detectar_licencias(user)
     generar_mantenimiento(user)
+
+
+# ── Cola de emails (patrón GLPI: cola + cron) ────────────────────────────────
+
+
+def encolar_email(destinatario_email, asunto, cuerpo, adjunto_tipo="", adjunto_objeto_id=None):
+    """Encola un email. Sin destinatario → sin acción, no es error.
+
+    El envío real lo hace el comando `enviar_notificaciones_email` (cron).
+    """
+    if not destinatario_email:
+        return None
+    return NotificacionEmail.objects.create(
+        destinatario=destinatario_email,
+        asunto=asunto,
+        cuerpo=cuerpo,
+        adjunto_tipo=adjunto_tipo,
+        adjunto_objeto_id=adjunto_objeto_id,
+    )
+
+
+def _get_smtp_connection():
+    config = ConfiguracionSistema.get_config()
+    if not config.smtp_host:
+        return None  # sin config SMTP → no enviar (no es error)
+    return get_connection(
+        backend="django.core.mail.backends.smtp.EmailBackend",
+        host=config.smtp_host,
+        port=config.smtp_puerto or 587,
+        username=config.smtp_usuario,
+        password=config.get_smtp_password(),
+        use_tls=config.smtp_usa_tls,
+        use_ssl=config.smtp_usa_ssl,
+    )
+
+
+def _adjunto_acta(objeto_id):
+    acta = ActaAsignacion.objects.get(pk=objeto_id)
+    pdf = acta_pdf_bytes(acta.asignacion)
+    nombre = f"acta_{acta.asignacion.activo.serial}_{acta.asignacion.usuario.documento_identidad}.pdf"
+    return (nombre, pdf, "application/pdf")
+
+
+def procesar_cola_email():
+    """Despacha la cola de emails. Reintenta hasta 5 intentos.
+
+    Devuelve (total, enviados, fallos, quedan). Si falla la conexión SMTP
+    (host caído / credenciales malas / firewall) marca toda la corrida con
+    intentos+1 y el error, y sale limpio: el cron nunca revienta y la tabla
+    NotificacionEmail queda con el rastro.
+    """
+    config = ConfiguracionSistema.get_config()
+    if not config.smtp_host:
+        return 0, 0, 0, 0  # sin config SMTP → no es error
+
+    pending = NotificacionEmail.objects.filter(
+        enviado=False, intentos__lt=5
+    ).order_by("fecha_creacion")
+    total = pending.count()
+
+    connection = _get_smtp_connection()
+    try:
+        try:
+            connection.open()
+        except Exception as exc:
+            error = str(exc)[:2000]
+            marcadas = pending.update(intentos=F("intentos") + 1, error=error)
+            quedan = NotificacionEmail.objects.filter(enviado=False, intentos__lt=5).count()
+            return total, 0, marcadas, quedan
+
+        enviados = 0
+        fallos = 0
+        for correo in pending:
+            try:
+                adjuntos = []
+                if correo.adjunto_tipo == "acta" and correo.adjunto_objeto_id:
+                    adjuntos.append(_adjunto_acta(correo.adjunto_objeto_id))
+                mensaje = EmailMessage(
+                    subject=correo.asunto,
+                    body=correo.cuerpo,
+                    to=[correo.destinatario],
+                    attachments=adjuntos,
+                    connection=connection,
+                )
+                mensaje.send(fail_silently=False)
+                correo.enviado = True
+                correo.intentos += 1
+                correo.fecha_enviado = timezone.now()
+                correo.error = ""
+                correo.save(update_fields=["enviado", "intentos", "fecha_enviado", "error"])
+                enviados += 1
+            except Exception as exc:
+                correo.intentos += 1
+                correo.error = str(exc)[:2000]
+                correo.save(update_fields=["intentos", "error"])
+                fallos += 1
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+    return total, enviados, fallos, NotificacionEmail.objects.filter(enviado=False, intentos__lt=5).count()

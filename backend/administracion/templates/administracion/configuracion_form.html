@@ -65,6 +65,58 @@
           </div>
         </fieldset>
 
+        <fieldset class="sa-fieldset mt-4">
+          <legend>Correo SMTP</legend>
+          <p class="text-muted mb-3" style="font-size:.8rem;">
+            Usado por la cola de notificaciones por correo. Deja la contraseña en blanco
+            para conservarla. Compatible con Microsoft 365 (Office 365) vía STARTTLS.
+          </p>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Servidor</label>
+              {{ form.smtp_host }}
+              {% if form.smtp_host.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_host.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-semibold">Puerto</label>
+              {{ form.smtp_puerto }}
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-semibold">Usuario</label>
+              {{ form.smtp_usuario }}
+              {% if form.smtp_usuario.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_usuario.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Contraseña</label>
+              {{ form.smtp_password }}
+              <div class="form-text">{{ form.smtp_password.help_text }}</div>
+              {% if form.smtp_password.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_password.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <div class="d-flex gap-4 flex-wrap">
+                <div class="form-check">
+                  {{ form.smtp_usa_tls }}
+                  <label class="form-check-label" for="{{ form.smtp_usa_tls.id_for_label }}">
+                    Usar STARTTLS
+                  </label>
+                </div>
+                <div class="form-check">
+                  {{ form.smtp_usa_ssl }}
+                  <label class="form-check-label" for="{{ form.smtp_usa_ssl.id_for_label }}">
+                    Usar SSL (puerto 465)
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
         <div class="d-flex gap-2 justify-content-end pt-3"
              style="border-top:1px solid var(--sa-border,#e2e8f0);">
           <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary">Cancelar</a>
