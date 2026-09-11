@@ -2,9 +2,11 @@ from datetime import date, datetime
 from decimal import Decimal
 import base64
 import io
+import os
 
 import qrcode
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
@@ -315,6 +317,9 @@ def generar_acta_pdf(request, asignacion_pk):
 
 # ── Etiquetas QR ───────────────────────────────────────────────────────────────
 
+LOGO_PATH = os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.png")
+
+
 def _qr_png_bytes(url):
     qr = qrcode.QRCode(
         version=None,
@@ -342,11 +347,11 @@ def _etiqueta_context(request, activo):
         "tipo": activo.get_tipo_dispositivo_display(),
         "marca": activo.marca,
         "modelo": activo.modelo,
-        "ubicacion": activo.ubicacion_fisica,
-        "estado": activo.get_estado_display(),
+        "numero_interno": activo.numero_interno,
         "qr": _qr_data_uri(
             request.build_absolute_uri(reverse("inventario:detalle", args=[activo.pk]))
         ),
+        "logo_path": LOGO_PATH,
         "config": config,
     }
 
