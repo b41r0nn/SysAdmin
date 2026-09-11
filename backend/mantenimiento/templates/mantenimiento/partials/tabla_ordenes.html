@@ -28,6 +28,10 @@
               <span class="sa-badge warning">
                 <i class="bi bi-exclamation-circle" style="font-size:.65rem;"></i>Abierta
               </span>
+            {% elif orden.estado == "reportada" %}
+              <span class="sa-badge danger">
+                <i class="bi bi-flag" style="font-size:.65rem;"></i>Reportada
+              </span>
             {% elif orden.estado == "en_proceso" %}
               <span class="sa-badge primary">
                 <i class="bi bi-arrow-repeat" style="font-size:.65rem;"></i>En proceso
