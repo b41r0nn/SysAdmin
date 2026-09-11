@@ -1,12 +1,15 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from inventario.models import Activo
+from mantenimiento.forms import ReporteFallaForm
 from mantenimiento.models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repuesto
 from notificaciones.models import Notificacion
 
@@ -383,6 +386,62 @@ class ReporteFallaPortalTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(OrdenMantenimiento.objects.count(), 0)
+
+
+# ─── Reporte robusto: foto y activos activos ───────────────────────
+
+
+class ReporteFallaFotoTests(TestCase):
+    def setUp(self):
+        self.user = _user("lectura")
+        self.client.force_login(self.user)
+        self.activo = _activo()
+
+    def test_post_con_foto_guarda_imagen(self):
+        from io import BytesIO
+        from PIL import Image
+        buf = BytesIO()
+        Image.new("RGB", (10, 10), "red").save(buf, format="PNG")
+        foto = SimpleUploadedFile("falla.png", buf.getvalue(), content_type="image/png")
+        resp = self.client.post(
+            reverse("mantenimiento:reportar"),
+            {"activo": self.activo.pk, "prioridad": "alta", "descripcion": "Falla.", "foto": foto},
+        )
+        self.assertEqual(resp.status_code, 302)
+        orden = OrdenMantenimiento.objects.get(activo=self.activo)
+        self.assertTrue(orden.foto.name.startswith("mantenimiento/fotos/"))
+
+    def test_activo_dado_de_baja_no_es_opcion(self):
+        self.activo.estado = "dado_de_baja"
+        self.activo.save()
+        resp = self.client.post(
+            reverse("mantenimiento:reportar"),
+            {"activo": self.activo.pk, "prioridad": "media", "descripcion": "Intento."},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(OrdenMantenimiento.objects.count(), 0)
+
+    def test_form_rechaza_activo_dado_de_baja(self):
+        self.activo.estado = "dado_de_baja"
+        self.activo.save()
+        form = ReporteFallaForm(
+            data={"activo": self.activo.pk, "prioridad": "media", "descripcion": "x"}
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("activo", form.errors)
+
+    def test_reporte_encola_email_a_tecnicos(self):
+        tecnico = _user("tecnico")
+        tecnico.email = "tecnico@test.com"
+        tecnico.save(update_fields=["email"])
+        with patch("mantenimiento.views.encolar_email") as mock:
+            self.client.post(
+                reverse("mantenimiento:reportar"),
+                {"activo": self.activo.pk, "prioridad": "media", "descripcion": "Falla."},
+            )
+        self.assertTrue(mock.called)
+        asuntos = [call.args[0] for call in mock.call_args_list]
+        self.assertTrue(all(asuntos))
 
 
 class CalendarioTests(TestCase):

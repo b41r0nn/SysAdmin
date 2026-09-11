@@ -96,6 +96,12 @@ class OrdenMantenimiento(models.Model):
     fecha_cierre = models.DateField(null=True, blank=True)
     tecnico_asignado = models.CharField(max_length=150, blank=True)
     descripcion = models.TextField(blank=True)
+    foto = models.ImageField(
+        upload_to="mantenimiento/fotos/",
+        null=True,
+        blank=True,
+        verbose_name="Foto del problema",
+    )
     diagnostico = models.TextField(blank=True)
     acciones = models.TextField(blank=True)
     costo_estimado = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)

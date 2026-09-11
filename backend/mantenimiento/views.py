@@ -445,7 +445,7 @@ def calendario_eventos(request):
 @login_required
 def reportar(request):
     if request.method == "POST":
-        form = ReporteFallaForm(request.POST)
+        form = ReporteFallaForm(request.POST, request.FILES)
         if form.is_valid():
             orden = form.save(commit=False)
             orden.tipo = "correctivo"

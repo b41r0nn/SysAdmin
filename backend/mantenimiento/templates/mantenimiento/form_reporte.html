@@ -27,7 +27,7 @@
         </div>
       </div>
 
-      <form method="post" novalidate>
+      <form method="post" novalidate enctype="multipart/form-data">
         {% csrf_token %}
         <div class="row g-3">
           <div class="col-12">
@@ -43,6 +43,11 @@
             <label class="form-label fw-semibold">Descripcion de la falla</label>
             {{ form.descripcion }}
             {% if form.descripcion.errors %}<div class="invalid-feedback d-block">{{ form.descripcion.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Foto del problema (opcional)</label>
+            {{ form.foto }}
+            {% if form.foto.errors %}<div class="invalid-feedback d-block">{{ form.foto.errors|join:", " }}</div>{% endif %}
           </div>
         </div>
 
