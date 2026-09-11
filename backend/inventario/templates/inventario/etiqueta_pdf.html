@@ -25,7 +25,7 @@
       height: 30mm;
       border: 1px solid #94a3b8;
       border-radius: 2mm;
-      padding: 2.2mm 2.6mm;
+      padding: 2mm 2.4mm;
       margin: 0 3mm 4mm 0;
       vertical-align: top;
       page-break-inside: avoid;
@@ -34,39 +34,38 @@
     .label-header {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
       border-bottom: 1px solid #1a56db;
-      padding-bottom: 1.4mm;
-      margin-bottom: 1.8mm;
+      padding-bottom: 0.8mm;
+      margin-bottom: 1mm;
     }
 
-    .label-company {
-      font-size: 5.4pt;
-      font-weight: 700;
-      color: #1a56db;
-      line-height: 1.25;
-    }
-
-    .label-company small {
-      display: block;
-      font-size: 4.2pt;
-      color: #64748b;
-      font-weight: 400;
+    .label-logo {
+      height: 5.5mm;
+      width: auto;
     }
 
     .label-brand {
       text-align: right;
-      font-size: 4pt;
+      font-size: 3.9pt;
       text-transform: uppercase;
-      letter-spacing: .06em;
+      letter-spacing: .05em;
       color: #64748b;
-      line-height: 1.4;
+      line-height: 1.35;
+    }
+
+    .label-brand strong {
+      display: block;
+      font-size: 6.4pt;
+      letter-spacing: .02em;
+      color: #0f172a;
     }
 
     .label-body {
       display: flex;
-      gap: 2.4mm;
+      gap: 3.5mm;
       align-items: center;
+      justify-content: center;
     }
 
     .qr {
@@ -83,11 +82,10 @@
     .data {
       font-size: 5.2pt;
       line-height: 1.25;
-      flex: 1;
-      min-width: 0;
+      flex: 0 1 auto;
     }
 
-    .data .field { margin-bottom: 1mm; }
+    .data .field { margin-bottom: 0.6mm; }
 
     .data .field:last-child { margin-bottom: 0; }
 
@@ -107,11 +105,15 @@
     }
 
     .label-footer {
-      margin-top: 1.4mm;
+      margin-top: 0.8mm;
       border-top: 0.5px solid #e2e8f0;
-      padding-top: 1mm;
-      font-size: 3.8pt;
-      color: #94a3b8;
+      padding-top: 0.5mm;
+      text-align: center;
+      font-size: 4.6pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #0156a6;
     }
   </style>
 </head>
@@ -119,11 +121,8 @@
   {% for l in labels %}
   <div class="label">
     <div class="label-header">
-      <div class="label-company">
-        {{ l.config.nombre_empresa }}
-        {% if l.config.nit %}<small>NIT {{ l.config.nit }}</small>{% endif %}
-      </div>
-      <div class="label-brand">SysAdmin<br>Etiqueta de inventario</div>
+      <img class="label-logo" src="file://{{ l.logo_path }}" alt="{{ l.config.nombre_empresa }}">
+      <div class="label-brand">Activo fijo No.<strong>{{ l.numero_interno|default:"—" }}</strong></div>
     </div>
     <div class="label-body">
       <div class="qr"><img src="{{ l.qr }}" alt="Código QR"></div>
@@ -140,19 +139,9 @@
           <span class="k">Tipo</span>
           {{ l.tipo }}
         </div>
-        <div class="field">
-          <span class="k">Ubicacion</span>
-          {{ l.ubicacion|default:"—" }}
-        </div>
-        <div class="field">
-          <span class="k">Estado</span>
-          {{ l.estado }}
-        </div>
       </div>
     </div>
-    <div class="label-footer">
-      Escanee el codigo QR para consultar la ficha completa del activo en SysAdmin.
-    </div>
+    <div class="label-footer">{{ l.config.nombre_empresa }}{% if l.config.nit %} · NIT {{ l.config.nit }}{% endif %}</div>
   </div>
   {% endfor %}
 </body>

@@ -2,6 +2,7 @@ import calendar
 from datetime import date
 
 from django.db import models
+from django.db.models import Max
 from django.utils import timezone
 
 
@@ -29,6 +30,15 @@ ESTADOS = [
     ("en_reparacion", "En reparación"),
     ("dado_de_baja", "Dado de baja"),
 ]
+
+NUMERO_INTERNO_INICIO = 1000
+
+
+def _siguiente_numero_interno():
+    ultimo = Activo.objects.exclude(numero_interno__isnull=True).aggregate(
+        Max("numero_interno")
+    )["numero_interno__max"]
+    return (ultimo or NUMERO_INTERNO_INICIO - 1) + 1
 
 
 class CatalogoModelo(models.Model):
@@ -63,6 +73,7 @@ class Activo(models.Model):
     marca = models.CharField(max_length=100)
     modelo = models.CharField(max_length=100)
     serial = models.CharField(max_length=150, unique=True)
+    numero_interno = models.PositiveIntegerField(unique=True, editable=False, null=True, blank=True)
     estado = models.CharField(max_length=30, choices=ESTADOS, default="disponible")
     ubicacion_fisica = models.CharField(max_length=200, blank=True)
     fecha_compra = models.DateField(null=True, blank=True)
@@ -117,6 +128,11 @@ class Activo(models.Model):
 
     def __str__(self):
         return f"[{self.get_tipo_dispositivo_display()}] {self.marca} {self.modelo} — {self.serial}"
+
+    def save(self, *args, **kwargs):
+        if self.numero_interno is None:
+            self.numero_interno = _siguiente_numero_interno()
+        super().save(*args, **kwargs)
 
     # ── Properties ───────────────────────────────────────────────────────────
     @property

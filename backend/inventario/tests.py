@@ -130,9 +130,31 @@ class EtiquetaTemplateTests(EtiquetasQRBase):
         label = _etiqueta_context(request, self.activo)
         self.assertTrue(label["qr"].startswith("data:image/png;base64,"))
         self.assertEqual(label["serial"], "SN-TEST-001")
+        self.assertEqual(label["numero_interno"], self.activo.numero_interno)
+        self.assertEqual(label["logo_path"].endswith("logo_redihos_mark.png"), True)
         self.assertEqual(label["config"].nombre_empresa, "REDIHOS S.A.S")
 
         html = render_to_string("inventario/etiqueta_pdf.html", {"labels": [label]})
         self.assertIn("SN-TEST-001", html)
         self.assertIn("data:image/png;base64,", html)
         self.assertIn("REDIHOS S.A.S", html)
+        self.assertIn(f"Activo fijo No.<strong>{self.activo.numero_interno}</strong>", html)
+        self.assertIn("logo_redihos_mark.png", html)
+        self.assertNotIn("Ubicacion", html)
+        self.assertNotIn(">Estado<", html)
+
+
+class NumeroInternoTests(TestCase):
+    def test_autogenera_secuencial_desde_1000(self):
+        a1 = crear_activo("SN-NUM-001")
+        a2 = crear_activo("SN-NUM-002")
+        self.assertEqual(a1.numero_interno, 1000)
+        self.assertEqual(a2.numero_interno, 1001)
+
+    def test_no_reaasigna_en_edicion(self):
+        a1 = crear_activo("SN-NUM-003")
+        original = a1.numero_interno
+        a1.modelo = "Actualizado"
+        a1.save()
+        a1.refresh_from_db()
+        self.assertEqual(a1.numero_interno, original)
