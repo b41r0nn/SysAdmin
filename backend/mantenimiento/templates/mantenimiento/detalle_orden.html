@@ -15,7 +15,12 @@
 <div class="page-header mb-3 d-flex align-items-center justify-content-between">
   <div>
     <h1 class="page-title">Orden #{{ orden.id }}</h1>
-    <p class="text-muted mb-0">{{ orden.activo.marca }} {{ orden.activo.modelo }}</p>
+    <p class="text-muted mb-0">
+      {{ orden.activo.marca }} {{ orden.activo.modelo }}
+      {% if orden.reportado_por %}
+        · Reportado por <strong>{{ orden.reportado_por.get_full_name|default:orden.reportado_por.username }}</strong>
+      {% endif %}
+    </p>
   </div>
   <span class="sa-badge {% if orden.estado == 'cerrada' %}success{% elif orden.estado == 'en_proceso' %}warning{% elif orden.estado == 'reportada' %}danger{% elif orden.estado == 'cancelada' %}secondary{% else %}info{% endif %}">
     {{ orden.get_estado_display }}

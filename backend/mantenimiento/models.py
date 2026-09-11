@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 
 
@@ -74,6 +75,14 @@ class OrdenMantenimiento(models.Model):
         null=True,
         blank=True,
         verbose_name="Ticket de soporte",
+    )
+    reportado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_reportadas",
+        null=True,
+        blank=True,
+        verbose_name="Reportado por",
     )
     activo = models.ForeignKey(
         "inventario.Activo",

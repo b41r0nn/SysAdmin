@@ -351,6 +351,22 @@ class ReporteFallaPortalTests(TestCase):
         self.assertEqual(orden.tipo, "correctivo")
         self.assertEqual(orden.prioridad, "alta")
         self.assertEqual(orden.fecha_apertura, HOY)
+        self.assertEqual(orden.reportado_por, user)
+
+    def test_reporte_genera_notificacion_a_tecnico(self):
+        user = _user("lectura")
+        tecnico = _user("tecnico")
+        self.client.force_login(user)
+
+        self.client.post(
+            reverse("mantenimiento:reportar"),
+            {"activo": self.activo.pk, "prioridad": "media", "descripcion": "Falla."},
+        )
+        self.assertTrue(
+            Notificacion.objects.filter(
+                usuario=tecnico, tipo="aviso", objetokey__startswith="orden:"
+            ).exists()
+        )
 
     def test_lectura_no_puede_crear_orden_completa(self):
         user = _user("lectura")

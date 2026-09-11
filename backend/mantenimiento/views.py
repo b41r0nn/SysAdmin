@@ -2,13 +2,15 @@ from datetime import timedelta
 
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db.models import DecimalField, F, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from accounts.permisos import requiere_permiso
+from accounts.permisos import PERMISOS_POR_ROL, requiere_permiso
+from notificaciones.services import aviso_usuario
 
 from .forms import (
     ChecklistItemForm,
@@ -449,14 +451,30 @@ def reportar(request):
             orden.tipo = "correctivo"
             orden.estado = "reportada"
             orden.fecha_apertura = timezone.now().date()
+            orden.reportado_por = request.user
             orden.save()
             messages.success(request, "Falla reportada. El equipo de TI se encargará.")
+            _notificar_tecnico(orden)
             return redirect("core:dashboard")
         messages.error(request, "Corrige los errores del formulario.")
     else:
         form = ReporteFallaForm(initial={"prioridad": "alta"})
 
     return render(request, "mantenimiento/form_reporte.html", {"form": form})
+
+
+def _notificar_tecnico(orden):
+    titulo = f"Nueva orden #{orden.id} reportada · {orden.activo.serial}"
+    mensaje = (
+        f"{orden.reportado_por.get_full_name() or orden.reportado_por.username} "
+        f"reportó un problema con {orden.activo.marca} {orden.activo.modelo}."
+    )
+    link = reverse("mantenimiento:detalle_orden", args=[orden.pk])
+    tecnicos = get_user_model().objects.filter(
+        is_active=True, rol__in={"superadmin", "admin", "tecnico"}
+    )
+    for user in tecnicos:
+        aviso_usuario(user, titulo, mensaje, link=link, objetokey=f"orden:{orden.pk}")
 
 
 def _guardar_checklist_items(fset, plan):
