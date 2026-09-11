@@ -7,10 +7,20 @@ from django.urls import reverse
 
 from accounts.permisos import requiere_permiso
 from mantenimiento.models import OrdenMantenimiento
-from notificaciones.services import aviso_usuario
+from notificaciones.services import aviso_usuario, encolar_email
 
 from .forms import EscalarTicketForm, TicketForm
 from .models import ESTADOS_TICKET, PRIORIDADES_TICKET, Ticket
+
+
+def _aviso_email_ticket(ticket, estado_nuevo):
+    """Encola email al solicitante cuando cambia el estado de un ticket."""
+    encolar_email(
+        ticket.solicitante.email,
+        f"Ticket #{ticket.pk}: {dict(ESTADOS_TICKET)[estado_nuevo]}",
+        f"Tu ticket \"{ticket.asunto}\" cambió a estado "
+        f"\"{dict(ESTADOS_TICKET)[estado_nuevo]}\".\nSoporte TI",
+    )
 
 
 @requiere_permiso("soporte", "lectura")
@@ -109,10 +119,13 @@ def asignar_ticket(request, pk):
         user = None
         if user_id:
             user = get_object_or_404(get_user_model(), pk=user_id)
+        estado_anterior = ticket.estado
         ticket.asignado_a = user
-        if ticket.estado == "abierto":
+        if estado_anterior == "abierto":
             ticket.estado = "en_proceso"
         ticket.save(update_fields=["asignado_a", "estado", "fecha_actualizacion"])
+        if ticket.estado != estado_anterior:
+            _aviso_email_ticket(ticket, ticket.estado)
         if user:
             aviso_usuario(
                 user,
@@ -133,8 +146,11 @@ def cambiar_estado(request, pk):
     if request.method == "POST":
         nuevo = request.POST.get("estado", "")
         if nuevo in dict(ESTADOS_TICKET):
+            anterior = ticket.estado
             ticket.estado = nuevo
             ticket.save(update_fields=["estado", "fecha_actualizacion"])
+            if nuevo != anterior:
+                _aviso_email_ticket(ticket, nuevo)
             messages.success(request, f"Ticket marcado como {dict(ESTADOS_TICKET)[nuevo]}.")
     return redirect("soporte:detalle", pk=ticket.pk)
 
@@ -161,6 +177,7 @@ def escalar_ticket(request, pk):
             )
             ticket.estado = "escalado"
             ticket.save(update_fields=["estado", "fecha_actualizacion"])
+            _aviso_email_ticket(ticket, "escalado")
             messages.success(request, "Ticket escalado a orden de mantenimiento.")
             return redirect("mantenimiento:detalle_orden", pk=orden.pk)
         messages.error(request, "Corrige los errores del formulario.")

@@ -1,11 +1,14 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from inventario.models import Activo
 from mantenimiento.models import OrdenMantenimiento
-from notificaciones.models import Notificacion
+from notificaciones.models import Notificacion, NotificacionEmail
 from soporte.models import Ticket
+from soporte.views import _aviso_email_ticket
 
 CustomUser = get_user_model()
 
@@ -206,3 +209,56 @@ class EscalarTicketTests(TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(OrdenMantenimiento.objects.filter(ticket=self.ticket).count(), 1)
+
+
+# ─── Avisos por email en cambios de estado ─────────────────────────
+
+
+class TicketEmailTriggersTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.tecnico = _user("tecnico")
+        self.ticket = _ticket(self.user)
+
+    @patch("soporte.views.encolar_email")
+    def test_asignar_encola_email(self, mock):
+        resp = self.client.post(
+            reverse("soporte:asignar", args=[self.ticket.pk]),
+            {"asignado_a": self.tecnico.pk},
+        )
+        self.assertEqual(resp.status_code, 302)
+        mock.assert_called_once()
+        args, _ = mock.call_args
+        self.assertEqual(args[0], self.ticket.solicitante.email)
+
+    @patch("soporte.views.encolar_email")
+    def test_cambiar_estado_encola_email(self, mock):
+        resp = self.client.post(
+            reverse("soporte:cambiar_estado", args=[self.ticket.pk]),
+            {"estado": "en_proceso"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        mock.assert_called_once()
+        args, _ = mock.call_args
+        self.assertEqual(args[0], self.ticket.solicitante.email)
+
+    @patch("soporte.views.encolar_email")
+    def test_cambiar_al_mismo_estado_no_reenvia(self, mock):
+        self.ticket.estado = "en_proceso"
+        self.ticket.save(update_fields=["estado"])
+        resp = self.client.post(
+            reverse("soporte:cambiar_estado", args=[self.ticket.pk]),
+            {"estado": "en_proceso"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        mock.assert_not_called()
+
+    def test_aviso_email_sin_email_no_rompe(self):
+        self.user.email = ""
+        self.user.save(update_fields=["email"])
+        self.ticket.solicitante = self.user
+        self.ticket.save(update_fields=["solicitante"])
+        _aviso_email_ticket(self.ticket, "en_proceso")
+        self.assertEqual(NotificacionEmail.objects.count(), 0)

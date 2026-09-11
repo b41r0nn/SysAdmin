@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from inventario.models import Activo
 from inventario.views import _etiqueta_context
+from usuarios.models import Usuario
 
 CustomUser = get_user_model()
 
@@ -158,3 +159,41 @@ class NumeroInternoTests(TestCase):
         a1.save()
         a1.refresh_from_db()
         self.assertEqual(a1.numero_interno, original)
+
+
+class AsignacionActaEmailTests(TestCase):
+    def setUp(self):
+        self.usuario = crear_usuario("superadmin")
+        self.client.force_login(self.usuario)
+        self.activo = crear_activo("SN-ACTA-001")
+        self.persona = Usuario.objects.create(
+            nombre_completo="Pepe Pruebas",
+            documento_identidad="123456789",
+            cargo="Analista",
+            area="Compras",
+            correo="pepe@test.com",
+        )
+
+    def test_asignar_encola_email_de_acta(self):
+        with patch("inventario.views.encolar_email") as mock:
+            resp = self.client.post(
+                reverse("inventario:asignar", args=[self.activo.pk]),
+                {"usuario": self.persona.pk},
+            )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(mock.called)
+        args, kwargs = mock.call_args
+        self.assertEqual(args[0], "pepe@test.com")
+        self.assertIn(self.activo.serial, args[1])
+        self.assertEqual(kwargs["adjunto_tipo"], "acta")
+        self.assertIsNotNone(kwargs["adjunto_objeto_id"])
+
+    def test_asignar_sin_correo_no_es_error(self):
+        self.persona.correo = ""
+        self.persona.save()
+        resp = self.client.post(
+            reverse("inventario:asignar", args=[self.activo.pk]),
+            {"usuario": self.persona.pk},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(self.activo.asignaciones.filter(activa=True).count(), 1)

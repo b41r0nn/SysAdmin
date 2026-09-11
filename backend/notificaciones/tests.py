@@ -1,21 +1,25 @@
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Asignacion, Activo
 from licencias.models import LicenciaSoftware
 from mantenimiento.models import PlanMantenimiento
-from notificaciones.models import Notificacion
+from notificaciones.models import Notificacion, NotificacionEmail
 from notificaciones.services import (
     _detectar_actas,
     _detectar_garantias,
     _detectar_licencias,
     _detectar_mantenimiento,
     _detectar_ocs,
+    encolar_email,
     generar_notificaciones,
+    procesar_cola_email,
 )
 from usuarios.models import Usuario
 from yule.models import EquipoOCS
@@ -417,3 +421,113 @@ class NotificacionesViewTests(TestCase):
         self.assertFalse(
             Notificacion.objects.filter(usuario=self.user, leida=False).exists()
         )
+
+
+# ─── Cola de emails ───────────────────────────────────────────────────────────
+
+
+class _FakeConnection:
+    def open(self):
+        return True
+
+    def close(self):
+        pass
+
+    def send_messages(self, messages):
+        return len(messages)
+
+
+class _FakeBrokenConnection(_FakeConnection):
+    def open(self):
+        raise ConnectionRefusedError("host caido")
+
+
+class _FakeSendFailConnection(_FakeConnection):
+    def send_messages(self, messages):
+        raise OSError("smtp 554")
+
+
+class EncolarEmailTests(TestCase):
+    def test_crea_fila_pendiente(self):
+        fila = encolar_email("a@b.co", "Asunto", "Cuerpo")
+        self.assertIsNotNone(fila)
+        self.assertFalse(fila.enviado)
+        self.assertEqual(fila.intentos, 0)
+
+    def test_sin_destinatario_no_crea_fila(self):
+        self.assertIsNone(encolar_email("", "Asunto", "Cuerpo"))
+        self.assertIsNone(encolar_email(None, "Asunto", "Cuerpo"))
+        self.assertEqual(NotificacionEmail.objects.count(), 0)
+
+
+class ProcesarColaEmailTests(TestCase):
+    def setUp(self):
+        self.config = ConfiguracionSistema.get_config()
+        self.config.smtp_host = "smtp.test.com"
+        self.config.smtp_puerto = 587
+        self.config.smtp_usa_tls = True
+        self.config.set_smtp_password("secret")
+        self.config.save()
+
+    def _sin_smtp(self):
+        self.config.smtp_host = ""
+        self.config.save()
+
+    @patch("notificaciones.services.get_connection")
+    def test_envia_pendientes_y_marca_enviadas(self, mock):
+        encolar_email("a@b.co", "S1", "C1")
+        encolar_email("a@b.co", "S2", "C2")
+        mock.return_value = _FakeConnection()
+        total, enviados, fallos, quedan = procesar_cola_email()
+        self.assertEqual((total, enviados, fallos, quedan), (2, 2, 0, 0))
+        self.assertEqual(NotificacionEmail.objects.filter(enviado=True).count(), 2)
+        self.assertTrue(all(n.error == "" for n in NotificacionEmail.objects.all()))
+
+    def test_sin_config_smtp_no_es_error(self):
+        self._sin_smtp()
+        encolar_email("a@b.co", "S", "C")
+        self.assertEqual(procesar_cola_email(), (0, 0, 0, 0))
+        self.assertEqual(NotificacionEmail.objects.filter(enviado=False).count(), 1)
+
+    @patch("notificaciones.services.get_connection")
+    def test_falla_conexion_marca_intentos_y_error_sin_reventar(self, mock):
+        encolar_email("a@b.co", "S", "C")
+        mock.return_value = _FakeBrokenConnection()
+        total, enviados, fallos, quedan = procesar_cola_email()
+        correo = NotificacionEmail.objects.get()
+        self.assertEqual((total, enviados, fallos, quedan), (1, 0, 1, 1))
+        self.assertEqual(correo.intentos, 1)
+        self.assertIn("host caido", correo.error)
+        self.assertFalse(correo.enviado)
+
+    @patch("notificaciones.services.get_connection")
+    def test_fallo_envio_incrementa_intentos_con_error(self, mock):
+        encolar_email("a@b.co", "S", "C")
+        mock.return_value = _FakeSendFailConnection()
+        total, enviados, fallos, quedan = procesar_cola_email()
+        correo = NotificacionEmail.objects.get()
+        self.assertEqual((enviados, fallos), (0, 1))
+        self.assertEqual(correo.intentos, 1)
+        self.assertIn("smtp 554", correo.error)
+
+    @patch("notificaciones.services.get_connection")
+    def test_reenvia_tras_fallo_anterior(self, mock):
+        correo = encolar_email("a@b.co", "S", "C")
+        correo.intentos = 1
+        correo.error = "error previo"
+        correo.save()
+        mock.return_value = _FakeConnection()
+        total, enviados, fallos, quedan = procesar_cola_email()
+        correo.refresh_from_db()
+        self.assertEqual(enviados, 1)
+        self.assertTrue(correo.enviado)
+        self.assertEqual(correo.error, "")
+
+    def test_llega_al_maximo_de_intentos_y_queda_en_cola(self):
+        encolar_email("a@b.co", "S", "C")
+        NotificacionEmail.objects.all().update(intentos=5, error="limite")
+        with patch("notificaciones.services.get_connection") as mock:
+            mock.return_value = _FakeConnection()
+            total, enviados, fallos, quedan = procesar_cola_email()
+        self.assertEqual((total, enviados, fallos, quedan), (0, 0, 0, 0))
+        self.assertEqual(enviados, 0)
