@@ -68,8 +68,8 @@ class PrestamosCRUDTests(TestCase):
             {
                 "activo": self.activo.pk,
                 "solicitante": self.user.pk,
-                "fecha_prestamo": "2026-09-01",
-                "fecha_devolucion_prevista": "2026-09-10",
+                "fecha_prestamo": date.today() - timedelta(days=5),
+                "fecha_devolucion_prevista": date.today() + timedelta(days=10),
                 "destino": "Feria de tecnología",
             },
         )
