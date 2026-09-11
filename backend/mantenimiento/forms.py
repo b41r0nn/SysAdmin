@@ -1,5 +1,7 @@
 from django import forms
 
+from inventario.models import Activo
+
 from .models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repuesto
 
 
@@ -42,12 +44,23 @@ class ChecklistItemForm(forms.ModelForm):
 class ReporteFallaForm(forms.ModelForm):
     class Meta:
         model = OrdenMantenimiento
-        fields = ["activo", "prioridad", "descripcion"]
+        fields = ["activo", "prioridad", "descripcion", "foto"]
         widgets = {
             "activo": forms.Select(attrs={"class": "form-select"}),
             "prioridad": forms.Select(attrs={"class": "form-select"}),
             "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["activo"].queryset = Activo.objects.exclude(estado="dado_de_baja")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        activo = cleaned_data.get("activo")
+        if activo and activo.estado == "dado_de_baja":
+            self.add_error("activo", "El activo seleccionado está dado de baja.")
+        return cleaned_data
 
 
 class OrdenMantenimientoForm(forms.ModelForm):
