@@ -197,17 +197,24 @@
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info alert-sm mb-3">
-                        <strong>Etapa 7B — Sincronización OCS</strong><br>
-                        Módulo de conector para OCS Inventory NG.
+                        <strong>¿Qué es esto?</strong><br>
+                        OCS Inventory NG escanea los equipos de la red automáticamente.
+                        Este módulo trae esos equipos y propone candidatos de
+                        vinculación por serial o MAC contra los activos ya cargados en
+                        SysAdmin; el enlace final se hace a mano en el admin
+                        (`/admin/yule/equiposocs/`, campo `activo_local`).
                     </div>
-                    
-                    <h6>Características:</h6>
+
+                    <h6>Antes de sincronizar:</h6>
+                    <ul class="list-unstyled small mb-3">
+                        <li><i class="bi bi-arrow-right text-primary me-2"></i>Cargá la URL, usuario y token del servidor OCS en "Configuración OCS".</li>
+                        <li><i class="bi bi-arrow-right text-primary me-2"></i>Si el servidor usa un certificado propio, dejá "Verificar SSL" en No.</li>
+                    </ul>
+
+                    <h6>Si la sincronización falla:</h6>
                     <ul class="list-unstyled small">
-                        <li><i class="bi bi-check text-success me-2"></i>Sincronización manual con reintentos</li>
-                        <li><i class="bi bi-check text-success me-2"></i>Detección automática de equipos</li>
-                        <li><i class="bi bi-check text-success me-2"></i>Vinculación con inventario local</li>
-                        <li><i class="bi bi-check text-success me-2"></i>Auditoría de sincronizaciones</li>
-                        <li><i class="bi bi-check text-success me-2"></i>Búsqueda de coincidencias por serial/MAC</li>
+                        <li><i class="bi bi-arrow-right text-primary me-2"></i>Revisá que la URL Base sea alcanzable desde este servidor (no localhost, si OCS corre en otra máquina).</li>
+                        <li><i class="bi bi-arrow-right text-primary me-2"></i>Confirmá usuario/token contra el propio panel de OCS.</li>
                     </ul>
                 </div>
             </div>

@@ -210,6 +210,8 @@ OCS_TOKEN=token_ocs_aqui
 OCS_VERIFY_SSL=True
 ```
 
+> **Instalación del servidor OCS:** ver `OCS_INVENTORY_SETUP.md` — runbook completo de instalación en 192.168.1.250 y conexión con Yule.
+
 #### Próximos Pasos (7C-7D)
 
 - [ ] Alertas por equipos nuevos/sin match
