@@ -7,26 +7,26 @@
 
 ## 📊 Estado del Proyecto
 
-| Módulo          | App Django      | Estado     | Etapa |
-| --------------- | --------------- | ---------- | ----- |
-| 🔐 Autenticación | `accounts`      | ✅ Completa | 0-1   |
-| 📊 Dashboard     | `core`          | ✅ Completa | 0     |
-| 👥 Usuarios      | `usuarios`      | ✅ Completa | 2     |
-| 💻 Inventario    | `inventario`    | ✅ Completa | 3     |
-| 📈 Reportes      | `reports`       | ✅ Completa | 4     |
-| 🔧 Mantenimiento | `mantenimiento` | ✅ Completa | 5     |
-| 🔑 Contraseñas   | `passwords`     | ✅ Completa | 6     |
-| 🔄 Yule (OCS)    | `yule`          | ✅ Completa | 7B    |
-| 📁 Documentos    | `documentos`    | ✅ Completa | 8     |
-| 🛡️ Administración | `administracion` | ✅ Completa | Fase 1 |
-| 🔳 Etiquetas QR  | `inventario`    | ✅ Completa | Fase 2 |
-| 🔔 Notificaciones | `notificaciones` | ✅ Completa | Fase 3 |
-| 📅 Calendario mantenimiento | `mantenimiento` | ✅ Completa | Fase 3 |
-| 📋 Portal de reporte de fallas | `mantenimiento` | ✅ Completa | Fase 3 |
-| 🎫 Helpdesk / Tickets | `soporte` | ✅ Completa | Fase 4 |
-| 💠 Licencias de software | `licencias` | ✅ Completa | Fase 5 |
-| 🔁 Préstamos de equipos | `prestamos` | ✅ Completa | Fase 6 |
-| 🧪 Tests de cobertura | todas las apps | ✅ Completa | Fase 4 |
+| Módulo                        | App Django       | Estado     | Etapa  |
+| ----------------------------- | ---------------- | ---------- | ------ |
+| 🔐 Autenticación               | `accounts`       | ✅ Completa | 0-1    |
+| 📊 Dashboard                   | `core`           | ✅ Completa | 0      |
+| 👥 Usuarios                    | `usuarios`       | ✅ Completa | 2      |
+| 💻 Inventario                  | `inventario`     | ✅ Completa | 3      |
+| 📈 Reportes                    | `reports`        | ✅ Completa | 4      |
+| 🔧 Mantenimiento               | `mantenimiento`  | ✅ Completa | 5      |
+| 🔑 Contraseñas                 | `passwords`      | ✅ Completa | 6      |
+| 🔄 Yule (OCS)                  | `yule`           | ✅ Completa | 7B     |
+| 📁 Documentos                  | `documentos`     | ✅ Completa | 8      |
+| 🛡️ Administración              | `administracion` | ✅ Completa | Fase 1 |
+| 🔳 Etiquetas QR                | `inventario`     | ✅ Completa | Fase 2 |
+| 🔔 Notificaciones              | `notificaciones` | ✅ Completa | Fase 3 |
+| 📅 Calendario mantenimiento    | `mantenimiento`  | ✅ Completa | Fase 3 |
+| 📋 Portal de reporte de fallas | `mantenimiento`  | ✅ Completa | Fase 3 |
+| 🎫 Helpdesk / Tickets          | `soporte`        | ✅ Completa | Fase 4 |
+| 💠 Licencias de software       | `licencias`      | ✅ Completa | Fase 5 |
+| 🔁 Préstamos de equipos        | `prestamos`      | ✅ Completa | Fase 6 |
+| 🧪 Tests de cobertura          | todas las apps   | ✅ Completa | Fase 4 |
 
 ---
 
