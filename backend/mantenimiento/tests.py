@@ -5,12 +5,19 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
 from inventario.models import Activo
 from mantenimiento.forms import ReporteFallaForm
-from mantenimiento.models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repuesto
+from mantenimiento.models import (
+    ChecklistItem,
+    FotoMantenimiento,
+    OrdenMantenimiento,
+    PlanMantenimiento,
+    Repuesto,
+)
 from notificaciones.models import Notificacion
 
 CustomUser = get_user_model()
@@ -36,10 +43,10 @@ def _activo(serial="SN-MT-001"):
     )
 
 
-def _plan(activo, **kw):
+def _plan(tipo_dispositivo="escritorio", **kw):
     defaults = {"tipo": "preventivo", "estado": "activo"}
     defaults.update(kw)
-    return PlanMantenimiento.objects.create(activo=activo, **defaults)
+    return PlanMantenimiento.objects.create(tipo_dispositivo=tipo_dispositivo, **defaults)
 
 
 def _orden(activo, **kw):
@@ -74,7 +81,7 @@ class PlanesCRUDTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_detalle_returns_200(self):
-        p = _plan(self.activo)
+        p = _plan()
         resp = self.client.get(reverse("mantenimiento:detalle_plan", args=[p.pk]))
         self.assertEqual(resp.status_code, 200)
 
@@ -82,7 +89,7 @@ class PlanesCRUDTests(TestCase):
         resp = self.client.post(
             reverse("mantenimiento:crear_plan"),
             {
-                "activo": self.activo.pk,
+                "tipo_dispositivo": "escritorio",
                 "tipo": "preventivo",
                 "criticidad": "alta",
                 "frecuencia_dias": 30,
@@ -90,23 +97,23 @@ class PlanesCRUDTests(TestCase):
             },
         )
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(PlanMantenimiento.objects.filter(activo=self.activo).exists())
+        self.assertTrue(PlanMantenimiento.objects.filter(tipo_dispositivo="escritorio").exists())
 
     def test_toggle_plan(self):
-        p = _plan(self.activo, estado="activo")
+        p = _plan(estado="activo")
         resp = self.client.post(reverse("mantenimiento:toggle_plan", args=[p.pk]))
         self.assertEqual(resp.status_code, 302)
         p.refresh_from_db()
         self.assertEqual(p.estado, "pausado")
 
     def test_eliminar_plan_sin_ordenes(self):
-        p = _plan(self.activo)
+        p = _plan()
         resp = self.client.post(reverse("mantenimiento:eliminar_plan", args=[p.pk]))
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(PlanMantenimiento.objects.filter(pk=p.pk).exists())
 
     def test_eliminar_plan_con_ordenes_fallido(self):
-        p = _plan(self.activo)
+        p = _plan()
         _orden(self.activo, plan=p)
         resp = self.client.post(reverse("mantenimiento:eliminar_plan", args=[p.pk]))
         self.assertEqual(resp.status_code, 302)
@@ -234,7 +241,7 @@ class ChecklistTests(TestCase):
         self.activo = _activo()
 
     def _plan_con_checklist(self, descripciones):
-        plan = _plan(self.activo)
+        plan = _plan()
         for i, d in enumerate(descripciones):
             ChecklistItem.objects.create(plan=plan, descripcion=d, posicion=i)
         return plan
@@ -310,7 +317,7 @@ class CommandNotificacionesMantenimientoTests(TestCase):
         user_super = _user("superadmin")
         user_tecnico = _user("tecnico")
         user_lectura = _user("lectura")
-        plan = _plan(self.activo, proxima_ejecucion=HOY + timedelta(days=3))
+        plan = _plan(proxima_ejecucion=HOY + timedelta(days=3))
 
         call_command("generar_notificaciones_mantenimiento")
         call_command("generar_notificaciones_mantenimiento")
@@ -457,10 +464,211 @@ class CalendarioTests(TestCase):
 
     def test_eventos_incluyen_ordenes_y_planes(self):
         orden = _orden(self.activo, tipo="correctivo", estado="abierta")
-        plan = _plan(self.activo, tipo="preventivo", proxima_ejecucion=HOY + timedelta(days=5))
+        plan = _plan(tipo="preventivo", proxima_ejecucion=HOY + timedelta(days=5))
         resp = self.client.get(reverse("mantenimiento:calendario_eventos"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         titulos = [e["title"] for e in data]
         self.assertTrue(any(f"Orden #{orden.id}" in t for t in titulos))
         self.assertTrue(any(f"Plan Preventivo" in t for t in titulos))
+
+
+# ─── Fase 4: Snapshot software + fotos + hoja de vida ─────────────
+
+
+class FakeWeasyHTML:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def write_pdf(self):
+        return b"%PDF-1.4 fake-mantenimiento"
+
+
+class FakeWeasyPrintModule:
+    HTML = FakeWeasyHTML
+
+
+class SoftwareSnapshotTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = _activo()
+
+    def test_crear_orden_guarda_software_del_textarea(self):
+        resp = self.client.post(
+            reverse("mantenimiento:crear_orden"),
+            {
+                "activo": self.activo.pk,
+                "tipo": "correctivo",
+                "estado": "abierta",
+                "prioridad": "media",
+                "fecha_apertura": HOY,
+                "software_snapshot_text": "Google Chrome\nAdobe Acrobat",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        orden = OrdenMantenimiento.objects.get(activo=self.activo)
+        self.assertEqual(orden.software_snapshot, ["Google Chrome", "Adobe Acrobat"])
+
+    def test_editar_orden_precarga_software_existente(self):
+        orden = _orden(self.activo)
+        orden.software_snapshot = ["Google Chrome", "Word"]
+        orden.save()
+        resp = self.client.get(reverse("mantenimiento:editar_orden", args=[orden.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Google Chrome")
+        self.assertContains(resp, "Word")
+
+    def test_snapshot_ocs_vacio_sin_equipo_vinculado(self):
+        from mantenimiento.services import snapshot_software_ocs
+
+        self.assertEqual(snapshot_software_ocs(self.activo), [])
+
+
+class FotoMantenimientoTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = _activo()
+
+    def _foto_bytes(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (10, 10), "red").save(buf, format="PNG")
+        return SimpleUploadedFile("mant.png", buf.getvalue(), content_type="image/png")
+
+    def test_crear_orden_con_foto(self):
+        resp = self.client.post(
+            reverse("mantenimiento:crear_orden"),
+            {
+                "activo": self.activo.pk,
+                "tipo": "correctivo",
+                "estado": "abierta",
+                "prioridad": "media",
+                "fecha_apertura": HOY,
+                "fotos-TOTAL_FORMS": "1",
+                "fotos-INITIAL_FORMS": "0",
+                "fotos-MIN_NUM_FORMS": "0",
+                "fotos-MAX_NUM_FORMS": "1000",
+                "fotos-0-foto": self._foto_bytes(),
+                "fotos-0-descripcion": "Antes",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        orden = OrdenMantenimiento.objects.get(activo=self.activo)
+        self.assertEqual(orden.fotos.count(), 1)
+        self.assertEqual(orden.fotos.first().descripcion, "Antes")
+
+    def test_detalle_orden_muestra_fotos(self):
+        orden = _orden(self.activo)
+        FotoMantenimiento.objects.create(
+            orden=orden, foto=self._foto_bytes(), descripcion="Despues"
+        )
+        resp = self.client.get(reverse("mantenimiento:detalle_orden", args=[orden.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Despues")
+
+    def test_eliminar_foto(self):
+        orden = _orden(self.activo)
+        foto = FotoMantenimiento.objects.create(
+            orden=orden, foto=self._foto_bytes(), descripcion="X"
+        )
+        resp = self.client.post(reverse("mantenimiento:eliminar_foto", args=[foto.pk]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(FotoMantenimiento.objects.filter(pk=foto.pk).exists())
+
+
+class ChecklistEditableTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = _activo()
+
+    def test_crear_item_checklist_en_orden(self):
+        orden = _orden(self.activo)
+        resp = self.client.post(
+            reverse("mantenimiento:crear_item_checklist", args=[orden.pk]),
+            {"descripcion": "Verificar cableado"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(
+            ChecklistItem.objects.filter(orden=orden, descripcion="Verificar cableado").exists()
+        )
+
+
+class HojaDeVidaTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = _activo()
+
+    def test_hoja_de_vida_returns_200(self):
+        _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        resp = self.client.get(reverse("mantenimiento:hoja_de_vida", args=[self.activo.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.activo.serial)
+
+    def test_hoja_de_vida_muestra_software_ultimo_snapshot(self):
+        orden = _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        orden.software_snapshot = ["Google Chrome", "Word"]
+        orden.save()
+        resp = self.client.get(reverse("mantenimiento:hoja_de_vida", args=[self.activo.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Google Chrome")
+        self.assertContains(resp, "Word")
+
+    def test_hoja_de_vida_sin_mantenimientos(self):
+        resp = self.client.get(reverse("mantenimiento:hoja_de_vida", args=[self.activo.pk]))
+        self.assertEqual(resp.status_code, 200)
+
+
+class PdfMantenimientoTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = _activo()
+
+    def test_orden_pdf_returns_pdf(self):
+        orden = _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        with patch.dict("sys.modules", {"weasyprint": FakeWeasyPrintModule()}):
+            resp = self.client.get(reverse("mantenimiento:orden_pdf", args=[orden.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertTrue(resp.content.startswith(b"%PDF"))
+
+    def test_reporte_mantenimientos_pdf_returns_pdf(self):
+        _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        with patch.dict("sys.modules", {"weasyprint": FakeWeasyPrintModule()}):
+            resp = self.client.get(reverse("mantenimiento:reporte_mantenimientos_pdf"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_reporte_pdf_filtra_por_estado(self):
+        orden = _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        with patch.dict("sys.modules", {"weasyprint": FakeWeasyPrintModule()}):
+            resp = self.client.get(
+                reverse("mantenimiento:reporte_mantenimientos_pdf"), {"estado": "cerrada"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        html = render_to_string(
+            "mantenimiento/reporte_mantenimientos_pdf.html",
+            {
+                "ordenes": OrdenMantenimiento.objects.filter(estado="cerrada"),
+                "config": None,
+                "logo_path": "x",
+                "generado": timezone.now(),
+                "filtro_tipo": "",
+                "filtro_estado": "cerrada",
+                "filtro_inicio": "",
+                "filtro_fin": "",
+            },
+        )
+        self.assertIn(orden.activo.serial, html)

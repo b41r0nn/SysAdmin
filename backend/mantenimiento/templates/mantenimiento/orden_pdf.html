@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Orden de Mantenimiento #{{ orden.id }} — SysAdmin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 10.5pt;
+      color: #1e293b;
+      background: #fff;
+    }
+    @page {
+      size: A4 portrait;
+      margin: 2cm 2.2cm 2.4cm 2.2cm;
+    }
+    .header { text-align: center; margin-bottom: 5mm; }
+    .header img { height: 18mm; }
+    .header .empresa {
+      margin-top: 2mm;
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: .04em;
+      color: #0f172a;
+    }
+    .header .slogan { font-size: 9pt; color: #475569; margin-top: 1mm; }
+    .header .titulo {
+      margin-top: 4mm;
+      font-size: 13pt;
+      font-weight: 700;
+      color: #0156a6;
+      letter-spacing: .06em;
+    }
+    .sub { font-weight: 700; font-size: 11pt; margin: 4mm 0 2mm 0; }
+    table.datos { width: 100%; border-collapse: collapse; margin: 3mm 0; }
+    table.datos td {
+      border: .5px solid #cbd5e1;
+      padding: 2mm 3mm;
+      font-size: 10pt;
+      vertical-align: top;
+    }
+    table.datos td.etiqueta {
+      width: 30%;
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #475569;
+    }
+    .seccion {
+      border: .5px solid #cbd5e1;
+      padding: 3mm;
+      margin: 3mm 0;
+      font-size: 10pt;
+      line-height: 1.5;
+    }
+    .seccion .t {
+      font-weight: 700;
+      font-size: 9.5pt;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #475569;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 1.5mm;
+      margin-bottom: 2mm;
+    }
+    .foo { font-size: 10pt; line-height: 1.5; }
+    .footer {
+      position: fixed;
+      bottom: -14mm;
+      left: 2.2cm;
+      right: 2.2cm;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1.5mm;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-align: center;
+    }
+    .small { font-size: 9pt; color: #475569; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}">
+    <div class="empresa">{{ config.nombre_empresa|upper }}</div>
+    <div class="slogan">Su Distribuidor Hospitalario</div>
+    <div class="titulo">ORDEN DE MANTENIMIENTO #{{ orden.id }}</div>
+  </div>
+
+  <div class="sub">Datos generales</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">Fecha apertura</td>
+      <td>{{ orden.fecha_apertura|date:"d/m/Y" }}</td>
+      <td class="etiqueta">Fecha cierre</td>
+      <td>{{ orden.fecha_cierre|date:"d/m/Y"|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Tipo</td>
+      <td>{{ orden.get_tipo_display }}</td>
+      <td class="etiqueta">Estado</td>
+      <td>{{ orden.get_estado_display }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Prioridad</td>
+      <td>{{ orden.get_prioridad_display }}</td>
+      <td class="etiqueta">Técnico</td>
+      <td>{{ orden.tecnico_asignado|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Costo estimado</td>
+      <td>${{ orden.costo_estimado|floatformat:2|default:"0.00" }}</td>
+      <td class="etiqueta">Costo real</td>
+      <td>${{ orden.costo_real|floatformat:2|default:"0.00" }}</td>
+    </tr>
+  </table>
+
+  <div class="sub">Equipo</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">Tipo</td>
+      <td>{{ orden.activo.get_tipo_dispositivo_display }}</td>
+      <td class="etiqueta">N° interno</td>
+      <td>{{ orden.activo.numero_interno|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Marca / Modelo</td>
+      <td>{{ orden.activo.marca }} {{ orden.activo.modelo }}</td>
+      <td class="etiqueta">Serial</td>
+      <td>{{ orden.activo.serial }}</td>
+    </tr>
+    {% if orden.activo.ip_equipo or orden.activo.nombre_equipo %}
+    <tr>
+      <td class="etiqueta">Nombre / IP</td>
+      <td colspan="3">{{ orden.activo.nombre_equipo|default:"—" }} · {{ orden.activo.ip_equipo|default:"—" }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {% if orden.descripcion or orden.diagnostico or orden.acciones %}
+  <div class="sub">Detalle del mantenimiento</div>
+  {% if orden.descripcion %}
+  <div class="seccion">
+    <div class="t">Descripción</div>{{ orden.descripcion|linebreaksbr }}
+  </div>
+  {% endif %}
+  {% if orden.diagnostico %}
+  <div class="seccion">
+    <div class="t">Diagnóstico</div>{{ orden.diagnostico|linebreaksbr }}
+  </div>
+  {% endif %}
+  {% if orden.acciones %}
+  <div class="seccion">
+    <div class="t">Acciones</div>{{ orden.acciones|linebreaksbr }}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if orden.software_snapshot %}
+  <div class="sub">Software instalado (snapshot)</div>
+  <div class="seccion">
+    <div class="t">Aplicaciones ({{ orden.software_snapshot|length }})</div>
+    <ul style="margin:0;padding-left:5mm;column-count:2;">
+      {% for app in orden.software_snapshot %}
+      <li>{{ app.name|default:app }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="sub">Firmas</div>
+  <table style="width:100%;margin-top:12mm;">
+    <tr>
+      <td style="width:50%;text-align:center;vertical-align:bottom;">
+        <div style="border-top:1px solid #0f172a;width:80%;margin:0 auto;padding-top:1.5mm;">
+          <strong>Técnico</strong><br>
+          <span class="small">{{ orden.tecnico_asignado|default:"________________" }}</span>
+        </div>
+      </td>
+      <td style="width:50%;text-align:center;vertical-align:bottom;">
+        <div style="border-top:1px solid #0f172a;width:80%;margin:0 auto;padding-top:1.5mm;">
+          <strong>Recibe</strong><br>
+          <span class="small">Bairon Calle · Analista de Sistemas</span>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

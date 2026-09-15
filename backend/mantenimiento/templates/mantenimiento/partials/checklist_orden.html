@@ -1,7 +1,7 @@
 {% if orden.checklist_items.all %}
 <div class="sa-card p-4 mt-4" id="card-checklist-{{ orden.id }}">
   <div class="d-flex align-items-center justify-content-between mb-3">
-    <h6 class="fw-semibold mb-0 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+    <h6 class="fw-semibold mb-0 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
       Checklist de ejecucion
     </h6>
     <span id="progreso-checklist-{{ orden.id }}" class="fw-semibold" style="font-size:.85rem;">
@@ -41,5 +41,13 @@
     </li>
     {% endfor %}
   </ul>
+  <form method="post" action="{% url 'mantenimiento:crear_item_checklist' orden.pk %}" class="d-flex gap-2 mt-3">
+    {% csrf_token %}
+    <input type="text" name="descripcion" class="form-control form-control-sm"
+           placeholder="Agregar item al checklist..." required>
+    <button type="submit" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-plus-lg"></i> Agregar
+    </button>
+  </form>
 </div>
 {% endif %}

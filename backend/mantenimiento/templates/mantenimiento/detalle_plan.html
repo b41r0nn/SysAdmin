@@ -14,7 +14,7 @@
 
 <div class="page-header">
   <div class="d-flex align-items-center gap-3">
-    <h1 class="page-title mb-0">Plan: {{ plan.get_tipo_display }} · {{ plan.activo.serial }}</h1>
+    <h1 class="page-title mb-0">Plan: {{ plan.get_tipo_display }} · {{ plan.tipo_dispositivo }}</h1>
     {% if plan.criticidad == "alta" %}
       <span class="sa-badge danger"><i class="bi bi-exclamation-triangle"></i> Critica</span>
     {% elif plan.criticidad == "baja" %}
@@ -64,7 +64,7 @@
 </div>
 
 <div class="sa-card p-4 mb-4">
-  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.72rem;letter-spacing:.08em;">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
     Checklist (plantilla)
   </h6>
   {% if plan.checklist_items.all %}
@@ -73,7 +73,7 @@
         <li class="mb-1">{{ item.descripcion }}</li>
       {% endfor %}
     </ol>
-    <p class="text-muted mt-3 mb-0" style="font-size:.75rem;">
+    <p class="text-muted mt-3 mb-0" style="font-size:.85rem;">
       Se copia automaticamente a cada orden generada desde este plan.
     </p>
   {% else %}

@@ -5,9 +5,9 @@ from .models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repues
 
 @admin.register(PlanMantenimiento)
 class PlanMantenimientoAdmin(admin.ModelAdmin):
-    list_display = ("activo", "tipo", "criticidad", "estado", "proxima_ejecucion")
+    list_display = ("tipo_dispositivo", "tipo", "criticidad", "estado", "proxima_ejecucion")
     list_filter = ("tipo", "criticidad", "estado")
-    search_fields = ("activo__serial", "activo__marca", "activo__modelo")
+    search_fields = ("tipo_dispositivo",)
 
 
 @admin.register(OrdenMantenimiento)

@@ -185,6 +185,47 @@ class OCSClient:
         except Exception as e:
             raise OCSClientException(f"Failed to parse OCS response: {str(e)}")
 
+    def get_software(self, computer_id: str) -> List[Dict[str, Any]]:
+        """Obtiene el software instalado de una computadora OCS (endpoint
+        `computer/{id}` con su sección `software`).
+
+        Returns:
+            Lista normalizada de {"name", "version", "publisher"}.
+            Vacía si el equipo no tiene software o el formato no es el esperado.
+
+        Raises:
+            OCSClientException: errores de conexión/autenticación.
+        """
+        try:
+            response = self.request(f"computer/{computer_id}")
+            response.raise_for_status()
+            data = response.json()
+
+            if isinstance(data, dict) and "software" in data:
+                raw = data["software"]
+            elif isinstance(data, list) and data and isinstance(data[0], dict) and "software" in data[0]:
+                raw = data[0]["software"]
+            else:
+                # Algunas versiones ubican la sección en "result"
+                raw = data.get("result", []) if isinstance(data, dict) else []
+
+            software = []
+            if isinstance(raw, list):
+                for item in raw:
+                    if not isinstance(item, dict):
+                        continue
+                    software.append({
+                        "name": item.get("name") or item.get("NAME") or "",
+                        "version": item.get("version") or item.get("VERSION") or "",
+                        "publisher": item.get("publisher") or item.get("PUBLISHER") or "",
+                    })
+            return [s for s in software if s["name"]]
+
+        except OCSClientException:
+            raise
+        except Exception as e:
+            raise OCSClientException(f"Failed to parse software OCS: {str(e)}")
+
     def test_connection(self) -> bool:
         """Verifica la conexión con OCS"""
         try:
