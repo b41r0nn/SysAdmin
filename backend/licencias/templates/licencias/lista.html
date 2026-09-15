@@ -125,7 +125,7 @@
         <tr>
           <td>
             <div class="fw-semibold" style="font-size:.9rem;">{{ l.nombre }}</div>
-            <div class="text-muted" style="font-size:.75rem;">
+            <div class="text-muted" style="font-size:.85rem;">
               {% if l.version %}v{{ l.version }} · {% endif %}{{ l.proveedor|default:"—" }}
             </div>
           </td>
@@ -139,7 +139,7 @@
           <td style="font-size:.85rem;">
             {{ l.fecha_vencimiento|date:"d/m/Y"|default:"—" }}
             {% if l.dias_para_vencer is not None and l.dias_para_vencer >= 0 %}
-              <div class="text-muted" style="font-size:.72rem;">{{ l.dias_para_vencer }} días</div>
+              <div class="text-muted" style="font-size:.8rem;">{{ l.dias_para_vencer }} días</div>
             {% endif %}
           </td>
           <td style="font-size:.85rem;">{{ l.activos.count }}</td>
