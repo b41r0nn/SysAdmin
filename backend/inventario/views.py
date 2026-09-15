@@ -204,6 +204,25 @@ def asignar_activo(request, pk):
     })
 
 @requiere_permiso("inventario", "escritura")
+def editar_asignacion(request, asignacion_pk):
+    asignacion = get_object_or_404(Asignacion, pk=asignacion_pk)
+    activo = asignacion.activo
+    if request.method == "POST":
+        form = AsignacionForm(request.POST, instance=asignacion)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Datos de entrega actualizados.")
+            return redirect("inventario:detalle", pk=activo.pk)
+        messages.error(request, "Corrige los errores del formulario.")
+    else:
+        form = AsignacionForm(instance=asignacion)
+
+    return render(request, "inventario/asignacion_form.html", {
+        "form": form, "titulo": "Datos de entrega", "activo": activo, "accion": "Entrega",
+    })
+
+
+@requiere_permiso("inventario", "escritura")
 def devolver_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion = activo.asignaciones.filter(activa=True).first()

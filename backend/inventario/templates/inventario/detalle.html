@@ -14,23 +14,25 @@
 </nav>
 
 <div class="row">
-  <div class="col-md-3">
+  <div class="col-md-4 col-lg-3">
     {% if activo.foto_activo %}
-    <img src="{{ activo.foto_activo.url }}" alt="{{ activo.marca }} {{ activo.modelo }}"
-         class="img-fluid rounded" style="width:100%;max-width:300px;">
+    <div class="sa-card p-3 mb-3">
+      <img src="{{ activo.foto_activo.url }}" alt="{{ activo.marca }} {{ activo.modelo }}"
+           class="img-fluid rounded w-100">
+    </div>
     {% endif %}
-    <div class="sa-card p-3 text-center mt-3">
+    <div class="sa-card p-3 text-center">
       <img src="{% url 'inventario:qr_imagen' activo.pk %}" alt="Código QR"
-           class="img-fluid rounded" style="width:160px;height:160px;">
-      <div class="text-muted mt-2" style="font-size:.8rem;">
-        Codigo QR del activo — escaneelo para ver la ficha
+           class="img-fluid rounded mx-auto d-block" style="width:130px;height:130px;">
+      <div class="text-muted mt-2 fw-semibold" style="font-size:.8rem;">
+        Código QR del activo — escanéalo para ver la ficha
       </div>
     </div>
   </div>
 
-  <div class="col-md-9">
-    <h2>{{ activo.marca }} {{ activo.modelo }}</h2>
-    <p class="text-muted">{{ activo.get_tipo_dispositivo_display }}</p>
+  <div class="col-md-8 col-lg-9">
+    <h2 class="page-title mb-1">{{ activo.marca }} {{ activo.modelo }}</h2>
+    <p class="page-subtitle mb-4">{{ activo.get_tipo_dispositivo_display }}</p>
 
     <div class="row g-2 mb-4">
       <div class="col-6 col-md-3">
@@ -107,9 +109,13 @@
         <dt class="col-sm-4">Estado:</dt>
         <dd class="col-sm-8">
           {% if activo.estado == 'disponible' %}
-          <span class="sa-badge success"><i class="bi bi-check-circle"></i> Disponible</span>
+          <span class="sa-badge danger"><i class="bi bi-circle-fill"></i> Sin asignar</span>
           {% elif activo.estado == 'asignado' %}
-          <span class="sa-badge primary"><i class="bi bi-person-check"></i> Asignado</span>
+          <span class="sa-badge success"><i class="bi bi-circle-fill"></i> Asignado</span>
+          {% elif activo.estado == 'en_mantenimiento' %}
+          <span class="sa-badge warning"><i class="bi bi-wrench"></i> En mantenimiento</span>
+          {% elif activo.estado == 'en_reparacion' %}
+          <span class="sa-badge warning"><i class="bi bi-wrench"></i> En reparación</span>
           {% else %}
           <span class="sa-badge danger"><i class="bi bi-x-circle"></i> Baja</span>
           {% endif %}
@@ -200,6 +206,9 @@
   <a href="{% url 'inventario:asignar' activo.id %}" class="btn btn-outline-secondary">
     <i class="bi bi-person-plus"></i> Asignar
   </a>
+  <a href="{% url 'mantenimiento:hoja_de_vida' activo.pk %}" class="btn btn-outline-secondary">
+    <i class="bi bi-person-lines-fill"></i> Hoja de vida
+  </a>
   <form method="post" action="{% url 'inventario:baja' activo.pk %}">
     {% csrf_token %}
     <button class="btn btn-danger" type="submit"> <i class="bi bi-trash"></i> Dar de baja</button>
@@ -252,6 +261,10 @@
             </td>
             <td class="text-end">
               <div class="d-flex gap-1 justify-content-end">
+                <a href="{% url 'inventario:editar_asignacion' acta.asignacion.pk %}"
+                   class="btn btn-sm btn-outline-secondary" title="Datos de entrega">
+                  <i class="bi bi-box"></i>
+                </a>
                 <a href="{% url 'inventario:acta_pdf' acta.asignacion.pk %}"
                    class="btn btn-sm btn-outline-primary" title="Ver/Generar PDF" target="_blank">
                   <i class="bi bi-filetype-pdf"></i>

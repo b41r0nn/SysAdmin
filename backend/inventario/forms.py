@@ -2,7 +2,7 @@ import os
 
 from django import forms
 
-from .models import Activo, CatalogoModelo
+from .models import Activo, CatalogoModelo, TIPOS
 
 ALLOWED_ACTA_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png'}
 
@@ -35,6 +35,29 @@ CAMPOS_COMUNES = [
 ]
 
 ALL_SPECIFIC = CAMPOS_CELULAR + CAMPOS_PC + CAMPOS_TELEFONO + CAMPOS_MONITOR
+
+
+def _normalizar_nuevo_tipo(valor):
+    """Normaliza un tipo de dispositivo escrito a mano (strip + title case)."""
+    valor = valor.strip()
+    if not valor:
+        return ""
+    # Title case preservando lo que el usuario escribió palabra por palabra
+    return valor.title()
+
+
+class _NuevoTipoMixin(forms.Form):
+    """Campo auxiliar 'nuevo_tipo' para crear tipos de dispositivo desde la
+    pantalla: si el usuario escribe un valor acá, ese valor se guarda como el
+    tipo_dispositivo del modelo (el campo es CharField, sin restricción real
+    de choices a nivel BD)."""
+
+    nuevo_tipo = forms.CharField(
+        label="Si el tipo no está en el menú, escribalo acá",
+        required=False,
+        help_text="Ejemplo: Impresora, Diadema, UPS… (se guardará como nuevo tipo).",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
 
 
 class ActivoForm(forms.ModelForm):
@@ -96,9 +119,23 @@ class ActivoForm(forms.ModelForm):
         # Make all specific fields optional at form level (model already nullable)
         for campo in ALL_SPECIFIC:
             self.fields[campo].required = False
+        # El tipo es obligatorio y usa las opciones del menú + tipos ya existentes
+        self.fields["tipo_dispositivo"].required = True
+        opciones = list(TIPOS)
+        usados = CatalogoModelo.objects.exclude(tipo_dispositivo="").order_by().values_list(
+            "tipo_dispositivo", flat=True
+        ).distinct()
+        for t in sorted(usados):
+            if t not in [c[0] for c in opciones]:
+                opciones.append((t, t))
+        tipo_actual = self.instance.tipo_dispositivo if self.instance and self.instance.pk else ""
+        if tipo_actual and tipo_actual not in [c[0] for c in opciones]:
+            opciones.append((tipo_actual, tipo_actual))
+        self.fields["tipo_dispositivo"].choices = opciones
+        self.fields["tipo_dispositivo"].widget.choices = opciones
 
 
-class CatalogoModeloForm(forms.ModelForm):
+class CatalogoModeloForm(_NuevoTipoMixin, forms.ModelForm):
     class Meta:
         model = CatalogoModelo
         fields = ["tipo_dispositivo", "marca", "modelo", "especificaciones_json"]
@@ -111,14 +148,48 @@ class CatalogoModeloForm(forms.ModelForm):
             ),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Si el usuario escribe nuevo_tipo, ese valor es el que manda:
+        # por eso el select no es estrictamente requerido a nivel formulario
+        self.fields["tipo_dispositivo"].required = False
+        # Opciones del select: constantes + el tipo actual por si es uno creado a mano
+        self.fields["tipo_dispositivo"].choices = list(TIPOS)
+        self.fields["tipo_dispositivo"].widget.choices = list(TIPOS)
+        tipo_actual = self.instance.tipo_dispositivo if self.instance and self.instance.pk else ""
+        if tipo_actual and tipo_actual not in [c[0] for c in self.fields["tipo_dispositivo"].choices]:
+            self.fields["tipo_dispositivo"].choices = list(self.fields["tipo_dispositivo"].choices) + [(tipo_actual, tipo_actual)]
+            self.fields["tipo_dispositivo"].widget.choices = self.fields["tipo_dispositivo"].choices
+
+    def clean(self):
+        cleaned_data = super().clean()
+        nuevo = _normalizar_nuevo_tipo(cleaned_data.get("nuevo_tipo", ""))
+        if nuevo:
+            cleaned_data["tipo_dispositivo"] = nuevo
+        elif not cleaned_data.get("tipo_dispositivo"):
+            raise forms.ValidationError("Debe seleccionar un tipo de dispositivo o crear uno nuevo.")
+        return cleaned_data
+
+    def save(self, commit=True):
+        nuevo = _normalizar_nuevo_tipo(self.cleaned_data.get("nuevo_tipo", ""))
+        if nuevo:
+            self.instance.tipo_dispositivo = nuevo
+        return super().save(commit=commit)
+
 
 class AsignacionForm(forms.ModelForm):
     class Meta:
         from .models import Asignacion
         model = Asignacion
-        fields = ["usuario", "observaciones"]
+        fields = ["usuario", "accesorios", "condicion_entrega", "observaciones"]
         widgets = {
             "usuario": forms.Select(attrs={"class": "form-select"}),
+            "accesorios": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Cargador, mouse, maletín, base…"}
+            ),
+            "condicion_entrega": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Nuevo / usado en buen estado"}
+            ),
             "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Observaciones sobre la asignación..."}),
         }
 

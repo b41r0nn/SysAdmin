@@ -2,164 +2,161 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Acta de Asignacion #{{ asignacion.pk }} — SysAdmin</title>
+  <title>Acta de Asignación #{{ asignacion.pk }} — SysAdmin</title>
   <style>
     /* ─── Reset + Base ──────────────────────────────────────────────────── */
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      font-size: 11pt;
+      font-size: 10pt;
       color: #1e293b;
       background: #fff;
-      padding: 0;
+      line-height: 1.4;
     }
 
-    /* ─── Página ────────────────────────────────────────────────────────── */
     @page {
       size: A4 portrait;
-      margin: 2cm 2cm 2.5cm 2cm;
+      margin: 12mm 14mm 14mm 14mm;
     }
 
-    /* ─── Encabezado ────────────────────────────────────────────────────── */
+    /* ─── Encabezado: logo a la izquierda ──────────────────────────────── */
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 3px solid #1a56db;
-      padding-bottom: 12px;
-      margin-bottom: 20px;
+      gap: 6mm;
+      border-bottom: 2px solid #0156a6;
+      padding-bottom: 3mm;
+      margin-bottom: 4mm;
     }
-
-    .header-brand { display: flex; align-items: center; gap: 12px; }
-
-    .header-logo-box {
-      width: 52px; height: 52px;
-      background: #1a56db;
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    .header-logo-box svg { width: 32px; height: 32px; fill: #fff; }
-
-    .header-company { font-size: 9pt; color: #64748b; line-height: 1.4; }
-    .header-company strong { font-size: 11pt; color: #1e293b; display: block; }
-
-    .header-doc { text-align: right; }
-    .header-doc .doc-title {
-      font-size: 13pt; font-weight: 700;
-      color: #1a56db; letter-spacing: .02em;
-    }
-    .header-doc .doc-num { font-size: 9pt; color: #64748b; margin-top: 2px; }
-
-    /* ─── Sección título ────────────────────────────────────────────────── */
-    .section-title {
-      font-size: 8pt;
+    .header .logo-block { display: flex; align-items: center; gap: 4mm; }
+    .header img { height: 13mm; }
+    .header .empresa {
+      font-size: 9pt;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: #1a56db;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 4px;
-      margin-bottom: 10px;
-      margin-top: 20px;
+      letter-spacing: .04em;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+    .header .slogan {
+      font-size: 7.5pt;
+      color: #475569;
+    }
+    .header .titulo {
+      text-align: right;
+      font-size: 11pt;
+      font-weight: 700;
+      color: #0156a6;
+      letter-spacing: .05em;
+      line-height: 1.3;
+      white-space: nowrap;
     }
 
-    /* ─── Tabla de datos ────────────────────────────────────────────────── */
-    .data-table {
+    /* ─── Cuerpo ────────────────────────────────────────────────────────── */
+    .fecha {
+      font-size: 10pt;
+      margin: 2.5mm 0;
+    }
+    .senor {
+      font-size: 10pt;
+      margin-bottom: 2.5mm;
+    }
+    .senor .nombre { font-weight: 700; }
+    .parrafo {
+      text-align: justify;
+      font-size: 10pt;
+      line-height: 1.4;
+      margin-bottom: 2.5mm;
+    }
+    .subtitulo {
+      font-weight: 700;
+      font-size: 10pt;
+      margin: 2mm 0 1.2mm 0;
+    }
+
+    /* ─── Datos del equipo: tabla de etiqueta/valor alineada ───────────── */
+    .datos {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10pt;
-      margin-bottom: 4px;
+      margin: 0 0 2.5mm 0;
     }
-
-    .data-table td {
-      padding: 5px 8px;
-      border: 1px solid #e2e8f0;
+    .datos td {
+      padding: 1mm 2mm;
       vertical-align: top;
+      font-size: 10pt;
+      line-height: 1.35;
     }
-
-    .data-table td.label {
-      width: 38%;
-      background: #f8fafc;
-      font-weight: 600;
-      color: #475569;
-      font-size: 9.5pt;
+    .datos .etiqueta {
+      width: 44mm;
+      font-weight: 700;
+      white-space: nowrap;
     }
+    .datos .mono { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; }
 
-    .data-table td.value {
+    /* ─── Observaciones ────────────────────────────────────────────────── */
+    .obs {
+      font-size: 10pt;
+      margin: 2mm 0;
+      text-align: justify;
+      line-height: 1.4;
+    }
+    .obs-titulo { font-weight: 700; font-size: 10pt; margin: 2mm 0 1.2mm 0; }
+
+    /* ─── Nota legal ───────────────────────────────────────────────────── */
+    .nota {
+      font-size: 8pt;
+      line-height: 1.35;
+      text-align: justify;
       color: #1e293b;
+      margin: 2mm 0;
+    }
+    .nota-titulo { font-weight: 700; font-size: 8pt; margin-bottom: 0.8mm; }
+
+    /* ─── Despedida ────────────────────────────────────────────────────── */
+    .despedida {
+      font-size: 10pt;
+      margin: 2.5mm 0 3mm 0;
+      text-align: justify;
+      line-height: 1.4;
     }
 
-    .mono { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; }
-
-    /* ─── Badge estado ──────────────────────────────────────────────────── */
-    .badge-estado {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 20px;
-      font-size: 9pt;
-      font-weight: 600;
-    }
-    .badge-asignado { background: #dbeafe; color: #1d4ed8; }
-    .badge-disponible { background: #dcfce7; color: #15803d; }
-
-    /* ─── Cláusula ──────────────────────────────────────────────────────── */
-    .clausula {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-left: 4px solid #1a56db;
-      padding: 10px 14px;
-      font-size: 9.5pt;
-      color: #475569;
-      line-height: 1.6;
-      margin-top: 16px;
-      margin-bottom: 4px;
-    }
-
-    /* ─── Firmas ────────────────────────────────────────────────────────── */
+    /* ─── Firmas ───────────────────────────────────────────────────────── */
     .firmas {
-      display: flex;
-      justify-content: space-between;
-      gap: 40px;
-      margin-top: 36px;
+      margin-top: 7mm;
     }
-
+    .fila-firma {
+      display: flex;
+      justify-content: space-around;
+      gap: 14mm;
+      margin-top: 4mm;
+    }
     .firma-box {
       flex: 1;
+      max-width: 65mm;
       text-align: center;
     }
-
     .firma-linea {
-      border-top: 1.5px solid #1e293b;
-      margin-bottom: 6px;
-      margin-top: 50px;
+      border-top: 1px solid #0f172a;
+      margin-bottom: 1mm;
     }
-
-    .firma-nombre {
-      font-weight: 700;
-      font-size: 10pt;
-      margin-bottom: 2px;
+    .firma-texto {
+      font-size: 9.5pt;
+      line-height: 1.3;
     }
+    .firma-texto .cargo { font-size: 8pt; color: #475569; }
 
-    .firma-cargo {
-      font-size: 8.5pt;
-      color: #64748b;
-    }
-
-    /* ─── Pie de página ─────────────────────────────────────────────────── */
+    /* ─── Pie de página ────────────────────────────────────────────────── */
     .footer {
       position: fixed;
       bottom: 0;
-      left: 2cm;
-      right: 2cm;
+      left: 14mm;
+      right: 14mm;
       border-top: 1px solid #e2e8f0;
-      padding-top: 6px;
-      font-size: 7.5pt;
+      padding-top: 1.2mm;
+      font-size: 7pt;
       color: #94a3b8;
-      display: flex;
-      justify-content: space-between;
+      text-align: center;
     }
   </style>
 </head>
@@ -167,168 +164,110 @@
 
   <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
   <div class="header">
-    <div class="header-brand">
-      <div class="header-logo-box">
-        <!-- ícono simple servidor/IT -->
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M2 6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6zm0 8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2zm13-7a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0 8a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
-        </svg>
-      </div>
-      <div class="header-company">
-        <strong>Empresa</strong>
-        Departamento de Sistemas — Gestion IT
+    <div class="logo-block">
+      <img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}">
+      <div>
+        <div class="empresa">{{ config.nombre_empresa|upper }}</div>
+        <div class="slogan">Su Distribuidor Hospitalario</div>
       </div>
     </div>
-    <div class="header-doc">
-      <div class="doc-title">ACTA DE ASIGNACIÓN</div>
-      <div class="doc-num">
-        Acta N° {{ asignacion.pk|stringformat:"04d" }} &nbsp;·&nbsp;
-        Fecha: {{ asignacion.fecha_asignacion|date:"d/m/Y" }}
-      </div>
-    </div>
+    <div class="titulo">ACTA DE ASIGNACIÓN<br>DE EQUIPO</div>
   </div>
 
-  <!-- ── Datos del activo ───────────────────────────────────────────────── -->
-  <div class="section-title">Información del Activo</div>
-  <table class="data-table">
-    <tr>
-      <td class="label">Tipo de dispositivo</td>
-      <td class="value">{{ asignacion.activo.get_tipo_dispositivo_display }}</td>
-      <td class="label">Estado</td>
-      <td class="value">
-        <span class="badge-estado badge-asignado">
-          {{ asignacion.activo.get_estado_display }}
-        </span>
-      </td>
-    </tr>
-    <tr>
-      <td class="label">Marca</td>
-      <td class="value">{{ asignacion.activo.marca }}</td>
-      <td class="label">Modelo</td>
-      <td class="value">{{ asignacion.activo.modelo }}</td>
-    </tr>
-    <tr>
-      <td class="label">Serial</td>
-      <td class="value mono">{{ asignacion.activo.serial }}</td>
-      <td class="label">Ubicación física</td>
-      <td class="value">{{ asignacion.activo.ubicacion_fisica|default:"—" }}</td>
-    </tr>
-    {% if asignacion.activo.tipo_dispositivo == "escritorio" or asignacion.activo.tipo_dispositivo == "portatil" %}
-    <tr>
-      <td class="label">IP del equipo</td>
-      <td class="value mono">{{ asignacion.activo.ip_equipo|default:"—" }}</td>
-      <td class="label">Usuario de red</td>
-      <td class="value mono">{{ asignacion.activo.usuario_red|default:"—" }}</td>
-    </tr>
-    <tr>
-      <td class="label">Sistema operativo</td>
-      <td class="value">{{ asignacion.activo.sistema_operativo|default:"—" }}</td>
-      <td class="label">RAM / Disco</td>
-      <td class="value">{{ asignacion.activo.ram|default:"—" }} / {{ asignacion.activo.disco_capacidad|default:"—" }}</td>
-    </tr>
-    {% elif asignacion.activo.tipo_dispositivo == "celular" %}
-    <tr>
-      <td class="label">IMEI</td>
-      <td class="value mono">{{ asignacion.activo.imei|default:"—" }}</td>
-      <td class="label">Operador / Línea</td>
-      <td class="value">{{ asignacion.activo.operador|default:"—" }} / {{ asignacion.activo.numero_linea|default:"—" }}</td>
-    </tr>
-    {% elif asignacion.activo.tipo_dispositivo == "telefono_fijo" %}
-    <tr>
-      <td class="label">Extensión</td>
-      <td class="value mono">{{ asignacion.activo.extension|default:"—" }}</td>
-      <td class="label">Línea asignada</td>
-      <td class="value">{{ asignacion.activo.linea_asignada|default:"—" }}</td>
-    </tr>
-    {% endif %}
-    {% if asignacion.activo.en_garantia %}
-    <tr>
-      <td class="label">Garantía</td>
-      <td class="value" colspan="3">
-        Vigente hasta {{ asignacion.activo.fecha_vencimiento_garantia|date:"d/m/Y" }}
-      </td>
-    </tr>
-    {% endif %}
-  </table>
+  <!-- ── Fecha y destinatario ─────────────────────────────────────────── -->
+  <div class="fecha">Sabaneta, {{ asignacion.fecha_asignacion|date:"d \d\e F \d\e Y" }}</div>
+  <div class="senor">Señor(a): <span class="nombre">{{ asignacion.usuario.nombre_completo }}</span></div>
 
-  <!-- ── Datos del usuario ──────────────────────────────────────────────── -->
-  <div class="section-title">Datos del Usuario Receptor</div>
-  <table class="data-table">
-    <tr>
-      <td class="label">Nombre completo</td>
-      <td class="value">{{ asignacion.usuario.nombre_completo }}</td>
-      <td class="label">Documento</td>
-      <td class="value mono">{{ asignacion.usuario.documento_identidad }}</td>
-    </tr>
-    <tr>
-      <td class="label">Cargo</td>
-      <td class="value">{{ asignacion.usuario.cargo }}</td>
-      <td class="label">Área</td>
-      <td class="value">{{ asignacion.usuario.area }}</td>
-    </tr>
-    <tr>
-      <td class="label">Correo electrónico</td>
-      <td class="value">{{ asignacion.usuario.correo }}</td>
-      <td class="label">Teléfono</td>
-      <td class="value">{{ asignacion.usuario.telefono|default:"—" }}</td>
-    </tr>
-  </table>
-
-  <!-- ── Detalles de la asignación ─────────────────────────────────────── -->
-  <div class="section-title">Detalles de la Asignación</div>
-  <table class="data-table">
-    <tr>
-      <td class="label">Fecha de asignación</td>
-      <td class="value">{{ asignacion.fecha_asignacion|date:"d \d\e F \d\e Y" }}</td>
-      <td class="label">N° de acta</td>
-      <td class="value mono">{{ asignacion.pk|stringformat:"04d" }}</td>
-    </tr>
-    {% if asignacion.observaciones %}
-    <tr>
-      <td class="label">Observaciones</td>
-      <td class="value" colspan="3">{{ asignacion.observaciones }}</td>
-    </tr>
-    {% endif %}
-  </table>
-
-  <!-- ── Cláusula ──────────────────────────────────────────────────────── -->
-  <div class="clausula">
-    Por medio del presente documento, <strong>la empresa</strong>
-    hace entrega formal del activo tecnológico descrito al usuario receptor identificado en este acta.
-    El receptor declara recibir el equipo en buen estado y se compromete a:
-    (1) usarlo exclusivamente para actividades laborales,
-    (2) notificar cualquier daño o pérdida al Departamento de Sistemas de manera inmediata,
-    (3) devolverlo en las mismas condiciones al momento de retiro, traslado o finalización del vínculo laboral.
-    El incumplimiento de estas condiciones podrá acarrear responsabilidad disciplinaria y/o económica
-    según las políticas internas de la empresa.
+  <div class="parrafo">
+    Por medio del presente documento se deja constancia de la entrega del equipo y herramientas de trabajo
+    asignados al colaborador anteriormente mencionado. La entrega se realiza en cumplimiento de las políticas
+    internas de la empresa {{ config.nombre_empresa|upper }}. "Su Distribuidor Hospitalario".
+    A continuación, se detallan los elementos entregados:
   </div>
 
-  <!-- ── Espacios de firma ──────────────────────────────────────────────── -->
+  <div class="subtitulo">Descripción del equipo:</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">Equipo:</td>
+      <td>{{ asignacion.activo.get_tipo_dispositivo_display }}
+          {{ asignacion.activo.nombre_equipo|default:"" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Marca y modelo:</td>
+      <td>{{ asignacion.activo.marca }} {{ asignacion.activo.modelo }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Serial:</td>
+      <td><span class="mono">{{ asignacion.activo.serial }}</span></td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Número interno:</td>
+      <td>{% if asignacion.activo.numero_interno %}{{ asignacion.activo.numero_interno }}{% else %}—{% endif %}</td>
+    </tr>
+  </table>
+
+  <div class="subtitulo">Accesorios y condición de entrega:</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">Accesorios incluidos:</td>
+      <td>{{ asignacion.accesorios|default:"Ninguno" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Condición de entrega:</td>
+      <td>{{ asignacion.condicion_entrega|default:"Nuevo" }}</td>
+    </tr>
+  </table>
+
+  <!-- ── Observaciones ─────────────────────────────────────────────────── -->
+  <div class="obs-titulo">OBSERVACIONES:</div>
+  <div class="obs">
+    {% if asignacion.observaciones %}{{ asignacion.observaciones }}{% endif %}
+  </div>
+
+  <!-- ── Nota legal ────────────────────────────────────────────────────── -->
+  <div class="nota-titulo">NOTA:</div>
+  <div class="nota">
+    Es obligación del colaborador velar por la adecuada custodia y el cuidado de los equipos y herramientas
+    de trabajo asignados, por lo cual deberá reintegrarlos a la empresa cuando esta lo solicite, en óptimas
+    condiciones salvo el deterioro natural derivado de su uso cuidadoso. Cuando por descuido o sin
+    justificación se presente un daño o pérdida de los bienes de la compañía que el colaborador tiene a su
+    cargo, este autoriza a la empresa a deducir de su nómina quincenal o mensual el valor equivalente a la
+    suma de dinero o de los bienes que se hayan perdido o dañado. Igualmente, en caso de terminación del
+    contrato de trabajo, el colaborador autoriza a la empresa para deducir el saldo que tenga en ese
+    momento por el daño o la pérdida de los bienes de la empresa, sobre el valor de la liquidación
+    definitiva de prestaciones sociales, salarios, así como sobre indemnizaciones, bonificaciones o
+    cualquier otro pago legal o extralegal a que tenga derecho.
+  </div>
+
+  <!-- ── Despedida ─────────────────────────────────────────────────────── -->
+  <div class="despedida">
+    Agradecemos su amable atención y colaboración.<br>
+    Un cordial saludo,
+  </div>
+
+  <!-- ── Espacios de firma ─────────────────────────────────────────────── -->
   <div class="firmas">
-    <div class="firma-box">
-      <div class="firma-linea"></div>
-      <div class="firma-nombre">{{ asignacion.usuario.nombre_completo }}</div>
-      <div class="firma-cargo">
-        {{ asignacion.usuario.cargo }}<br>
-        C.C. {{ asignacion.usuario.documento_identidad }}
+    <div class="fila-firma">
+      <div class="firma-box">
+        <div class="firma-linea"></div>
+        <div class="firma-texto">
+          <strong>Entrega</strong> Bairon Calle<br>
+          <span class="cargo">Analista de Sistemas · {{ config.nombre_empresa|upper }}</span>
+        </div>
       </div>
-    </div>
-    <div class="firma-box">
-      <div class="firma-linea"></div>
-      <div class="firma-nombre">Responsable Sistemas</div>
-      <div class="firma-cargo">Departamento de Sistemas<br>Empresa</div>
-    </div>
-    <div class="firma-box">
-      <div class="firma-linea"></div>
-      <div class="firma-nombre">Jefe Inmediato</div>
-      <div class="firma-cargo">{{ asignacion.usuario.area }}<br>Empresa</div>
+      <div class="firma-box">
+        <div class="firma-linea"></div>
+        <div class="firma-texto">
+          <strong>Recibe</strong> {{ asignacion.usuario.nombre_completo }}<br>
+          <span class="cargo">{{ asignacion.usuario.cargo }}{% if asignacion.usuario.documento_identidad %} · C.C. {{ asignacion.usuario.documento_identidad }}{% endif %}</span>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- ── Pie de página ──────────────────────────────────────────────────── -->
+  <!-- ── Pie de página ─────────────────────────────────────────────────── -->
   <div class="footer">
-    <span>SysAdmin — Sistema de Gestion IT · Documento generado automaticamente</span>
-    <span>Acta N° {{ asignacion.pk|stringformat:"04d" }} · {{ asignacion.fecha_asignacion|date:"d/m/Y" }}</span>
+    SysAdmin · Acta N° {{ asignacion.pk|stringformat:"04d" }} · {{ asignacion.fecha_asignacion|date:"d/m/Y" }}
   </div>
 
 </body>
