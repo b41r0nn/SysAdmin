@@ -119,9 +119,9 @@ Se pregunta al usuario: confirmó **títulos de página demasiado grandes** + **
 
 | Commit | Contenido |
 |--------|-----------|
-| `<hash1>` | feat(mantenimiento): planes por categoría + reporte dentro del módulo |
-| `<hash2>` | feat(inventario): acta en una hoja, accesorios/condición y fix del desplegable tipo |
-| `<hash3>` | style(ui): tipografía proporcionada en títulos, tablas y badges |
+| `fb2180d` | feat(mantenimiento): planes por categoría + reporte dentro del módulo |
+| `6957c01` | feat(inventario): acta en una hoja, accesorios/condición y fix del desplegable tipo |
+| `b1949a9` | style(ui): tipografía proporcionada en títulos, tablas y badges |
 
 ---
 
