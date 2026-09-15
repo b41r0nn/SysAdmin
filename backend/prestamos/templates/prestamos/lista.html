@@ -109,16 +109,16 @@
         <tr>
           <td>
             <div class="fw-semibold" style="font-size:.9rem;">{{ p.activo }}</div>
-            <div class="text-muted" style="font-size:.75rem;">{{ p.destino|default:"—" }}</div>
+            <div class="text-muted" style="font-size:.85rem;">{{ p.destino|default:"—" }}</div>
           </td>
           <td style="font-size:.85rem;">{{ p.solicitante.username }}</td>
           <td style="font-size:.85rem;">{{ p.fecha_prestamo|date:"d/m/Y" }}</td>
           <td style="font-size:.85rem;">
             {{ p.fecha_devolucion_prevista|date:"d/m/Y"|default:"—" }}
             {% if p.estado == "vencido" %}
-              <div class="text-danger" style="font-size:.72rem;">{{ p.dias_retraso }} días de retraso</div>
+              <div class="text-danger" style="font-size:.8rem;">{{ p.dias_retraso }} días de retraso</div>
             {% elif p.estado == "devuelto" %}
-              <div class="text-muted" style="font-size:.72rem;">Devuelto: {{ p.fecha_devolucion|date:"d/m/Y" }}</div>
+              <div class="text-muted" style="font-size:.8rem;">Devuelto: {{ p.fecha_devolucion|date:"d/m/Y" }}</div>
             {% endif %}
           </td>
           <td>

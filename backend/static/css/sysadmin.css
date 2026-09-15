@@ -203,7 +203,7 @@ img.sa-watermark {
 }
 
 .sa-table {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   border-collapse: collapse;
   width: 100%;
 }
@@ -217,7 +217,7 @@ img.sa-watermark {
   padding: 12px 16px;
   text-align: left;
   font-weight: 700;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   color: #1f2937;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -226,7 +226,7 @@ img.sa-watermark {
 .sa-table td {
   padding: 12px 16px;
   border-bottom: 1px solid var(--sa-border);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .sa-table tbody tr {
@@ -245,7 +245,7 @@ img.sa-watermark {
 
 .page-title {
   font-weight: 700;
-  font-size: 1.8rem;
+  font-size: 1.45rem;
   color: #0f172a;
   margin: 0;
 }
@@ -385,7 +385,7 @@ img.sa-watermark {
   gap: 4px;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 

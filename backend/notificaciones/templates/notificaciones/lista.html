@@ -58,11 +58,11 @@
       </div>
       <div class="flex-grow-1">
         <div class="d-flex align-items-center gap-2 flex-wrap">
-          <span class="fw-semibold" style="font-size:.9rem;">{{ n.titulo }}</span>
-          <span class="sa-badge warning text-uppercase" style="font-size:.6rem;">{{ n.get_tipo_display }}</span>
+          <span class="fw-semibold" style="font-size:.95rem;">{{ n.titulo }}</span>
+          <span class="sa-badge warning text-uppercase" style="font-size:.85rem;">{{ n.get_tipo_display }}</span>
         </div>
-        <p class="mb-1 text-muted" style="font-size:.82rem;">{{ n.mensaje }}</p>
-        <div class="text-muted" style="font-size:.72rem;">{{ n.fecha_creacion|date:"d/m/Y H:i" }}</div>
+        <p class="mb-1 text-muted" style="font-size:.875rem;">{{ n.mensaje }}</p>
+        <div class="text-muted" style="font-size:.8rem;">{{ n.fecha_creacion|date:"d/m/Y H:i" }}</div>
       </div>
       <div class="flex-shrink-0 d-flex flex-column gap-1 align-items-end">
         <span class="sa-badge danger">•</span>
@@ -99,8 +99,8 @@
         {% for n in leidas %}
         <tr>
           <td>
-            <div class="fw-semibold" style="font-size:.85rem;">{{ n.titulo }}</div>
-            <div class="text-muted" style="font-size:.78rem;">{{ n.mensaje }}</div>
+            <div class="fw-semibold" style="font-size:.9rem;">{{ n.titulo }}</div>
+            <div class="text-muted" style="font-size:.85rem;">{{ n.mensaje }}</div>
           </td>
           <td style="font-size:.8rem;">{{ n.fecha_creacion|date:"d/m/Y H:i" }}</td>
           <td class="text-end">
