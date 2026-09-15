@@ -1,4 +1,6 @@
 {% load static %}
+{% load permisos_extras %}
+{% tiene_permiso 'mantenimiento' 'lectura' as puede_mantenimiento %}
 
 {% if activos %}
 <div class="sa-card overflow-hidden">
@@ -42,9 +44,9 @@
                 </div>
               {% endif %}
               <div>
-                <div class="fw-semibold" style="font-size:.9rem;">{{ a.marca }} {{ a.modelo }}</div>
+                <div class="fw-semibold" style="font-size:.95rem;">{{ a.marca }} {{ a.modelo }}</div>
                 {% if a.en_garantia %}
-                  <span class="text-success" style="font-size:.72rem;">
+                  <span class="text-success" style="font-size:.8rem;">
                     <i class="bi bi-shield-check me-1"></i>En garantía
                   </span>
                 {% endif %}
@@ -61,24 +63,24 @@
           </td>
           <td class="text-center">
             {% if a.estado == "disponible" %}
-              <span class="sa-badge success">
-                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Disponible
+              <span class="sa-badge danger">
+                <i class="bi bi-circle-fill" style="font-size:.6rem;"></i>Sin asignar
               </span>
             {% elif a.estado == "asignado" %}
-              <span class="sa-badge primary">
-                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Asignado
+              <span class="sa-badge success">
+                <i class="bi bi-circle-fill" style="font-size:.6rem;"></i>Asignado
               </span>
             {% elif a.estado == "en_mantenimiento" %}
               <span class="sa-badge warning">
-                <i class="bi bi-circle-fill" style="font-size:.45rem;"></i>Mantenimiento
+                <i class="bi bi-circle-fill" style="font-size:.6rem;"></i>Mantenimiento
               </span>
             {% elif a.estado == "en_reparacion" %}
               <span class="sa-badge warning">
-                <i class="bi bi-wrench" style="font-size:.65rem;"></i>Reparacion
+                <i class="bi bi-wrench" style="font-size:.85rem;"></i>Reparacion
               </span>
             {% elif a.estado == "dado_de_baja" %}
               <span class="sa-badge danger">
-                <i class="bi bi-x-circle" style="font-size:.65rem;"></i>Baja
+                <i class="bi bi-x-circle" style="font-size:.85rem;"></i>Baja
               </span>
             {% endif %}
           </td>
@@ -97,6 +99,12 @@
                  class="btn btn-sm btn-outline-secondary" title="Editar">
                 <i class="bi bi-pencil"></i>
               </a>
+              {% if puede_mantenimiento %}
+              <a href="{% url 'mantenimiento:crear_orden' %}?activo={{ a.pk }}"
+                 class="btn btn-sm btn-outline-secondary" title="Documentar mantenimiento">
+                <i class="bi bi-tools"></i>
+              </a>
+              {% endif %}
             </div>
           </td>
         </tr>

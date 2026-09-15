@@ -41,8 +41,16 @@ def _siguiente_numero_interno():
     return (ultimo or NUMERO_INTERNO_INICIO - 1) + 1
 
 
+def _ver_tipo(tipo):
+    """Devuelve el nombre legible de un tipo de dispositivo.
+    Si el tipo fue creado a mano (no está en TIPOS), devuelve el valor crudo."""
+    return dict(TIPOS).get(tipo, tipo)
+
+
 class CatalogoModelo(models.Model):
-    tipo_dispositivo = models.CharField(max_length=50, choices=TIPOS)
+    # Sin choices a nivel modelo a propósito: el usuario puede crear tipos
+    # nuevos desde el formulario. TIPOS solo se usa para el menú y display.
+    tipo_dispositivo = models.CharField(max_length=50)
     marca = models.CharField(max_length=100)
     modelo = models.CharField(max_length=100)
     especificaciones_json = models.JSONField(default=dict, blank=True)
@@ -55,13 +63,16 @@ class CatalogoModelo(models.Model):
         verbose_name_plural = "Catálogo de Modelos"
         unique_together = ("tipo_dispositivo", "marca", "modelo")
 
+    def get_tipo_dispositivo_display(self):
+        return _ver_tipo(self.tipo_dispositivo)
+
     def __str__(self):
         return f"{self.get_tipo_dispositivo_display()} — {self.marca} {self.modelo}"
 
 
 class Activo(models.Model):
     # ── Comunes ──────────────────────────────────────────────────────────────
-    tipo_dispositivo = models.CharField(max_length=50, choices=TIPOS)
+    tipo_dispositivo = models.CharField(max_length=50)
     catalogo = models.ForeignKey(
         CatalogoModelo,
         on_delete=models.SET_NULL,
@@ -126,6 +137,9 @@ class Activo(models.Model):
         verbose_name = "Activo"
         verbose_name_plural = "Activos"
 
+    def get_tipo_dispositivo_display(self):
+        return _ver_tipo(self.tipo_dispositivo)
+
     def __str__(self):
         return f"[{self.get_tipo_dispositivo_display()}] {self.marca} {self.modelo} — {self.serial}"
 
@@ -162,6 +176,18 @@ class Asignacion(models.Model):
     fecha_asignacion = models.DateField()
     fecha_devolucion = models.DateField(null=True, blank=True)
     observaciones = models.TextField(blank=True)
+    accesorios = models.TextField(
+        blank=True,
+        verbose_name="Accesorios entregados",
+        help_text="Ej: cargador, mouse, maletín, base…",
+    )
+    condicion_entrega = models.CharField(
+        max_length=200,
+        blank=True,
+        default="Nuevo",
+        verbose_name="Condición de entrega",
+        help_text="Ej: nuevo, usado en buen estado…",
+    )
     activa = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)

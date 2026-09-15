@@ -23,6 +23,7 @@ urlpatterns = [
     path("<int:pk>/trasladar/", views.trasladar_activo, name="trasladar"),
     path("acta/<int:asignacion_pk>/pdf/", views.generar_acta_pdf, name="acta_pdf"),
     path("acta/<int:asignacion_pk>/subir/", views.subir_acta_firmada, name="subir_acta"),
+    path("asignacion/<int:asignacion_pk>/editar/", views.editar_asignacion, name="editar_asignacion"),
 
     # ── Catálogo de Modelos ───────────────────────────────────────────────────
     path("catalogo/", views.lista_catalogo, name="catalogo_lista"),
