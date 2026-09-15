@@ -80,7 +80,7 @@ def _detectar_mantenimiento(user):
         PlanMantenimiento.objects.filter(
             estado="activo",
             proxima_ejecucion__isnull=False,
-        ).select_related("activo")
+        )
     )
     creadas = 0
     for plan in planes:
@@ -89,8 +89,8 @@ def _detectar_mantenimiento(user):
             creadas += _crear(
                 user,
                 "mantenimiento",
-                f"Mantenimiento atrasado · {plan.activo.serial}",
-                f"El plan {plan.get_tipo_display()} del activo {plan.activo.serial} "
+                f"Mantenimiento atrasado · {plan.tipo_dispositivo}",
+                f"El plan {plan.get_tipo_display()} de la categoría {plan.tipo_dispositivo} "
                 f"debía ejecutarse el {plan.proxima_ejecucion:%d/%m/%Y}.",
                 link=link,
                 objetokey=f"mantenimiento:{plan.pk}",
@@ -99,8 +99,8 @@ def _detectar_mantenimiento(user):
             creadas += _crear(
                 user,
                 "mantenimiento",
-                f"Mantenimiento próximo · {plan.activo.serial}",
-                f"El plan {plan.get_tipo_display()} del activo {plan.activo.serial} "
+                f"Mantenimiento próximo · {plan.tipo_dispositivo}",
+                f"El plan {plan.get_tipo_display()} de la categoría {plan.tipo_dispositivo} "
                 f"está programado para el {plan.proxima_ejecucion:%d/%m/%Y}.",
                 link=link,
                 objetokey=f"mantenimiento:{plan.pk}",

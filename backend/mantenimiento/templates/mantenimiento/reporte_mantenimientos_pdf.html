@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte de Mantenimientos — SysAdmin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      color: #1e293b;
+      background: #fff;
+    }
+    @page {
+      size: A4 landscape;
+      margin: 2cm 1.6cm 2.2cm 1.6cm;
+    }
+    .header { text-align: center; margin-bottom: 5mm; }
+    .header img { height: 16mm; }
+    .header .empresa {
+      margin-top: 2mm;
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: .04em;
+      color: #0f172a;
+    }
+    .header .titulo {
+      margin-top: 3mm;
+      font-size: 13pt;
+      font-weight: 700;
+      color: #0156a6;
+      letter-spacing: .06em;
+    }
+    .filtros {
+      font-size: 9pt;
+      color: #475569;
+      margin: 3mm 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 3mm;
+    }
+    th {
+      background: #0156a6;
+      color: #fff;
+      font-size: 9pt;
+      padding: 2mm 2.5mm;
+      text-align: left;
+    }
+    td {
+      border: .5px solid #cbd5e1;
+      padding: 1.8mm 2.5mm;
+      font-size: 8.8pt;
+    }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .mono { font-family: 'Courier New', Courier, monospace; font-size: 8.5pt; }
+    .footer {
+      position: fixed;
+      bottom: -12mm;
+      left: 1.6cm;
+      right: 1.6cm;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1.5mm;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-align: center;
+    }
+    .estado { font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}">
+    <div class="empresa">{{ config.nombre_empresa|upper }}</div>
+    <div class="titulo">REPORTE GENERAL DE MANTENIMIENTOS</div>
+  </div>
+
+  <div class="filtros">
+    Tipo: <strong>{% if filtro_tipo %}{{ filtro_tipo }}{% else %}Todos{% endif %}</strong>
+    · Estado: <strong>{% if filtro_estado %}{{ filtro_estado }}{% else %}Todos{% endif %}</strong>
+    · Desde: <strong>{% if filtro_inicio %}{{ filtro_inicio }}{% else %}—{% endif %}</strong>
+    · Hasta: <strong>{% if filtro_fin %}{{ filtro_fin }}{% else %}—{% endif %}</strong>
+    · Total ordenes: <strong>{{ ordenes|length }}</strong>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Serial</th>
+        <th>Marca / Modelo</th>
+        <th>N° interno</th>
+        <th>Tipo</th>
+        <th>Técnico</th>
+        <th>Costo</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in ordenes %}
+      <tr>
+        <td>{{ o.fecha_apertura|date:"d/m/Y" }}</td>
+        <td class="mono">{{ o.activo.serial }}</td>
+        <td>{{ o.activo.marca }} {{ o.activo.modelo }}</td>
+        <td>{{ o.activo.numero_interno|default:"—" }}</td>
+        <td>{{ o.get_tipo_display }}</td>
+        <td>{{ o.tecnico_asignado|default:"—" }}</td>
+        <td>${{ o.costo_real|floatformat:2|default:"0.00" }}</td>
+        <td>
+          <span class="estado"
+                {% if o.estado == "cerrada" %}style="color:#16a34a;"
+                {% elif o.estado == "en_proceso" %}style="color:#d97706;"
+                {% elif o.estado == "reportada" %}style="color:#dc2626;"
+                {% else %}style="color:#64748b;"{% endif %}>
+            {{ o.get_estado_display }}
+          </span>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" style="text-align:center;color:#94a3b8;">Sin órdenes para los filtros seleccionados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    SysAdmin · Reporte de mantenimientos · Generado {{ generado|date:"d/m/Y H:i" }}
+  </div>
+
+</body>
+</html>

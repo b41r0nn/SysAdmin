@@ -178,9 +178,8 @@ class DetectarGarantiasTests(TestCase):
 
 class DetectarMantenimientoTests(TestCase):
     def _crear_plan(self, proxima_ejecucion, estado="activo"):
-        a = _activo("SN-M1")
         return PlanMantenimiento.objects.create(
-            activo=a,
+            tipo_dispositivo="escritorio",
             tipo="preventivo",
             proxima_ejecucion=proxima_ejecucion,
             estado=estado,

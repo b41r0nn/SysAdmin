@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 
 from django import forms
@@ -5,15 +6,18 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db.models import DecimalField, F, Q, Sum
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from accounts.permisos import PERMISOS_POR_ROL, requiere_permiso
+from administracion.models import ConfiguracionSistema
 from notificaciones.services import aviso_usuario, encolar_email
 
 from .forms import (
     ChecklistItemForm,
+    FotoMantenimientoForm,
     OrdenMantenimientoForm,
     PlanMantenimientoForm,
     ReporteFallaForm,
@@ -21,6 +25,7 @@ from .forms import (
 )
 from .models import (
     ChecklistItem,
+    FotoMantenimiento,
     OrdenMantenimiento,
     PlanMantenimiento,
     Repuesto,
@@ -30,6 +35,7 @@ from .models import (
     PRIORIDADES,
     CRITICIDADES,
 )
+from .services import snapshot_software_ocs
 
 from django.forms import modelformset_factory
 
@@ -37,12 +43,21 @@ ChecklistItemFormSet = modelformset_factory(
     ChecklistItem, form=ChecklistItemForm, extra=3, can_delete=True
 )
 
+FotoFormSet = modelformset_factory(
+    FotoMantenimiento, form=FotoMantenimientoForm, extra=3, can_delete=True
+)
+
+# El formset de fotos se instancia SIEMPRE con prefix="fotos": la plantilla y
+# las validaciones de la vista dependen de ese prefijo (fotos-TOTAL_FORMS...).
+def _foto_formset(*args, **kwargs):
+    return FotoFormSet(*args, prefix="fotos", **kwargs)
+
 
 # ── Planes ───────────────────────────────────────────────────────────────────
 
 @requiere_permiso("mantenimiento", "lectura")
 def lista_planes(request):
-    qs = PlanMantenimiento.objects.select_related("activo")
+    qs = PlanMantenimiento.objects.all()
 
     tipo = request.GET.get("tipo", "").strip()
     estado = request.GET.get("estado", "").strip()
@@ -53,11 +68,7 @@ def lista_planes(request):
     if estado:
         qs = qs.filter(estado=estado)
     if q:
-        qs = qs.filter(
-            Q(activo__serial__icontains=q)
-            | Q(activo__marca__icontains=q)
-            | Q(activo__modelo__icontains=q)
-        )
+        qs = qs.filter(Q(tipo_dispositivo__icontains=q))
 
     stats = {
         "total": qs.count(),
@@ -232,40 +243,73 @@ def detalle_orden(request, pk):
     repuestos_total = repuestos.aggregate(
         total=Sum(F("costo_unitario") * F("cantidad"), output_field=DecimalField())
     )
+    fotos = orden.fotos.all()
 
     return render(request, "mantenimiento/detalle_orden.html", {
         "orden": orden,
         "repuestos": repuestos,
         "repuestos_total": repuestos_total.get("total") or 0,
+        "fotos": fotos,
     })
 
 
 @requiere_permiso("mantenimiento", "escritura")
 def crear_orden(request):
     if request.method == "POST":
+        hay_fotos = "fotos-TOTAL_FORMS" in request.POST
+        fset = (
+            _foto_formset(request.POST, request.FILES, queryset=FotoMantenimiento.objects.none())
+            if hay_fotos
+            else None
+        )
+        if fset is not None:
+            fset_valid = fset.is_valid()
+        else:
+            fset_valid = True
         form = OrdenMantenimientoForm(request.POST)
-        if form.is_valid():
+        if form.is_valid() and fset_valid:
+            # Snapshot automático de software desde OCS si el textarea quedó vacío
+            if not form.cleaned_data.get("software_snapshot_text"):
+                activo = form.cleaned_data.get("activo")
+                if activo:
+                    software = snapshot_software_ocs(activo)
+                    if software:
+                        form.instance.software_snapshot = [
+                            s.get("name") for s in software if s.get("name")
+                        ]
             orden = form.save()
             _copiar_checklist_plantilla(orden)
-            messages.success(request, "Orden de mantenimiento creada correctamente.")
+            if fset is not None:
+                for foto in fset.save(commit=False):
+                    foto.orden = orden
+                    foto.save()
+            messages.success(request, "Mantenimiento documentado correctamente.")
             return redirect("mantenimiento:detalle_orden", pk=orden.pk)
         messages.error(request, "Corrige los errores del formulario.")
     else:
         initial = {}
+        activo_pk = request.GET.get("activo")
         plan_pk = request.GET.get("plan")
         if plan_pk:
             plan = get_object_or_404(PlanMantenimiento, pk=plan_pk)
-            initial = {
-                "plan": plan,
-                "activo": plan.activo,
-                "tipo": plan.tipo,
-                "descripcion": f"Ejecutar plan {plan.get_tipo_display()} del activo {plan.activo.serial}.",
-            }
+            initial["plan"] = plan
+        if activo_pk:
+            from inventario.models import Activo
+            activo = get_object_or_404(Activo, pk=activo_pk)
+            software = snapshot_software_ocs(activo)
+            initial.update({
+                "activo": activo,
+                "software_snapshot_text": "\n".join(
+                    s["name"] for s in software if s.get("name")
+                ),
+            })
         form = OrdenMantenimientoForm(initial=initial)
+        fset = _foto_formset(queryset=FotoMantenimiento.objects.none())
 
     return render(request, "mantenimiento/form_orden.html", {
         "form": form,
-        "titulo": "Nueva orden",
+        "fset": fset,
+        "titulo": "Documentar mantenimiento",
     })
 
 
@@ -273,18 +317,36 @@ def crear_orden(request):
 def editar_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
     if request.method == "POST":
+        hay_fotos = "fotos-TOTAL_FORMS" in request.POST
+        fset = (
+            _foto_formset(request.POST, request.FILES, queryset=orden.fotos.all())
+            if hay_fotos
+            else None
+        )
+        if fset is not None:
+            fset_valid = fset.is_valid()
+        else:
+            fset_valid = True
         form = OrdenMantenimientoForm(request.POST, instance=orden)
-        if form.is_valid():
+        if form.is_valid() and fset_valid:
             orden = form.save()
-            messages.success(request, "Orden de mantenimiento actualizada.")
+            if fset is not None:
+                for foto in fset.save(commit=False):
+                    foto.orden = orden
+                    foto.save()
+                for foto in fset.deleted_objects:
+                    foto.delete()
+            messages.success(request, "Mantenimiento actualizado.")
             return redirect("mantenimiento:detalle_orden", pk=orden.pk)
         messages.error(request, "Corrige los errores del formulario.")
     else:
         form = OrdenMantenimientoForm(instance=orden)
+        fset = _foto_formset(queryset=orden.fotos.all())
 
     return render(request, "mantenimiento/form_orden.html", {
         "form": form,
-        "titulo": "Editar orden",
+        "fset": fset,
+        "titulo": "Editar mantenimiento",
         "orden": orden,
     })
 
@@ -427,11 +489,11 @@ def calendario_eventos(request):
             "color": colores_estado.get(orden.estado, "#0d6efd"),
         })
 
-    for plan in PlanMantenimiento.objects.select_related("activo").filter(
+    for plan in PlanMantenimiento.objects.filter(
         estado="activo", proxima_ejecucion__isnull=False
     ):
         eventos.append({
-            "title": f"Plan {plan.get_tipo_display()} · {plan.activo.serial}",
+            "title": f"Plan {plan.get_tipo_display()} · {plan.tipo_dispositivo}",
             "start": plan.proxima_ejecucion.isoformat(),
             "url": reverse("mantenimiento:detalle_plan", args=[plan.pk]),
             "color": colores_criticidad.get(plan.criticidad, "#ffc107"),
@@ -522,3 +584,153 @@ def _actualizar_plan_por_orden(orden):
     base = orden.fecha_cierre or timezone.now().date()
     orden.plan.proxima_ejecucion = base + timedelta(days=orden.plan.frecuencia_dias)
     orden.plan.save(update_fields=["proxima_ejecucion", "fecha_actualizacion"])
+
+
+# ── Hoja de vida por activo ──────────────────────────────────────────────────
+
+@requiere_permiso("mantenimiento", "escritura")
+def crear_foto(request, pk):
+    orden = get_object_or_404(OrdenMantenimiento, pk=pk)
+    if request.method == "POST":
+        form = FotoMantenimientoForm(request.POST, request.FILES)
+        if form.is_valid():
+            foto = form.save(commit=False)
+            foto.orden = orden
+            foto.save()
+            messages.success(request, "Foto agregada al mantenimiento.")
+        else:
+            messages.error(request, "No se pudo subir la foto (formato o tamaño inválido).")
+        return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+    return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+
+
+@requiere_permiso("mantenimiento", "escritura")
+def eliminar_foto(request, pk):
+    foto = get_object_or_404(FotoMantenimiento, pk=pk)
+    orden_pk = foto.orden_id
+    if request.method == "POST":
+        foto.delete()
+        messages.success(request, "Foto eliminada.")
+    return redirect("mantenimiento:detalle_orden", pk=orden_pk)
+
+
+@requiere_permiso("mantenimiento", "escritura")
+def crear_item_checklist(request, pk):
+    orden = get_object_or_404(OrdenMantenimiento, pk=pk)
+    if request.method == "POST":
+        descripcion = request.POST.get("descripcion", "").strip()
+        if descripcion:
+            pos = orden.checklist_items.count()
+            ChecklistItem.objects.create(
+                orden=orden, descripcion=descripcion, posicion=pos
+            )
+            messages.success(request, "Ítem agregado al checklist.")
+        else:
+            messages.error(request, "Escribe una descripción para el ítem.")
+    return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def hoja_de_vida(request, activo_pk):
+    from inventario.models import Activo
+
+    activo = get_object_or_404(Activo, pk=activo_pk)
+    ordenes = (
+        OrdenMantenimiento.objects.filter(activo=activo)
+        .select_related("plan")
+        .order_by("-fecha_apertura", "-fecha_creacion")
+    )
+    ultima = ordenes.first()
+    fotos = FotoMantenimiento.objects.filter(orden__activo=activo).order_by("-fecha_creacion")
+    equipo_ocs = activo.equipo_ocs.first() if activo.equipo_ocs.exists() else None
+    software_ultimo = []
+    if ultima and ultima.software_snapshot:
+        software_ultimo = ultima.software_snapshot
+        if isinstance(software_ultimo, list) and software_ultimo and isinstance(software_ultimo[0], dict):
+            software_ultimo = [
+                s.get("name") if isinstance(s, dict) else str(s) for s in software_ultimo
+            ]
+
+    return render(request, "mantenimiento/hoja_de_vida.html", {
+        "activo": activo,
+        "ordenes": ordenes,
+        "ultima": ultima,
+        "fotos": fotos,
+        "equipo_ocs": equipo_ocs,
+        "software_ultimo": software_ultimo,
+    })
+
+
+# ── PDFs ─────────────────────────────────────────────────────────────────────
+
+def _mantenimiento_pdf_bytes(orden):
+    import weasyprint
+
+    from django.conf import settings
+
+    html = render_to_string("mantenimiento/orden_pdf.html", {
+        "orden": orden,
+        "activo": orden.activo,
+        "config": ConfiguracionSistema.get_config(),
+        "logo_path": os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.png"),
+        "generado": timezone.now(),
+    })
+    return weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).write_pdf()
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def orden_pdf(request, pk):
+    orden = get_object_or_404(OrdenMantenimiento, pk=pk)
+    pdf_bytes = _mantenimiento_pdf_bytes(orden)
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    filename = f"mantenimiento_orden_{orden.pk}_{orden.activo.serial}.pdf"
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def reporte_mantenimientos_pdf(request):
+    import weasyprint
+
+    from django.conf import settings
+
+    tipo = request.GET.get("tipo", "").strip()
+    estado = request.GET.get("estado", "").strip()
+    inicio = request.GET.get("inicio", "").strip()
+    fin = request.GET.get("fin", "").strip()
+
+    qs = (
+        OrdenMantenimiento.objects.select_related("activo")
+        .order_by("-fecha_apertura", "-fecha_creacion")
+    )
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if estado:
+        qs = qs.filter(estado=estado)
+    if inicio:
+        from datetime import datetime as _dt
+        try:
+            qs = qs.filter(fecha_apertura__gte=_dt.strptime(inicio, "%Y-%m-%d").date())
+        except ValueError:
+            pass
+    if fin:
+        from datetime import datetime as _dt
+        try:
+            qs = qs.filter(fecha_apertura__lte=_dt.strptime(fin, "%Y-%m-%d").date())
+        except ValueError:
+            pass
+
+    html = render_to_string("mantenimiento/reporte_mantenimientos_pdf.html", {
+        "ordenes": qs,
+        "config": ConfiguracionSistema.get_config(),
+        "logo_path": os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.png"),
+        "generado": timezone.now(),
+        "filtro_tipo": tipo,
+        "filtro_estado": estado,
+        "filtro_inicio": inicio,
+        "filtro_fin": fin,
+    })
+    pdf_bytes = weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).write_pdf()
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = 'inline; filename="reporte_mantenimientos.pdf"'
+    return response

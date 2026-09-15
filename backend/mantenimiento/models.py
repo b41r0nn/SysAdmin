@@ -35,10 +35,9 @@ CRITICIDADES = [
 
 
 class PlanMantenimiento(models.Model):
-    activo = models.ForeignKey(
-        "inventario.Activo",
-        on_delete=models.PROTECT,
-        related_name="planes_mantenimiento",
+    tipo_dispositivo = models.CharField(
+        max_length=50,
+        verbose_name="Categoría de equipo",
     )
     tipo = models.CharField(max_length=20, choices=TIPOS_MANTENIMIENTO)
     criticidad = models.CharField(max_length=20, choices=CRITICIDADES, default="media")
@@ -57,7 +56,7 @@ class PlanMantenimiento(models.Model):
         verbose_name_plural = "Planes de Mantenimiento"
 
     def __str__(self):
-        return f"{self.get_tipo_display()} · {self.activo.serial}"
+        return f"{self.get_tipo_display()} · {self.tipo_dispositivo}"
 
 
 class OrdenMantenimiento(models.Model):
@@ -106,6 +105,11 @@ class OrdenMantenimiento(models.Model):
     acciones = models.TextField(blank=True)
     costo_estimado = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     costo_real = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    software_snapshot = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Software instalado (snapshot OCS)",
+    )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -173,3 +177,23 @@ class ChecklistItem(models.Model):
 
     def __str__(self):
         return self.descripcion
+
+
+class FotoMantenimiento(models.Model):
+    """Foto adicional de un mantenimiento (varias por orden)."""
+    orden = models.ForeignKey(
+        OrdenMantenimiento,
+        on_delete=models.CASCADE,
+        related_name="fotos",
+    )
+    foto = models.ImageField(upload_to="mantenimiento/fotos/", verbose_name="Foto")
+    descripcion = models.CharField(max_length=200, blank=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_creacion"]
+        verbose_name = "Foto de mantenimiento"
+        verbose_name_plural = "Fotos de mantenimiento"
+
+    def __str__(self):
+        return self.descripcion or f"Foto #{self.pk}"

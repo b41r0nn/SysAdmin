@@ -73,7 +73,7 @@
                 </a>
                 {% endif %}
                 {% if puede_mantenimiento %}
-                <a class="nav-link {% if request.resolver_match.app_name == 'mantenimiento' %}active{% endif %}" href="{% url 'mantenimiento:lista_planes' %}">
+                <a class="nav-link {% if request.resolver_match.app_name == 'mantenimiento' %}active{% endif %}" href="{% url 'mantenimiento:lista_ordenes' %}">
                     <i class="bi bi-tools me-2"></i>Mantenimiento
                 </a>
                 {% endif %}

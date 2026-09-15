@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Hoja de vida — {{ activo.serial }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'inventario:detalle' activo.pk %}" class="text-decoration-none">Activo — {{ activo.serial }}</a>
+    </li>
+    <li class="breadcrumb-item active">Hoja de vida</li>
+  </ol>
+</nav>
+
+<div class="page-header mb-3 d-flex align-items-center justify-content-between">
+  <div class="d-flex align-items-center gap-3">
+    {% if activo.foto_activo %}
+    <img src="{{ activo.foto_activo.url }}" alt="Foto"
+         style="width:64px;height:64px;object-fit:cover;border-radius:12px;"
+         class="border">
+    {% else %}
+    <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:64px;height:64px;">
+      <i class="bi bi-pc-display fs-3"></i>
+    </div>
+    {% endif %}
+    <div>
+      <h1 class="page-title mb-0">Hoja de vida — {{ activo }}</h1>
+      <p class="text-muted mb-0">
+        {{ activo.get_tipo_dispositivo_display }} · #{{ activo.numero_interno }}
+        · {{ activo.get_estado_display }}
+      </p>
+    </div>
+  </div>
+  {% if ultima %}
+  <span class="sa-badge success">Ultimo mantenimiento: {{ ultima.fecha_apertura|date:"d/m/Y" }}</span>
+  {% endif %}
+</div>
+
+{% if equipo_ocs %}
+<div class="sa-card p-3 mb-4 d-flex gap-3 align-items-center" style="font-size:.88rem;">
+  <i class="bi bi-hdd-network fs-4 text-primary"></i>
+  <div>
+    <strong>Vinculado a OCS:</strong> {{ equipo_ocs.id_ocs }} · {{ equipo_ocs.nombre_host|default:"sin nombre" }}
+    · SO {{ equipo_ocs.so_nombre|default:"s/d" }}
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="sa-card p-4">
+      <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+        Historial de mantenimientos ({{ ordenes.count }})
+      </h6>
+      {% if ordenes %}
+      <div class="table-responsive">
+        <table class="table table-hover sa-table mb-0" style="font-size:.88rem;">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th>Description</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for orden in ordenes %}
+            <tr>
+              <td>{{ orden.fecha_apertura|date:"d/m/Y" }}</td>
+              <td>{{ orden.get_tipo_display }}</td>
+              <td><span class="sa-badge {% if orden.estado == 'cerrada' %}success{% elif orden.estado == 'en_proceso' %}warning{% elif orden.estado == 'reportada' %}danger{% else %}secondary{% endif %}">{{ orden.get_estado_display }}</span></td>
+              <td class="text-truncate" style="max-width:180px;">{{ orden.descripcion|default:"—" }}</td>
+              <td class="text-end">
+                <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-sm btn-outline-secondary">
+                  Ver
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-muted">Sin mantenimientos registrados.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    {% if software_ultimo %}
+    <div class="sa-card p-4 mb-4">
+      <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+        Software instalado (ultimo snapshot)
+      </h6>
+      <ul class="list-unstyled mb-0" style="font-size:.85rem;max-height:320px;overflow:auto;">
+        {% for app in software_ultimo %}
+        <li class="py-1 border-bottom" style="border-color:rgba(0,0,0,.04)!important;">
+          <i class="bi bi-box-seam me-2 text-primary"></i>{{ app }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if fotos %}
+    <div class="sa-card p-4">
+      <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+        Fotos de mantenimientos
+      </h6>
+      <div class="row g-2">
+        {% for foto in fotos %}
+        <div class="col-4">
+          <a href="{{ foto.foto.url }}" target="_blank">
+            <img src="{{ foto.foto.url }}" alt="{{ foto.descripcion|default:'Foto' }}"
+                 style="width:100%;height:80px;object-fit:cover;border-radius:8px;" class="border">
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -30,18 +30,24 @@
         </div>
       </div>
 
-      <form method="post" novalidate>
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger" style="font-size:.85rem;">
+        {% for err in form.non_field_errors %}{{ err }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <label class="form-label fw-semibold">Plan asociado</label>
-            {{ form.plan }}
-            {% if form.plan.errors %}<div class="invalid-feedback d-block">{{ form.plan.errors|join:", " }}</div>{% endif %}
-          </div>
           <div class="col-12 col-md-6">
             <label class="form-label fw-semibold">Activo</label>
             {{ form.activo }}
             {% if form.activo.errors %}<div class="invalid-feedback d-block">{{ form.activo.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Plan asociado <small class="text-muted">(opcional)</small></label>
+            {{ form.plan }}
+            {% if form.plan.errors %}<div class="invalid-feedback d-block">{{ form.plan.errors|join:", " }}</div>{% endif %}
           </div>
           <div class="col-6 col-md-3">
             <label class="form-label fw-semibold">Tipo</label>
@@ -79,6 +85,16 @@
             <label class="form-label fw-semibold">Acciones</label>
             {{ form.acciones }}
           </div>
+
+          <div class="col-12">
+            <label class="form-label fw-semibold">
+              Software instalado
+              <small class="text-muted">(snapshot del equipo — una app por linea)</small>
+            </label>
+            {{ form.software_snapshot_text }}
+            {% if form.software_snapshot_text.errors %}<div class="invalid-feedback d-block">{{ form.software_snapshot_text.errors|join:", " }}</div>{% endif %}
+          </div>
+
           <div class="col-6 col-md-3">
             <label class="form-label fw-semibold">Costo estimado</label>
             {{ form.costo_estimado }}
@@ -89,11 +105,38 @@
           </div>
         </div>
 
+        {% if fset %}
+        <hr class="my-4">
+        <h6 class="fw-semibold text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">Fotos del mantenimiento</h6>
+        {{ fset.management_form }}
+        <div class="row g-3 mt-1">
+          {% for foto_form in fset %}
+          <div class="col-12 col-md-4">
+            <div class="border rounded p-3" style="background:var(--sa-bg-alt,#f8fafc);">
+              {% if foto_form.instance.pk and foto_form.instance.foto %}
+              <div class="mb-2">
+                <img src="{{ foto_form.instance.foto.url }}" alt="Foto" style="max-height:120px;max-width:100%;border-radius:6px;">
+                {% if foto_form.DELETE %}<div class="form-check mt-1" style="font-size:.8rem;">{{ foto_form.DELETE }} <label class="form-check-label text-danger">Eliminar</label></div>{% endif %}
+              </div>
+              {% endif %}
+              <div class="mb-2">{{ foto_form.foto }}</div>
+              <div>{{ foto_form.descripcion }}</div>
+              {% if foto_form.errors %}<div class="invalid-feedback d-block">{{ foto_form.errors|join:", " }}</div>{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
         <div class="d-flex gap-2 mt-4">
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-check2-circle me-2"></i>Guardar
           </button>
+          {% if orden %}
+          <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+          {% else %}
           <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-outline-secondary">Cancelar</a>
+          {% endif %}
         </div>
       </form>
     </div>
