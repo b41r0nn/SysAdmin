@@ -12,7 +12,7 @@
       font-size: 12.5pt;
       color: #1e293b;
       background: #fff;
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     @page {
@@ -27,8 +27,8 @@
       justify-content: space-between;
       gap: 6mm;
       border-bottom: 2px solid #0156a6;
-      padding-bottom: 2.5mm;
-      margin-bottom: 3.5mm;
+      padding-bottom: 3mm;
+      margin-bottom: 4.5mm;
     }
     .header .logo-block { display: flex; align-items: center; gap: 4mm; }
     .header img { height: 14mm; }
@@ -51,7 +51,7 @@
     .parrafo {
       text-align: justify;
       font-size: 12.5pt;
-      line-height: 1.4;
+      line-height: 1.35;
       margin-bottom: 3mm;
     }
     .subtitulo {
@@ -60,32 +60,34 @@
       margin: 3.5mm 0 1.5mm 0;
     }
 
-    /* ─── Datos del equipo: tabla de etiqueta/valor alineada ───────────── */
-    .datos {
+    /* ─── Cajas de descripción: campos a lo ancho, tipo ficha ─────────── */
+    .section-box {
       width: 100%;
       border-collapse: collapse;
-      margin: 0 0 3.5mm 0;
+      border: 1px solid #cbd5e1;
+      margin-bottom: 2.5mm;
     }
-    .datos td {
-      padding: 1mm 2mm;
+    .section-box td {
+      border: 1px solid #cbd5e1;
+      padding: 1.5mm 2.5mm;
       vertical-align: top;
       font-size: 12.5pt;
-      line-height: 1.45;
+      line-height: 1.35;
     }
-    .datos .etiqueta {
-      width: 46mm;
+    .section-box .etiqueta {
+      width: 38mm;
       font-weight: 700;
       white-space: nowrap;
     }
-    .datos .mono { font-family: inherit; }
+    .section-box .mono { font-family: inherit; }
 
     /* ─── Observaciones ────────────────────────────────────────────────── */
     .obs {
       font-size: 12.5pt;
       margin: 2mm 0;
       text-align: justify;
-      line-height: 1.4;
-      min-height: 10mm;
+      line-height: 1.35;
+      min-height: 9.5mm;
     }
     .obs-titulo { font-weight: 700; font-size: 12.5pt; margin: 2.5mm 0 1mm 0; }
 
@@ -96,16 +98,16 @@
       line-height: 1.3;
       text-align: justify;
       color: #334155;
-      margin: 2mm 0;
+      margin: 1.5mm 0;
     }
-    .nota-titulo { font-weight: 700; font-size: 8pt; margin-bottom: 0.6mm; }
+    .nota-titulo { font-weight: 700; font-size: 8pt; margin-bottom: 0.5mm; }
 
     /* ─── Despedida ────────────────────────────────────────────────────── */
     .despedida {
       font-size: 12.5pt;
-      margin: 3mm 0 2mm 0;
+      margin: 2.5mm 0 2mm 0;
       text-align: justify;
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     /* ─── Firmas ───────────────────────────────────────────────────────── */
@@ -124,7 +126,7 @@
     }
     .firma-linea {
       border-top: 1px solid #0f172a;
-      margin-top: 28mm;
+      margin-top: 26mm;
       margin-bottom: 1.5mm;
     }
     .firma-texto {
@@ -168,33 +170,27 @@
   </div>
 
   <div class="subtitulo">Descripción del equipo:</div>
-  <table class="datos">
+  <table class="section-box">
     <tr>
       <td class="etiqueta">Equipo:</td>
       <td>{{ asignacion.activo.get_tipo_dispositivo_display }}
           {{ asignacion.activo.nombre_equipo|default:"" }}</td>
-    </tr>
-    <tr>
       <td class="etiqueta">Marca y modelo:</td>
       <td>{{ asignacion.activo.marca }} {{ asignacion.activo.modelo }}</td>
     </tr>
     <tr>
       <td class="etiqueta">Serial:</td>
       <td><span class="mono">{{ asignacion.activo.serial }}</span></td>
-    </tr>
-    <tr>
       <td class="etiqueta">Número interno:</td>
       <td>{% if asignacion.activo.numero_interno %}{{ asignacion.activo.numero_interno }}{% else %}—{% endif %}</td>
     </tr>
   </table>
 
   <div class="subtitulo">Accesorios y condición de entrega:</div>
-  <table class="datos">
+  <table class="section-box">
     <tr>
       <td class="etiqueta">Accesorios incluidos:</td>
       <td>{{ asignacion.accesorios|default:"Ninguno" }}</td>
-    </tr>
-    <tr>
       <td class="etiqueta">Condición de entrega:</td>
       <td>{{ asignacion.condicion_entrega|default:"Nuevo" }}</td>
     </tr>
