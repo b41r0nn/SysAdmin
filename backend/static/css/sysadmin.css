@@ -182,6 +182,10 @@ img.sa-watermark {
   transition: all 200ms ease;
 }
 
+.sa-card-pad {
+  padding: 1.25rem;
+}
+
 .sa-card:hover {
   box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
   transform: translateY(-2px);
@@ -417,36 +421,63 @@ img.sa-watermark {
 .sa-stat-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 18px;
+}
+
+/* Rejilla de tarjetas de estadísticas: 4 columnas iguales, 100% del padre */
+.sa-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 1.5rem;
 }
 
 .sa-stat-card .stat-icon {
-  width: 48px;
-  height: 48px;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
   border-radius: var(--sa-radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
 }
 
 .sa-stat-card .stat-content {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .sa-stat-card .stat-value {
   font-family: var(--sa-font-mono);
-  font-size: 1.8rem;
+  font-size: clamp(1.05rem, 1.15vw, 1.6rem);
   font-weight: 700;
   color: var(--sa-primary);
-  overflow-wrap: break-word;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sa-stat-card .stat-label {
   font-size: 0.875rem;
   color: #64748b;
   font-weight: 500;
+  margin-top: 2px;
+}
+
+@media (max-width: 1200px) {
+  .sa-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .sa-stats-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sa-stat-card .stat-trend {

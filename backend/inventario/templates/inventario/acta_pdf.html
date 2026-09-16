@@ -8,8 +8,8 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      font-size: 10pt;
+      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      font-size: 12.5pt;
       color: #1e293b;
       background: #fff;
       line-height: 1.4;
@@ -17,7 +17,7 @@
 
     @page {
       size: A4 portrait;
-      margin: 12mm 14mm 14mm 14mm;
+      margin: 8mm 12mm 10mm 12mm;
     }
 
     /* ─── Encabezado: logo a la izquierda ──────────────────────────────── */
@@ -27,25 +27,14 @@
       justify-content: space-between;
       gap: 6mm;
       border-bottom: 2px solid #0156a6;
-      padding-bottom: 3mm;
-      margin-bottom: 4mm;
+      padding-bottom: 2.5mm;
+      margin-bottom: 3.5mm;
     }
     .header .logo-block { display: flex; align-items: center; gap: 4mm; }
-    .header img { height: 13mm; }
-    .header .empresa {
-      font-size: 9pt;
-      font-weight: 700;
-      letter-spacing: .04em;
-      color: #0f172a;
-      line-height: 1.2;
-    }
-    .header .slogan {
-      font-size: 7.5pt;
-      color: #475569;
-    }
+    .header img { height: 14mm; }
     .header .titulo {
       text-align: right;
-      font-size: 11pt;
+      font-size: 12.5pt;
       font-weight: 700;
       color: #0156a6;
       letter-spacing: .05em;
@@ -55,106 +44,104 @@
 
     /* ─── Cuerpo ────────────────────────────────────────────────────────── */
     .fecha {
-      font-size: 10pt;
-      margin: 2.5mm 0;
+      font-size: 12.5pt;
+      margin: 3mm 0;
     }
-    .senor {
-      font-size: 10pt;
-      margin-bottom: 2.5mm;
-    }
-    .senor .nombre { font-weight: 700; }
+    .senor { font-size: 12.5pt; margin-bottom: 3mm; }
     .parrafo {
       text-align: justify;
-      font-size: 10pt;
+      font-size: 12.5pt;
       line-height: 1.4;
-      margin-bottom: 2.5mm;
+      margin-bottom: 3mm;
     }
     .subtitulo {
       font-weight: 700;
-      font-size: 10pt;
-      margin: 2mm 0 1.2mm 0;
+      font-size: 12.5pt;
+      margin: 3.5mm 0 1.5mm 0;
     }
 
     /* ─── Datos del equipo: tabla de etiqueta/valor alineada ───────────── */
     .datos {
       width: 100%;
       border-collapse: collapse;
-      margin: 0 0 2.5mm 0;
+      margin: 0 0 3.5mm 0;
     }
     .datos td {
       padding: 1mm 2mm;
       vertical-align: top;
-      font-size: 10pt;
-      line-height: 1.35;
+      font-size: 12.5pt;
+      line-height: 1.45;
     }
     .datos .etiqueta {
-      width: 44mm;
+      width: 46mm;
       font-weight: 700;
       white-space: nowrap;
     }
-    .datos .mono { font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; }
+    .datos .mono { font-family: inherit; }
 
     /* ─── Observaciones ────────────────────────────────────────────────── */
     .obs {
-      font-size: 10pt;
+      font-size: 12.5pt;
       margin: 2mm 0;
       text-align: justify;
       line-height: 1.4;
+      min-height: 10mm;
     }
-    .obs-titulo { font-weight: 700; font-size: 10pt; margin: 2mm 0 1.2mm 0; }
+    .obs-titulo { font-weight: 700; font-size: 12.5pt; margin: 2.5mm 0 1mm 0; }
 
     /* ─── Nota legal ───────────────────────────────────────────────────── */
     .nota {
       font-size: 8pt;
-      line-height: 1.35;
+      font-style: italic;
+      line-height: 1.3;
       text-align: justify;
-      color: #1e293b;
+      color: #334155;
       margin: 2mm 0;
     }
-    .nota-titulo { font-weight: 700; font-size: 8pt; margin-bottom: 0.8mm; }
+    .nota-titulo { font-weight: 700; font-size: 8pt; margin-bottom: 0.6mm; }
 
     /* ─── Despedida ────────────────────────────────────────────────────── */
     .despedida {
-      font-size: 10pt;
-      margin: 2.5mm 0 3mm 0;
+      font-size: 12.5pt;
+      margin: 3mm 0 2mm 0;
       text-align: justify;
       line-height: 1.4;
     }
 
     /* ─── Firmas ───────────────────────────────────────────────────────── */
     .firmas {
-      margin-top: 7mm;
+      margin-top: 2mm;
     }
     .fila-firma {
       display: flex;
       justify-content: space-around;
-      gap: 14mm;
-      margin-top: 4mm;
+      gap: 16mm;
     }
     .firma-box {
       flex: 1;
-      max-width: 65mm;
+      max-width: 68mm;
       text-align: center;
     }
     .firma-linea {
       border-top: 1px solid #0f172a;
-      margin-bottom: 1mm;
+      margin-top: 28mm;
+      margin-bottom: 1.5mm;
     }
     .firma-texto {
-      font-size: 9.5pt;
-      line-height: 1.3;
+      font-size: 12.5pt;
+      line-height: 1.35;
     }
-    .firma-texto .cargo { font-size: 8pt; color: #475569; }
+    .firma-texto .cargo { font-size: 9.5pt; color: #475569; }
 
     /* ─── Pie de página ────────────────────────────────────────────────── */
     .footer {
       position: fixed;
       bottom: 0;
-      left: 14mm;
-      right: 14mm;
+      left: 15mm;
+      right: 15mm;
       border-top: 1px solid #e2e8f0;
       padding-top: 1.2mm;
-      font-size: 7pt;
+      font-size: 8pt;
       color: #94a3b8;
       text-align: center;
     }
@@ -166,10 +153,6 @@
   <div class="header">
     <div class="logo-block">
       <img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}">
-      <div>
-        <div class="empresa">{{ config.nombre_empresa|upper }}</div>
-        <div class="slogan">Su Distribuidor Hospitalario</div>
-      </div>
     </div>
     <div class="titulo">ACTA DE ASIGNACIÓN<br>DE EQUIPO</div>
   </div>
@@ -179,10 +162,9 @@
   <div class="senor">Señor(a): <span class="nombre">{{ asignacion.usuario.nombre_completo }}</span></div>
 
   <div class="parrafo">
-    Por medio del presente documento se deja constancia de la entrega del equipo y herramientas de trabajo
-    asignados al colaborador anteriormente mencionado. La entrega se realiza en cumplimiento de las políticas
-    internas de la empresa {{ config.nombre_empresa|upper }}. "Su Distribuidor Hospitalario".
-    A continuación, se detallan los elementos entregados:
+    Por medio del presente documento se deja constancia de la entrega del equipo asignado al colaborador
+    anteriormente mencionado, en cumplimiento de las políticas internas de la empresa
+    {{ config.nombre_empresa|upper }}. A continuación, se detallan los elementos entregados:
   </div>
 
   <div class="subtitulo">Descripción del equipo:</div>
