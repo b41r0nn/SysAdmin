@@ -84,6 +84,112 @@
 <div class="row g-3">
   <div class="col-lg-6">
     <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">Activos por usuario</h5>
+      <input
+        class="form-control"
+        type="text"
+        name="q"
+        placeholder="Buscar por nombre o documento…"
+        autocomplete="off"
+        hx-get="{% url 'reports:activos_por_usuario' %}"
+        hx-trigger="input changed delay:350ms, search"
+        hx-target="#reporte-usuario"
+        hx-swap="innerHTML"
+      >
+      <div
+        class="mt-3"
+        id="reporte-usuario"
+        hx-get="{% url 'reports:activos_por_usuario' %}"
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      ></div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
+      <h5 class="fw-semibold mb-3">Activos por lugar</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Lugar / Ubicación</th>
+              <th class="text-end">Cantidad de activos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in activos_por_lugar %}
+            <tr>
+              <td>{{ item.ubicacion_fisica }}</td>
+              <td class="text-end fw-semibold">{{ item.total }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="2" class="text-muted">Sin ubicaciones registradas</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div>
+    <div class="sa-card p-4">
+      <h5 class="fw-semibold mb-3">Garantías</h5>
+      <p class="text-muted mb-3" style="font-size:.85rem;">
+        {{ garantia_vencidos|length }} vencid{{ garantia_vencidos|length|pluralize:"a,as" }}
+        · {{ garantia_vigentes|length }} vigente{{ garantia_vigentes|length|pluralize }}
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Activo</th>
+              <th>Serial</th>
+              <th>Proveedor</th>
+              <th>Fecha fin garantía</th>
+              <th class="text-end">Días restantes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in garantia_vencidos %}
+            <tr class="bg-danger bg-opacity-10">
+              <td>{{ item.activo.marca }} {{ item.activo.modelo }}</td>
+              <td class="font-monospace" style="font-size:.85rem;">{{ item.activo.serial }}</td>
+              <td>{{ item.activo.proveedor|default:"—" }}</td>
+              <td>{{ item.vencimiento|date:"d/m/Y" }}</td>
+              <td class="text-end">
+                <span class="badge bg-danger">Vencido</span>
+              </td>
+            </tr>
+            {% endfor %}
+            {% for item in garantia_vigentes %}
+            <tr>
+              <td>{{ item.activo.marca }} {{ item.activo.modelo }}</td>
+              <td class="font-monospace" style="font-size:.85rem;">{{ item.activo.serial }}</td>
+              <td>{{ item.activo.proveedor|default:"—" }}</td>
+              <td>{{ item.vencimiento|date:"d/m/Y" }}</td>
+              <td class="text-end fw-semibold">{{ item.dias_restantes }} días</td>
+            </tr>
+            {% empty %}
+            {% if not garantia_vencidos %}
+            <tr>
+              <td colspan="5" class="text-muted">Ningún activo con garantía registrada</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="sa-card p-4 h-100">
       <h5 class="fw-semibold mb-3">Inventario por estado</h5>
       <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">

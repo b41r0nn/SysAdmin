@@ -6,6 +6,7 @@ app_name = "reports"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("activos-por-usuario/", views.activos_por_usuario, name="activos_por_usuario"),
     path("inventario/pdf/", views.inventario_pdf, name="inventario_pdf"),
     path("usuarios/pdf/", views.usuarios_pdf, name="usuarios_pdf"),
     path("inventario/excel/", views.inventario_excel, name="inventario_excel"),

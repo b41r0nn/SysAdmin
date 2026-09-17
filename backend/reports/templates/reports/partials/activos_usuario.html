@@ -1,0 +1,43 @@
+<div class="sa-card p-4">
+  {% if not q %}
+    <p class="text-muted mb-0">Escribe un nombre o documento para ver los activos asignados.</p>
+  {% elif not usuario %}
+    <p class="text-muted mb-0">Sin resultados para «{{ q }}».</p>
+  {% else %}
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+      <div>
+        <h5 class="fw-semibold mb-1">{{ usuario.nombre_completo }}</h5>
+        <div class="text-muted" style="font-size:.85rem;">
+          {{ usuario.cargo|default:"—" }}{% if usuario.cargo %} · {% endif %}{{ usuario.area|default:"" }}
+        </div>
+      </div>
+      <span class="badge bg-primary bg-opacity-10 text-primary" style="font-size:.8rem;">
+        {{ asignaciones|length }} activo{{ asignaciones|length|pluralize }} asignado{{ asignaciones|length|pluralize }}
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Activo</th>
+            <th>Serial</th>
+            <th>Fecha de asignación</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for asignacion in asignaciones %}
+          <tr>
+            <td>{{ asignacion.activo.marca }} {{ asignacion.activo.modelo }}</td>
+            <td class="font-monospace" style="font-size:.85rem;">{{ asignacion.activo.serial }}</td>
+            <td>{{ asignacion.fecha_asignacion|date:"d/m/Y" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="text-muted">Sin activos asignados actualmente.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
