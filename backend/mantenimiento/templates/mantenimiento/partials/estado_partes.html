@@ -1,0 +1,22 @@
+{% if parte_fields %}
+  <div class="row g-3">
+    {% for field in parte_fields %}
+    <div class="col-12 col-md-6">
+      <div class="border rounded p-3" style="background:var(--sa-bg-alt,#f8fafc);">
+        <label class="form-label fw-semibold mb-2">{{ field.label }}</label>
+        <div class="d-flex flex-wrap gap-3">
+          {% for choice in field %}
+            <div class="form-check">
+              {{ choice.tag }}
+              <label class="form-check-label" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+            </div>
+          {% endfor %}
+        </div>
+        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-muted mb-0">Seleccioná un activo para ver sus partes.</p>
+{% endif %}

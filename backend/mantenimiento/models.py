@@ -103,6 +103,14 @@ class OrdenMantenimiento(models.Model):
     )
     diagnostico = models.TextField(blank=True)
     acciones = models.TextField(blank=True)
+
+    accion_limpieza_general = models.BooleanField(default=False)
+    accion_mantenimiento_logico = models.BooleanField(default=False)
+    accion_cambio_pasta_termica = models.BooleanField(default=False)
+    accion_cambio_parte = models.BooleanField(default=False)
+    accion_cambio_parte_detalle = models.CharField(max_length=255, blank=True)
+    estado_partes = models.JSONField(default=dict, blank=True)
+
     costo_estimado = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     costo_real = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     software_snapshot = models.JSONField(

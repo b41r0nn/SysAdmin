@@ -602,6 +602,91 @@ class ChecklistEditableTests(TestCase):
         )
 
 
+class OrdenAccionesYPartesTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo_portatil = Activo.objects.create(
+            serial="SN-PT-001",
+            tipo_dispositivo="portatil",
+            marca="Lenovo",
+            modelo="ThinkPad",
+            estado="disponible",
+        )
+
+    def test_crear_orden_guarda_acciones_y_estado_partes(self):
+        resp = self.client.post(
+            reverse("mantenimiento:crear_orden"),
+            {
+                "activo": self.activo_portatil.pk,
+                "tipo": "preventivo",
+                "estado": "abierta",
+                "prioridad": "media",
+                "fecha_apertura": HOY,
+                "accion_limpieza_general": "on",
+                "accion_mantenimiento_logico": "on",
+                "accion_cambio_parte": "on",
+                "accion_cambio_parte_detalle": "Teclado completo",
+                "parte_pantalla": "bien",
+                "parte_teclado": "mal",
+                "parte_bateria": "bien",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        orden = OrdenMantenimiento.objects.get(activo=self.activo_portatil)
+        self.assertTrue(orden.accion_limpieza_general)
+        self.assertTrue(orden.accion_mantenimiento_logico)
+        self.assertFalse(orden.accion_cambio_pasta_termica)
+        self.assertTrue(orden.accion_cambio_parte)
+        self.assertEqual(orden.accion_cambio_parte_detalle, "Teclado completo")
+        self.assertEqual(
+            orden.estado_partes,
+            {"pantalla": "bien", "teclado": "mal", "bateria": "bien"},
+        )
+
+    def test_cambio_parte_sin_detalle_devuelve_error(self):
+        resp = self.client.post(
+            reverse("mantenimiento:crear_orden"),
+            {
+                "activo": self.activo_portatil.pk,
+                "tipo": "correctivo",
+                "estado": "abierta",
+                "prioridad": "alta",
+                "fecha_apertura": HOY,
+                "accion_cambio_parte": "on",
+                "accion_cambio_parte_detalle": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(OrdenMantenimiento.objects.count(), 0)
+        self.assertContains(resp, "Indicá qué parte se cambió")
+
+    def test_partial_estado_partes_cambia_segun_tipo_activo(self):
+        activo_monitor = Activo.objects.create(
+            serial="SN-MN-001",
+            tipo_dispositivo="monitor",
+            marca="Dell",
+            modelo="P2419",
+            estado="disponible",
+        )
+        resp_portatil = self.client.get(
+            reverse("mantenimiento:estado_partes_partial"),
+            {"activo": self.activo_portatil.pk},
+        )
+        self.assertEqual(resp_portatil.status_code, 200)
+        self.assertContains(resp_portatil, "Teclado")
+        self.assertContains(resp_portatil, "Touchpad")
+
+        resp_monitor = self.client.get(
+            reverse("mantenimiento:estado_partes_partial"),
+            {"activo": activo_monitor.pk},
+        )
+        self.assertEqual(resp_monitor.status_code, 200)
+        self.assertContains(resp_monitor, "Puerto de video")
+        self.assertNotContains(resp_monitor, "Teclado")
+
+
 class HojaDeVidaTests(TestCase):
     def setUp(self):
         self.user = _user("superadmin")
@@ -627,6 +712,20 @@ class HojaDeVidaTests(TestCase):
     def test_hoja_de_vida_sin_mantenimientos(self):
         resp = self.client.get(reverse("mantenimiento:hoja_de_vida", args=[self.activo.pk]))
         self.assertEqual(resp.status_code, 200)
+
+    def test_hoja_de_vida_muestra_acciones_y_estado_partes(self):
+        orden = _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        orden.accion_limpieza_general = True
+        orden.accion_cambio_parte = True
+        orden.accion_cambio_parte_detalle = "Disco duro"
+        orden.estado_partes = {"disco_duro": "mal", "memoria_ram": "bien"}
+        orden.save()
+        resp = self.client.get(reverse("mantenimiento:hoja_de_vida", args=[self.activo.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Limpieza general")
+        self.assertContains(resp, "Cambio de parte")
+        self.assertContains(resp, "Disco duro")
+        self.assertContains(resp, "Memoria RAM")
 
 
 class PdfMantenimientoTests(TestCase):
