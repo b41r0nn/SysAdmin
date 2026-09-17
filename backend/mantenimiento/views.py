@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 from accounts.permisos import PERMISOS_POR_ROL, requiere_permiso
 from administracion.models import ConfiguracionSistema
+from inventario.models import Activo
 from notificaciones.services import aviso_usuario, encolar_email
 
 from .forms import (
@@ -35,6 +36,7 @@ from .models import (
     PRIORIDADES,
     CRITICIDADES,
 )
+from .constants import PARTES_POR_TIPO
 from .services import snapshot_software_ocs
 
 from django.forms import modelformset_factory
@@ -51,6 +53,10 @@ FotoFormSet = modelformset_factory(
 # las validaciones de la vista dependen de ese prefijo (fotos-TOTAL_FORMS...).
 def _foto_formset(*args, **kwargs):
     return FotoFormSet(*args, prefix="fotos", **kwargs)
+
+
+def _parte_fields(form):
+    return [field for field in form if field.name.startswith("parte_")]
 
 
 # ── Planes ───────────────────────────────────────────────────────────────────
@@ -245,11 +251,18 @@ def detalle_orden(request, pk):
     )
     fotos = orden.fotos.all()
 
+    partes_labels = dict(PARTES_POR_TIPO.get(orden.activo.tipo_dispositivo, []))
+    estado_partes_items = [
+        (partes_labels.get(slug, slug), estado)
+        for slug, estado in (orden.estado_partes or {}).items()
+    ]
+
     return render(request, "mantenimiento/detalle_orden.html", {
         "orden": orden,
         "repuestos": repuestos,
         "repuestos_total": repuestos_total.get("total") or 0,
         "fotos": fotos,
+        "estado_partes_items": estado_partes_items,
     })
 
 
@@ -294,7 +307,6 @@ def crear_orden(request):
             plan = get_object_or_404(PlanMantenimiento, pk=plan_pk)
             initial["plan"] = plan
         if activo_pk:
-            from inventario.models import Activo
             activo = get_object_or_404(Activo, pk=activo_pk)
             software = snapshot_software_ocs(activo)
             initial.update({
@@ -310,6 +322,24 @@ def crear_orden(request):
         "form": form,
         "fset": fset,
         "titulo": "Documentar mantenimiento",
+        "parte_fields": _parte_fields(form),
+    })
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def estado_partes_partial(request):
+    activo_pk = request.GET.get("activo")
+    activo = get_object_or_404(Activo, pk=activo_pk) if activo_pk else None
+    orden_pk = request.GET.get("orden")
+    if orden_pk:
+        orden = get_object_or_404(OrdenMantenimiento, pk=orden_pk)
+        form = OrdenMantenimientoForm(instance=orden, initial={"activo": activo} if activo else {})
+    else:
+        form = OrdenMantenimientoForm(initial={"activo": activo} if activo else {})
+    return render(request, "mantenimiento/partials/estado_partes.html", {
+        "form": form,
+        "activo": activo,
+        "parte_fields": _parte_fields(form),
     })
 
 
@@ -348,6 +378,7 @@ def editar_orden(request, pk):
         "fset": fset,
         "titulo": "Editar mantenimiento",
         "orden": orden,
+        "parte_fields": _parte_fields(form),
     })
 
 
@@ -651,6 +682,23 @@ def hoja_de_vida(request, activo_pk):
                 s.get("name") if isinstance(s, dict) else str(s) for s in software_ultimo
             ]
 
+    acciones_ultimas = []
+    estado_partes_items = []
+    if ultima:
+        if ultima.accion_limpieza_general:
+            acciones_ultimas.append("Limpieza general")
+        if ultima.accion_mantenimiento_logico:
+            acciones_ultimas.append("Mantenimiento lógico")
+        if ultima.accion_cambio_pasta_termica:
+            acciones_ultimas.append("Cambio de pasta térmica")
+        if ultima.accion_cambio_parte:
+            acciones_ultimas.append("Cambio de parte")
+        partes_labels = dict(PARTES_POR_TIPO.get(activo.tipo_dispositivo, []))
+        estado_partes_items = [
+            (partes_labels.get(slug, slug), estado)
+            for slug, estado in (ultima.estado_partes or {}).items()
+        ]
+
     return render(request, "mantenimiento/hoja_de_vida.html", {
         "activo": activo,
         "ordenes": ordenes,
@@ -658,6 +706,8 @@ def hoja_de_vida(request, activo_pk):
         "fotos": fotos,
         "equipo_ocs": equipo_ocs,
         "software_ultimo": software_ultimo,
+        "acciones_ultimas": acciones_ultimas,
+        "estado_partes_items": estado_partes_items,
     })
 
 

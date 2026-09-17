@@ -82,8 +82,54 @@
             {{ form.diagnostico }}
           </div>
           <div class="col-12">
-            <label class="form-label fw-semibold">Acciones</label>
+            <label class="form-label fw-semibold">{{ form.acciones.label }}</label>
             {{ form.acciones }}
+          </div>
+
+          <div class="col-12">
+            <h6 class="fw-semibold text-muted text-uppercase mt-2" style="font-size:.8rem;letter-spacing:.08em;">
+              Acciones realizadas
+            </h6>
+            <div class="row g-3">
+              <div class="col-6 col-md-3">
+                <div class="form-check">
+                  {{ form.accion_limpieza_general }}
+                  <label class="form-check-label" for="{{ form.accion_limpieza_general.id_for_label }}">{{ form.accion_limpieza_general.label }}</label>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="form-check">
+                  {{ form.accion_mantenimiento_logico }}
+                  <label class="form-check-label" for="{{ form.accion_mantenimiento_logico.id_for_label }}">{{ form.accion_mantenimiento_logico.label }}</label>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="form-check">
+                  {{ form.accion_cambio_pasta_termica }}
+                  <label class="form-check-label" for="{{ form.accion_cambio_pasta_termica.id_for_label }}">{{ form.accion_cambio_pasta_termica.label }}</label>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="form-check">
+                  {{ form.accion_cambio_parte }}
+                  <label class="form-check-label" for="{{ form.accion_cambio_parte.id_for_label }}">{{ form.accion_cambio_parte.label }}</label>
+                </div>
+              </div>
+              <div class="col-12 col-md-6" id="cambio-parte-detalle" style="display:none;">
+                <label class="form-label fw-semibold">{{ form.accion_cambio_parte_detalle.label }}</label>
+                {{ form.accion_cambio_parte_detalle }}
+                {% if form.accion_cambio_parte_detalle.errors %}<div class="invalid-feedback d-block">{{ form.accion_cambio_parte_detalle.errors|join:", " }}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <h6 class="fw-semibold text-muted text-uppercase mt-2" style="font-size:.8rem;letter-spacing:.08em;">
+              Estado general de partes
+            </h6>
+            <div id="estado-partes-container">
+              {% include "mantenimiento/partials/estado_partes.html" %}
+            </div>
           </div>
 
           <div class="col-12">
@@ -104,6 +150,15 @@
             {{ form.costo_real }}
           </div>
         </div>
+
+        <script>
+        (function(){
+          var check = document.getElementById('{{ form.accion_cambio_parte.id_for_label }}');
+          var detalle = document.getElementById('cambio-parte-detalle');
+          function toggle(){ detalle.style.display = check.checked ? 'block' : 'none'; }
+          if(check){ check.addEventListener('change', toggle); toggle(); }
+        })();
+        </script>
 
         {% if fset %}
         <hr class="my-4">

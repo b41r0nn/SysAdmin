@@ -88,6 +88,46 @@
   </div>
 
   <div class="col-12 col-lg-5">
+    {% if ultima %}
+    <div class="sa-card p-4 mb-4">
+      <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+        Último mantenimiento
+      </h6>
+      {% if acciones_ultimas %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          {% for accion in acciones_ultimas %}
+            <span class="sa-badge success">{{ accion }}</span>
+          {% endfor %}
+        </div>
+        {% if ultima.accion_cambio_parte and ultima.accion_cambio_parte_detalle %}
+          <p class="mb-3" style="font-size:.88rem;">
+            <strong>Detalle del cambio:</strong> {{ ultima.accion_cambio_parte_detalle }}
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted mb-3" style="font-size:.88rem;">Sin acciones registradas.</p>
+      {% endif %}
+
+      {% if estado_partes_items %}
+        <h6 class="fw-semibold mb-2 text-muted text-uppercase" style="font-size:.75rem;letter-spacing:.08em;">
+          Estado de partes
+        </h6>
+        <div class="row g-2">
+          {% for label, estado in estado_partes_items %}
+          <div class="col-6">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-1" style="font-size:.85rem;">
+              <span>{{ label }}</span>
+              <span class="sa-badge {% if estado == 'bien' %}success{% else %}danger{% endif %}">
+                {% if estado == 'bien' %}Bien{% else %}Mal{% endif %}
+              </span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% if software_ultimo %}
     <div class="sa-card p-4 mb-4">
       <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">

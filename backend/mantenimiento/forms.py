@@ -1,7 +1,11 @@
+import json
+
 from django import forms
+from django.urls import reverse
 
 from inventario.models import Activo, CatalogoModelo, TIPOS
 
+from .constants import PARTES_POR_TIPO
 from .models import (
     ChecklistItem,
     FotoMantenimiento,
@@ -9,6 +13,19 @@ from .models import (
     PlanMantenimiento,
     Repuesto,
 )
+
+
+ESTADO_PARTE_CHOICES = [
+    ("bien", "Buen estado"),
+    ("mal", "Mal estado"),
+]
+
+
+def _partes_por_activo(activo):
+    if not activo:
+        return []
+    tipo = getattr(activo, "tipo_dispositivo", "")
+    return PARTES_POR_TIPO.get(tipo, [])
 
 
 def _opciones_categorias(actual=""):
@@ -111,9 +128,22 @@ class OrdenMantenimientoForm(forms.ModelForm):
             "descripcion",
             "diagnostico",
             "acciones",
+            "accion_limpieza_general",
+            "accion_mantenimiento_logico",
+            "accion_cambio_pasta_termica",
+            "accion_cambio_parte",
+            "accion_cambio_parte_detalle",
             "costo_estimado",
             "costo_real",
         ]
+        labels = {
+            "acciones": "Notas adicionales",
+            "accion_limpieza_general": "Limpieza general",
+            "accion_mantenimiento_logico": "Mantenimiento lógico",
+            "accion_cambio_pasta_termica": "Cambio de pasta térmica",
+            "accion_cambio_parte": "Cambio de parte",
+            "accion_cambio_parte_detalle": "Detalle del cambio de parte",
+        }
         widgets = {
             "plan": forms.Select(attrs={"class": "form-select"}),
             "activo": forms.Select(attrs={"class": "form-select"}),
@@ -126,6 +156,11 @@ class OrdenMantenimientoForm(forms.ModelForm):
             "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "diagnostico": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "acciones": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "accion_limpieza_general": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "accion_mantenimiento_logico": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "accion_cambio_pasta_termica": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "accion_cambio_parte": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "accion_cambio_parte_detalle": forms.TextInput(attrs={"class": "form-control"}),
             "costo_estimado": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "costo_real": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
         }
@@ -136,6 +171,49 @@ class OrdenMantenimientoForm(forms.ModelForm):
             self.fields["software_snapshot_text"].initial = "\n".join(self.instance.software_snapshot)
         self.fields["plan"].required = False
         self.fields["plan"].queryset = PlanMantenimiento.objects.all()
+        self.fields["activo"].widget.attrs.update({
+            "hx-get": reverse("mantenimiento:estado_partes_partial"),
+            "hx-trigger": "change",
+            "hx-target": "#estado-partes-container",
+            "hx-vals": json.dumps({
+                "orden": self.instance.pk if self.instance and self.instance.pk else ""
+            }),
+        })
+        self._agregar_campos_estado_partes()
+
+    def _activo_para_partes(self):
+        activo_pk = self.data.get("activo")
+        if activo_pk:
+            try:
+                return Activo.objects.get(pk=activo_pk)
+            except Activo.DoesNotExist:
+                return None
+        if self.instance and self.instance.pk and self.instance.activo_id:
+            return self.instance.activo
+        activo = self.initial.get("activo")
+        if isinstance(activo, Activo):
+            return activo
+        if activo:
+            try:
+                return Activo.objects.get(pk=activo)
+            except Activo.DoesNotExist:
+                return None
+        return None
+
+    def _agregar_campos_estado_partes(self):
+        activo = self._activo_para_partes()
+        guardados = {}
+        if self.instance and self.instance.pk and self.instance.estado_partes:
+            guardados = self.instance.estado_partes
+        for slug, label in _partes_por_activo(activo):
+            nombre_campo = f"parte_{slug}"
+            self.fields[nombre_campo] = forms.ChoiceField(
+                label=label,
+                choices=ESTADO_PARTE_CHOICES,
+                required=False,
+                widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
+                initial=guardados.get(slug, ""),
+            )
 
     def clean_software_snapshot_text(self):
         text = self.cleaned_data.get("software_snapshot_text", "")
@@ -150,11 +228,21 @@ class OrdenMantenimientoForm(forms.ModelForm):
             raise forms.ValidationError(
                 "El activo no coincide con la categoría del plan seleccionado."
             )
+        if cleaned_data.get("accion_cambio_parte") and not cleaned_data.get("accion_cambio_parte_detalle", "").strip():
+            self.add_error("accion_cambio_parte_detalle", "Indicá qué parte se cambió.")
         return cleaned_data
+
+    def _estado_partes_desde_cleaned(self):
+        estado = {}
+        for nombre, valor in self.cleaned_data.items():
+            if nombre.startswith("parte_") and valor:
+                estado[nombre[6:]] = valor
+        return estado
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.software_snapshot = self.cleaned_data.get("software_snapshot_text", [])
+        instance.estado_partes = self._estado_partes_desde_cleaned()
         if commit:
             instance.save()
         return instance

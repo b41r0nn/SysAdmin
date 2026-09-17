@@ -17,6 +17,7 @@ urlpatterns = [
     path("planes/<int:pk>/toggle/", views.toggle_plan, name="toggle_plan"),
     path("planes/<int:pk>/eliminar/", views.eliminar_plan, name="eliminar_plan"),
     path("ordenes/nueva/", views.crear_orden, name="crear_orden"),
+    path("ordenes/estado-partes/", views.estado_partes_partial, name="estado_partes_partial"),
     path("ordenes/<int:pk>/", views.detalle_orden, name="detalle_orden"),
     path("ordenes/<int:pk>/editar/", views.editar_orden, name="editar_orden"),
     path("ordenes/<int:pk>/cerrar/", views.cerrar_orden, name="cerrar_orden"),
