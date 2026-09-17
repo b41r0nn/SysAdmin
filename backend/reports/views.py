@@ -212,6 +212,40 @@ def _build_costos(rango_fin, vida_util_meses=36):
     }
 
 
+def _build_garantias():
+    """Lista de activos con fecha de vencimiento de garantía calculable.
+
+    Usa campos existentes (fecha_compra, garantia_fabrica_meses,
+    garantia_extendida, anios_garantia_extendida, proveedor). La fecha fin
+    de garantía es la property Activo.fecha_vencimiento_garantia.
+    Devuelve (vencidos, vigentes), cada uno ordenado por días restantes
+    ascendente (vencidos = los más vencidos primero, con días negativos).
+    """
+    hoy = timezone.now().date()
+    items = []
+    for activo in Activo.objects.exclude(fecha_compra__isnull=True).exclude(
+        garantia_fabrica_meses__isnull=True
+    ):
+        vencimiento = activo.fecha_vencimiento_garantia
+        if vencimiento is None:
+            continue
+        items.append({
+            "activo": activo,
+            "vencimiento": vencimiento,
+            "dias_restantes": (vencimiento - hoy).days,
+        })
+
+    vencidos = sorted(
+        (i for i in items if i["dias_restantes"] < 0),
+        key=lambda i: i["dias_restantes"],
+    )
+    vigentes = sorted(
+        (i for i in items if i["dias_restantes"] >= 0),
+        key=lambda i: i["dias_restantes"],
+    )
+    return vencidos, vigentes
+
+
 def _build_report_context(rango_inicio, rango_fin):
     activos_por_estado, activos_por_tipo = _build_activos_resumen()
     movimientos_mensuales = _build_movimientos_mensuales(rango_fin)
@@ -231,6 +265,8 @@ def _build_report_context(rango_inicio, rango_fin):
         .order_by("-fecha", "-fecha_creacion")
     )
 
+    garantia_vencidos, garantia_vigentes = _build_garantias()
+
     return {
         "rango_inicio": rango_inicio,
         "rango_fin": rango_fin,
@@ -248,6 +284,14 @@ def _build_report_context(rango_inicio, rango_fin):
         "costos_valor_actual": costos["valor_actual"],
         "costos_items": costos["items"],
         "costos_vida_util": costos["vida_util"],
+        "activos_por_lugar": (
+            Activo.objects.exclude(ubicacion_fisica="")
+            .values("ubicacion_fisica")
+            .annotate(total=Count("id"))
+            .order_by("-total", "ubicacion_fisica")
+        ),
+        "garantia_vencidos": garantia_vencidos,
+        "garantia_vigentes": garantia_vigentes,
     }
 
 
@@ -453,6 +497,37 @@ def index(request):
 
     context = _build_report_context(rango_inicio, rango_fin)
     return render(request, "reports/index.html", context)
+
+
+@requiere_permiso("reportes", "lectura")
+def activos_por_usuario(request):
+    """Partial HTMX: una sola tarjeta con los activos actualmente asignados
+    al usuario que coincide con la búsqueda. Sin búsqueda o sin coincidencia
+    devuelve una tarjeta placeholder (nunca un error)."""
+    q = request.GET.get("q", "").strip()
+    usuario = None
+    asignaciones = []
+
+    if q:
+        usuarios = list(
+            Usuario.objects.filter(
+                Q(nombre_completo__icontains=q)
+                | Q(documento_identidad__icontains=q)
+            ).order_by("nombre_completo")[:5]
+        )
+        if usuarios:
+            usuario = usuarios[0]
+            asignaciones = (
+                Asignacion.objects.filter(usuario=usuario, activa=True)
+                .select_related("activo")
+                .order_by("-fecha_asignacion")
+            )
+
+    return render(request, "reports/partials/activos_usuario.html", {
+        "q": q,
+        "usuario": usuario,
+        "asignaciones": asignaciones,
+    })
 
 
 @requiere_permiso("reportes", "lectura")
