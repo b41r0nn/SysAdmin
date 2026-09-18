@@ -771,3 +771,171 @@ class PdfMantenimientoTests(TestCase):
             },
         )
         self.assertIn(orden.activo.serial, html)
+
+
+class HojaDeVidaBuscarTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = Activo.objects.create(
+            serial="SN-HV-001",
+            tipo_dispositivo="portatil",
+            marca="Lenovo",
+            modelo="ThinkPad",
+            estado="disponible",
+        )
+
+    def test_buscar_pagina_devuelve_200(self):
+        resp = self.client.get(reverse("mantenimiento:hoja_de_vida_buscar"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Buscar activo")
+
+    def test_buscar_requiere_login(self):
+        resp = Client().get(reverse("mantenimiento:hoja_de_vida_buscar"))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_busqueda_htmx_por_serial_marca_y_modelo(self):
+        headers = {"HTTP_HX_REQUEST": "true"}
+        url = reverse("mantenimiento:hoja_de_vida_buscar")
+
+        resp = self.client.get(url, {"q": "SN-HV-001"}, **headers)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "SN-HV-001")
+        self.assertContains(resp, reverse("mantenimiento:hoja_de_vida", args=[self.activo.pk]))
+
+        resp = self.client.get(url, {"q": "lenovo"}, **headers)
+        self.assertContains(resp, "ThinkPad")
+
+        resp = self.client.get(url, {"q": "thinkpad"}, **headers)
+        self.assertContains(resp, "Lenovo")
+
+        resp = self.client.get(url, {"q": "no-existe"}, **headers)
+        self.assertContains(resp, "Sin resultados")
+
+
+class HojaDeVidaPdfTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo = Activo.objects.create(
+            serial="SN-HV-PDF-001",
+            tipo_dispositivo="portatil",
+            marca="Lenovo",
+            modelo="ThinkPad",
+            estado="disponible",
+        )
+
+    def test_hoja_de_vida_pdf_returns_pdf(self):
+        _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        with patch.dict("sys.modules", {"weasyprint": FakeWeasyPrintModule()}):
+            resp = self.client.get(
+                reverse("mantenimiento:hoja_de_vida_pdf", args=[self.activo.pk])
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertTrue(resp.content.startswith(b"%PDF"))
+        self.assertIn("hoja_de_vida_", resp["Content-Disposition"])
+
+    def test_hoja_de_vida_pdf_template_contiene_historial_completo(self):
+        orden = _orden(self.activo, estado="cerrada", fecha_cierre=HOY)
+        orden.accion_limpieza_general = True
+        orden.accion_cambio_parte = True
+        orden.accion_cambio_parte_detalle = "Disco duro"
+        orden.estado_partes = {"teclado": "mal", "bateria": "bien"}
+        orden.software_snapshot = ["Google Chrome", "Word"]
+        orden.save()
+        foto = FotoMantenimiento.objects.create(
+            orden=orden,
+            descripcion="Antes del cambio",
+            foto=SimpleUploadedFile(
+                "mtto.jpg", b"%PDF fake image bytes", content_type="image/jpeg"
+            ),
+        )
+        html = render_to_string("mantenimiento/hoja_de_vida_pdf.html", {
+            "activo": self.activo,
+            "ordenes_detalle": [{
+                "orden": orden,
+                "acciones": ["Limpieza general", "Cambio de parte"],
+                "estado_partes": [("Teclado", "mal"), ("Batería", "bien")],
+                "fotos": [{"path": foto.foto.path, "descripcion": "Antes del cambio"}],
+            }],
+            "ultima": orden,
+            "asignacion_actual": None,
+            "equipo_ocs": None,
+            "software_ultimo": ["Google Chrome", "Word"],
+            "config": None,
+            "logo_path": "x",
+            "generado": timezone.now(),
+        })
+        self.assertIn(self.activo.serial, html)
+        self.assertIn("Historial de mantenimientos", html)
+        self.assertIn("Limpieza general", html)
+        self.assertIn("Cambio de parte", html)
+        self.assertIn("Disco duro", html)
+        self.assertIn("Teclado", html)
+        self.assertIn("Mal", html)
+        self.assertIn("Bien", html)
+        self.assertIn("Google Chrome", html)
+        self.assertIn("Antes del cambio", html)
+        self.assertIn(foto.foto.path, html)
+
+
+class ReporteActivosPdfTests(TestCase):
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.activo_con = Activo.objects.create(
+            serial="SN-REP-001",
+            tipo_dispositivo="escritorio",
+            marca="HP",
+            modelo="Pro",
+            estado="disponible",
+        )
+        self.activo_sin = Activo.objects.create(
+            serial="SN-REP-002",
+            tipo_dispositivo="escritorio",
+            marca="Dell",
+            modelo="OptiPlex",
+            estado="disponible",
+        )
+
+    def test_reporte_activos_pdf_returns_pdf(self):
+        _orden(self.activo_con, estado="cerrada", fecha_cierre=HOY)
+        with patch.dict("sys.modules", {"weasyprint": FakeWeasyPrintModule()}):
+            resp = self.client.get(reverse("mantenimiento:reporte_activos_pdf"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertTrue(resp.content.startswith(b"%PDF"))
+
+    def test_activos_con_ultimo_mantenimiento_solo_cerradas(self):
+        from mantenimiento.services import _activos_con_ultimo_mantenimiento
+
+        _orden(self.activo_con, estado="cerrada", fecha_cierre=HOY)
+        _orden(self.activo_sin, estado="abierta")
+        filas = _activos_con_ultimo_mantenimiento()
+        self.assertEqual(len(filas), 1)
+        self.assertEqual(filas[0]["activo"].pk, self.activo_con.pk)
+        self.assertEqual(filas[0]["ultima_cierre"], HOY)
+
+    def test_reportes_toma_ultima_fecha_cierre(self):
+        from mantenimiento.services import _activos_con_ultimo_mantenimiento
+
+        _orden(self.activo_con, estado="cerrada", fecha_cierre=HOY - timedelta(days=5))
+        _orden(self.activo_con, estado="cerrada", fecha_cierre=HOY)
+        filas = _activos_con_ultimo_mantenimiento()
+        self.assertEqual(filas[0]["ultima_cierre"], HOY)
+
+    def test_reporte_activos_pdf_template_muestra_columnas(self):
+        html = render_to_string("mantenimiento/reporte_activos_pdf.html", {
+            "filas": [{"activo": self.activo_con, "ultima_cierre": HOY}],
+            "config": None,
+            "logo_path": "x",
+            "generado": timezone.now(),
+        })
+        self.assertIn("SN-REP-001", html)
+        self.assertIn("HP Pro", html)
+        self.assertIn("Escritorio", html)
+        self.assertIn(HOY.strftime("%d/%m/%Y"), html)

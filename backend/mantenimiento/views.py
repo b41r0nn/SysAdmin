@@ -37,7 +37,7 @@ from .models import (
     CRITICIDADES,
 )
 from .constants import PARTES_POR_TIPO
-from .services import snapshot_software_ocs
+from .services import hoja_de_vida_pdf_bytes, reporte_activos_pdf_bytes, snapshot_software_ocs
 
 from django.forms import modelformset_factory
 
@@ -662,6 +662,31 @@ def crear_item_checklist(request, pk):
 
 
 @requiere_permiso("mantenimiento", "lectura")
+def hoja_de_vida_buscar(request):
+    """Índice de hoja de vida: búsqueda HTMX por serial/marca/modelo.
+
+    Cuando la petición viene con HX-Request devuelve solo el partial de
+    resultados (mismo patrón que lista_planes/lista_ordenes).
+    """
+    q = request.GET.get("q", "").strip()
+    resultados = []
+    if q:
+        resultados = (
+            Activo.objects.filter(
+                Q(serial__icontains=q) | Q(marca__icontains=q) | Q(modelo__icontains=q)
+            )
+            .order_by("tipo_dispositivo", "marca", "modelo")[:50]
+        )
+    context = {
+        "q": q,
+        "resultados": resultados,
+    }
+    if request.headers.get("HX-Request"):
+        return render(request, "mantenimiento/partials/resultados_hoja_de_vida.html", context)
+    return render(request, "mantenimiento/hoja_de_vida_buscar.html", context)
+
+
+@requiere_permiso("mantenimiento", "lectura")
 def hoja_de_vida(request, activo_pk):
     from inventario.models import Activo
 
@@ -735,6 +760,28 @@ def orden_pdf(request, pk):
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     filename = f"mantenimiento_orden_{orden.pk}_{orden.activo.serial}.pdf"
     response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def hoja_de_vida_pdf(request, activo_pk):
+    activo = get_object_or_404(Activo, pk=activo_pk)
+    pdf_bytes = hoja_de_vida_pdf_bytes(activo)
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    filename = f"hoja_de_vida_{activo.serial}.pdf"
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
+
+
+@requiere_permiso("mantenimiento", "lectura")
+def reporte_activos_pdf(request):
+    """Reporte PDF con una fila por activo que tenga al menos un mantenimiento
+    hecho (fecha del último mantenimiento cerrado)."""
+    pdf_bytes = reporte_activos_pdf_bytes()
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        'inline; filename="reporte_activos_con_mantenimiento.pdf"'
+    )
     return response
 
 

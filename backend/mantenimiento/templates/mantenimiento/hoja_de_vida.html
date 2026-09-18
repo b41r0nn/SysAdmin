@@ -31,9 +31,14 @@
       </p>
     </div>
   </div>
-  {% if ultima %}
-  <span class="sa-badge success">Ultimo mantenimiento: {{ ultima.fecha_apertura|date:"d/m/Y" }}</span>
-  {% endif %}
+  <div class="d-flex align-items-center gap-2">
+    {% if ultima %}
+    <span class="sa-badge success">Ultimo mantenimiento: {{ ultima.fecha_apertura|date:"d/m/Y" }}</span>
+    {% endif %}
+    <a href="{% url 'mantenimiento:hoja_de_vida_pdf' activo.pk %}" class="btn btn-outline-primary" target="_blank">
+      <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
+    </a>
+  </div>
 </div>
 
 {% if equipo_ocs %}
