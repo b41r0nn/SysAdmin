@@ -1,9 +1,35 @@
 # SysAdmin · Sistema de Gestión IT
 
-> **Versión:** 1.9.0 · **Fecha:** 2026-09-10 · **Estado:** Etapas 0-8 + Fases 1-6 (plan completo)  
-> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets, préstamos, detección de vencimiento de licencias y gestión de cuentas
 
----
+
+            .---''''''''''''''''''''''''''''''''''''''''---.
+          .-'     ((((                                         '-.
+        .'       ((((   ____  _____ ____ ___ _   _  ___  ____     '.
+       /        ((((   |  _ \| ____|  _ \_ _| | | |/ _ \/ ___|      \
+      |        ((((    | |_) |  _| | | | | || |_| | | | \___ \       |
+      |       ((((     |  _ <| |___| |_| | ||  _  | |_| |___) |      |
+       \     ((((      |_| \_\_____|____/___|_| |_|\___/|____/      /
+        '.    (((((                   S.A.S.                      .'
+          '-.  ((((((((((((((((((((((((((((((((((((((((((((    .-'
+              '---........................................---'
+                   S u   D i s t r i b u i d o r   H o s p i t a l a r i o ®
+
+                            ~ Su Distribuidor Hospitalario® ~
+
+          ███████╗██╗   ██╗███████╗ █████╗ ██████╗ ███╗   ███╗██╗███╗   ██╗
+          ██╔════╝╚██╗ ██╔╝██╔════╝██╔══██╗██╔══██╗████╗ ████║██║████╗  ██║
+          ███████╗ ╚████╔╝ ███████╗███████║██║  ██║██╔████╔██║██║██╔██╗ ██║
+          ╚════██║  ╚██╔╝  ╚════██║██╔══██║██║  ██║██║╚██╔╝██║██║██║╚██╗██║
+          ███████║   ██║   ███████║██║  ██║██████╔╝██║ ╚═╝ ██║██║██║ ╚████║
+          ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═════╝ ╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝
+
+
+
+
+
+> **Versión:** 1.9.1 · **Fecha:** 2026-09-17 · **Estado:** Etapas 0-8 + Fases 1-6 (plan completo)  
+> Sistema integral de gestión de inventario IT, usuarios, mantenimiento, hoja de vida por activo, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets, préstamos, detección de vencimiento de licencias y gestión de cuentas
+
 
 ## 📊 Estado del Proyecto
 
@@ -439,7 +465,7 @@ OCS_VERIFY_SSL=True
    - Reiniciar contenedor Django
    - Verificar módulos Fases 1-6 (tickets, licencias, préstamos) y validación manual de reportes configurables + importación masiva + etiquetas QR
 
-2. **Tests**: Suite automatizada — ✅ **202/202 OK** (Fases 1-6, plan completo)
+2. **Tests**: Suite automatizada — ✅ **271/271 OK** (Fases 1-6, plan completo + hoja de vida por activo)
 
 ---
 
@@ -493,6 +519,13 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-09-17 — v1.9.1 · Hoja de vida por activo + Reporte PDF de activos con mantenimiento
+
+- ✅ **Hoja de vida por activo** (HTMX): búsqueda por serial/marca/modelo desde `/mantenimiento/hoja-de-vida/`; botones "Hoja de vida" en las listas de órdenes y planes
+- ✅ **PDF de hoja de vida multi-página** (`mantenimiento_hoja_vida_pdf`): fichas de identificación + historial de mantenimiento + checklist + estado de partes (OCS) + software snapshot, generado con WeasyPrint
+- ✅ **Reporte de activos con mantenimiento** (`mantenimiento_reportes_activos_pdf`): una fila por activo con al menos un mantenimiento cerrado (serial, marca/modelo, tipo, fecha del último mantenimiento)
+- ✅ Suite automatizada **271/271 OK** · `manage.py check` 0 issues
 
 ### 2026-09-10 — v1.9.0 · Detección de vencimiento de licencias + Gestión de cuentas
 
