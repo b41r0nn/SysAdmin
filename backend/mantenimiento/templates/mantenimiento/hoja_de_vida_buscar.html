@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Mantenimiento — Hoja de vida{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Hoja de vida</h1>
+    <p class="page-subtitle">Historial completo por activo: buscá y entrá al equipo.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-calendar2-week"></i> Planes
+    </a>
+    <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-clipboard-check"></i> Ordenes
+    </a>
+    <a href="{% url 'mantenimiento:reporte_activos_pdf' %}" class="btn btn-outline-secondary" target="_blank">
+      <i class="bi bi-file-earmark-pdf"></i> Reporte por activo
+    </a>
+  </div>
+</div>
+
+<div class="sa-card mb-4 p-3">
+  <div class="col-12 col-md-7">
+    <label class="form-label">Buscar activo</label>
+    <div class="search-input-group">
+      <i class="bi bi-search"></i>
+      <input type="text" id="q_hoja" name="q" value="{{ q }}"
+             placeholder="Serial, marca o modelo..."
+             autocomplete="off"
+             hx-get="{% url 'mantenimiento:hoja_de_vida_buscar' %}"
+             hx-trigger="input changed delay:350ms, search"
+             hx-target="#resultados-hoja"
+             hx-swap="innerHTML">
+    </div>
+  </div>
+</div>
+
+<div id="resultados-hoja">
+  {% include "mantenimiento/partials/resultados_hoja_de_vida.html" %}
+</div>
+{% endblock %}

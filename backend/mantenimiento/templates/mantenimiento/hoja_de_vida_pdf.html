@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Hoja de vida {{ activo.serial }} — SysAdmin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      color: #1e293b;
+      background: #fff;
+      line-height: 1.4;
+    }
+    @page {
+      size: A4 portrait;
+      margin: 2cm 2.2cm 2.4cm 2.2cm;
+    }
+    .header { text-align: center; margin-bottom: 5mm; }
+    .header img { height: 16mm; }
+    .header .empresa {
+      margin-top: 2mm;
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: .04em;
+      color: #0f172a;
+    }
+    .header .titulo {
+      margin-top: 3mm;
+      font-size: 13pt;
+      font-weight: 700;
+      color: #0156a6;
+      letter-spacing: .06em;
+    }
+    .sub {
+      font-weight: 700;
+      font-size: 11pt;
+      margin: 5mm 0 2mm 0;
+      color: #0f172a;
+      border-bottom: 2px solid #0156a6;
+      padding-bottom: 1mm;
+    }
+    table.datos { width: 100%; border-collapse: collapse; margin: 2mm 0; }
+    table.datos td {
+      border: .5px solid #cbd5e1;
+      padding: 1.6mm 2.5mm;
+      font-size: 9.5pt;
+      vertical-align: top;
+    }
+    table.datos td.etiqueta {
+      width: 25%;
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #475569;
+      font-size: 8.5pt;
+    }
+    .mono { font-family: 'Courier New', Courier, monospace; font-size: 8.8pt; }
+    .seccion {
+      border: .5px solid #cbd5e1;
+      padding: 3mm;
+      margin: 2.5mm 0;
+      font-size: 9.5pt;
+      page-break-inside: auto;
+    }
+    .seccion .t {
+      font-weight: 700;
+      font-size: 9pt;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #475569;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 1.2mm;
+      margin-bottom: 2mm;
+    }
+    .orden-titulo {
+      font-weight: 700;
+      font-size: 10.5pt;
+      margin: 4mm 0 1.5mm 0;
+      color: #0156a6;
+    }
+    .badge {
+      display: inline-block;
+      border: 1px solid #16a34a;
+      border-radius: 3mm;
+      padding: .5mm 2.5mm;
+      font-size: 8pt;
+      font-weight: 700;
+      color: #15803d;
+      margin: 0 .5mm .5mm 0;
+    }
+    .badge.gris { border-color: #94a3b8; color: #475569; }
+    .ul { margin: 0; padding-left: 5mm; }
+    .ul li { margin-bottom: .8mm; }
+    .footer {
+      position: fixed;
+      bottom: -14mm;
+      left: 2.2cm;
+      right: 2.2cm;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1.5mm;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-align: center;
+    }
+    .foto-grid { width: 100%; margin-top: 1.5mm; }
+    .foto-grid td { vertical-align: top; width: 50%; padding: 1mm; }
+    .foto-grid img {
+      width: 100%;
+      max-height: 70mm;
+      object-fit: cover;
+      border: 1px solid #cbd5e1;
+      border-radius: 2mm;
+    }
+    .foto-nota { font-size: 8.5pt; color: #475569; margin-top: 1mm; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}">
+    <div class="empresa">{{ config.nombre_empresa|upper }}</div>
+    <div class="titulo">HOJA DE VIDA DEL ACTIVO</div>
+  </div>
+
+  <div class="sub">Datos del activo</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">Tipo</td>
+      <td>{{ activo.get_tipo_dispositivo_display }}</td>
+      <td class="etiqueta">N° interno</td>
+      <td>{{ activo.numero_interno|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Marca / Modelo</td>
+      <td>{{ activo.marca }} {{ activo.modelo }}</td>
+      <td class="etiqueta">Serial</td>
+      <td><span class="mono">{{ activo.serial }}</span></td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Estado</td>
+      <td>{{ activo.get_estado_display }}</td>
+      <td class="etiqueta">Ubicación</td>
+      <td>{{ activo.ubicacion_fisica|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Fecha de compra</td>
+      <td>{{ activo.fecha_compra|date:"d/m/Y"|default:"—" }}</td>
+      <td class="etiqueta">Proveedor</td>
+      <td>{{ activo.proveedor|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Valor de compra</td>
+      <td>${{ activo.valor_compra|floatformat:2|default:"0.00" }}</td>
+      <td class="etiqueta">Garantía</td>
+      <td>
+        {% if activo.fecha_vencimiento_garantia %}
+          Vence {{ activo.fecha_vencimiento_garantia|date:"d/m/Y" }} · {{ activo.en_garantia|yesno:"vigente,vencida" }}
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% if activo.nombre_equipo or activo.ip_equipo or activo.mac_equipo or activo.sistema_operativo %}
+    <tr>
+      <td class="etiqueta">Nombre / IP / MAC</td>
+      <td>{{ activo.nombre_equipo|default:"—" }} · {{ activo.ip_equipo|default:"—" }}</td>
+      <td class="etiqueta">Sistema operativo</td>
+      <td>{{ activo.sistema_operativo|default:"—" }} {% if activo.mac_equipo %}({{ activo.mac_equipo }}){% endif %}</td>
+    </tr>
+    {% endif %}
+    {% if activo.imei or activo.numero_linea or activo.operador or activo.almacenamiento %}
+    <tr>
+      <td class="etiqueta">IMEI</td>
+      <td><span class="mono">{{ activo.imei|default:"—" }}</span></td>
+      <td class="etiqueta">Línea / Operador</td>
+      <td>{{ activo.numero_linea|default:"—" }}{% if activo.operador %} · {{ activo.operador }}{% endif %}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Almacenamiento</td>
+      <td>{{ activo.almacenamiento|default:"—" }}</td>
+      <td class="etiqueta">RAM</td>
+      <td>{{ activo.ram_celular|default:"—" }}</td>
+    </tr>
+    {% endif %}
+    {% if activo.extension or activo.puerto_jack %}
+    <tr>
+      <td class="etiqueta">Extensión</td>
+      <td>{{ activo.extension|default:"—" }}</td>
+      <td class="etiqueta">Puerto / Línea</td>
+      <td>{{ activo.puerto_jack|default:"—" }}{% if activo.linea_asignada %} · {{ activo.linea_asignada }}{% endif %}</td>
+    </tr>
+    {% endif %}
+    {% if activo.pulgadas or activo.resolucion %}
+    <tr>
+      <td class="etiqueta">Pulgadas</td>
+      <td>{{ activo.pulgadas|default:"—" }}</td>
+      <td class="etiqueta">Resolución</td>
+      <td>{{ activo.resolucion|default:"—" }}{% if activo.tipo_panel %} · {{ activo.tipo_panel }}{% endif %}</td>
+    </tr>
+    {% endif %}
+    {% if activo.observaciones %}
+    <tr>
+      <td class="etiqueta">Observaciones</td>
+      <td colspan="3">{{ activo.observaciones }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  {% if asignacion_actual %}
+  <div class="sub">Asignación actual</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">Usuario</td>
+      <td>{{ asignacion_actual.usuario.nombre_completo }}</td>
+      <td class="etiqueta">Asignado el</td>
+      <td>{{ asignacion_actual.fecha_asignacion|date:"d/m/Y" }}</td>
+    </tr>
+    {% if asignacion_actual.accesorios or asignacion_actual.condicion_entrega %}
+    <tr>
+      <td class="etiqueta">Accesorios</td>
+      <td>{{ asignacion_actual.accesorios|default:"—" }}</td>
+      <td class="etiqueta">Condición de entrega</td>
+      <td>{{ asignacion_actual.condicion_entrega|default:"—" }}</td>
+    </tr>
+    {% endif %}
+    {% if asignacion_actual.observaciones %}
+    <tr>
+      <td class="etiqueta">Observaciones</td>
+      <td colspan="3">{{ asignacion_actual.observaciones }}</td>
+    </tr>
+    {% endif %}
+  </table>
+  {% else %}
+  <div class="seccion"><strong>Asignación actual:</strong> sin asignación activa.</div>
+  {% endif %}
+
+  {% if equipo_ocs %}
+  <div class="sub">Vinculación OCS</div>
+  <table class="datos">
+    <tr>
+      <td class="etiqueta">ID OCS</td>
+      <td><span class="mono">{{ equipo_ocs.id_ocs }}</span></td>
+      <td class="etiqueta">Nombre de host</td>
+      <td>{{ equipo_ocs.nombre_host|default:"—" }}</td>
+    </tr>
+    <tr>
+      <td class="etiqueta">Sistema operativo</td>
+      <td>{{ equipo_ocs.so_nombre|default:"—" }}</td>
+      <td class="etiqueta">Último reporte</td>
+      <td>{{ equipo_ocs.ultimo_reporte_ocs|date:"d/m/Y H:i"|default:"—" }}</td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <div class="sub">Historial de mantenimientos ({{ ordenes_detalle|length }})</div>
+
+  {% if ordenes_detalle %}
+  {% for item in ordenes_detalle %}
+    <div class="orden-titulo">Orden #{{ item.orden.id }} · {{ item.orden.fecha_apertura|date:"d/m/Y" }}{% if item.orden.fecha_cierre %} → {{ item.orden.fecha_cierre|date:"d/m/Y" }}{% endif %}</div>
+
+    <table class="datos">
+      <tr>
+        <td class="etiqueta">Tipo</td>
+        <td>{{ item.orden.get_tipo_display }}</td>
+        <td class="etiqueta">Estado</td>
+        <td>{{ item.orden.get_estado_display }}</td>
+      </tr>
+      <tr>
+        <td class="etiqueta">Prioridad</td>
+        <td>{{ item.orden.get_prioridad_display }}</td>
+        <td class="etiqueta">Técnico</td>
+        <td>{{ item.orden.tecnico_asignado|default:"—" }}</td>
+      </tr>
+      {% if item.orden.costo_estimado or item.orden.costo_real %}
+      <tr>
+        <td class="etiqueta">Costo estimado</td>
+        <td>${{ item.orden.costo_estimado|floatformat:2|default:"—" }}</td>
+        <td class="etiqueta">Costo real</td>
+        <td>${{ item.orden.costo_real|floatformat:2|default:"—" }}</td>
+      </tr>
+      {% endif %}
+    </table>
+
+    {% if item.orden.descripcion or item.orden.diagnostico or item.orden.acciones %}
+    <div class="seccion">
+      {% if item.orden.descripcion %}
+      <div class="t">Descripción</div>{{ item.orden.descripcion|linebreaksbr }}
+      {% endif %}
+      {% if item.orden.diagnostico %}
+      <div class="t">Diagnóstico</div>{{ item.orden.diagnostico|linebreaksbr }}
+      {% endif %}
+      {% if item.orden.acciones %}
+      <div class="t">Notas adicionales</div>{{ item.orden.acciones|linebreaksbr }}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if item.acciones %}
+    <div class="seccion">
+      <div class="t">Acciones marcadas</div>
+      {% for accion in item.acciones %}
+      <span class="badge">{{ accion }}</span>
+      {% endfor %}
+      {% if item.orden.accion_cambio_parte and item.orden.accion_cambio_parte_detalle %}
+      <p style="margin-top:1.5mm;"><strong>Detalle del cambio:</strong> {{ item.orden.accion_cambio_parte_detalle }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if item.estado_partes %}
+    <div class="seccion">
+      <div class="t">Estado de partes</div>
+      {% for label, estado in item.estado_partes %}
+      <span class="badge {% if estado != 'bien' %}gris{% endif %}">{{ label }}: {% if estado == 'bien' %}Bien{% else %}Mal{% endif %}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if item.fotos %}
+    <div class="seccion">
+      <div class="t">Fotos ({{ item.fotos|length }})</div>
+      <table class="foto-grid">
+        {% for foto in item.fotos %}
+          {% if forloop.counter0|divisibleby:"2" %}<tr>{% endif %}
+            <td>
+              <img src="file://{{ foto.path }}" alt="{{ foto.descripcion|default:'Foto' }}">
+              {% if foto.descripcion %}<div class="foto-nota">{{ foto.descripcion }}</div>{% endif %}
+            </td>
+          {% if forloop.counter|divisibleby:"2" or forloop.last %}</tr>{% endif %}
+        {% endfor %}
+      </table>
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% else %}
+  <div class="seccion">Sin mantenimientos registrados para este activo.</div>
+  {% endif %}
+
+  {% if software_ultimo %}
+  <div class="sub">Software instalado (último snapshot OCS)</div>
+  <div class="seccion">
+    <div class="t">Aplicaciones ({{ software_ultimo|length }})</div>
+    <ul class="ul">
+      {% for app in software_ultimo %}
+      <li>{{ app }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    SysAdmin · Hoja de vida {{ activo.marca }} {{ activo.modelo }} · {{ activo.serial }} · Generado {{ generado|date:"d/m/Y H:i" }}
+  </div>
+
+</body>
+</html>

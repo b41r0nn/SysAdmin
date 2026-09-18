@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte de activos con mantenimiento — SysAdmin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      color: #1e293b;
+      background: #fff;
+    }
+    @page {
+      size: A4 portrait;
+      margin: 2cm 2.2cm 2.4cm 2.2cm;
+    }
+    .header { text-align: center; margin-bottom: 5mm; }
+    .header img { height: 16mm; }
+    .header .empresa {
+      margin-top: 2mm;
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: .04em;
+      color: #0f172a;
+    }
+    .header .titulo {
+      margin-top: 3mm;
+      font-size: 13pt;
+      font-weight: 700;
+      color: #0156a6;
+      letter-spacing: .06em;
+    }
+    .filtros {
+      font-size: 9pt;
+      color: #475569;
+      margin: 3mm 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 3mm;
+    }
+    th {
+      background: #0156a6;
+      color: #fff;
+      font-size: 9pt;
+      padding: 2mm 2.5mm;
+      text-align: left;
+    }
+    td {
+      border: .5px solid #cbd5e1;
+      padding: 1.8mm 2.5mm;
+      font-size: 8.8pt;
+    }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .mono { font-family: 'Courier New', Courier, monospace; font-size: 8.5pt; }
+    .footer {
+      position: fixed;
+      bottom: -14mm;
+      left: 2.2cm;
+      right: 2.2cm;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1.5mm;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}">
+    <div class="empresa">{{ config.nombre_empresa|upper }}</div>
+    <div class="titulo">REPORTE DE ACTIVOS CON MANTENIMIENTO</div>
+  </div>
+
+  <div class="filtros">
+    Activos con al menos un mantenimiento hecho: <strong>{{ filas|length }}</strong>
+    · Generado {{ generado|date:"d/m/Y H:i" }}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Serial</th>
+        <th>Marca / Modelo</th>
+        <th>Tipo</th>
+        <th>Fecha último mantenimiento</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in filas %}
+      <tr>
+        <td class="mono">{{ fila.activo.serial }}</td>
+        <td>{{ fila.activo.marca }} {{ fila.activo.modelo }}</td>
+        <td>{{ fila.activo.get_tipo_dispositivo_display }}</td>
+        <td>{{ fila.ultima_cierre|date:"d/m/Y"|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" style="text-align:center;color:#94a3b8;">
+          Sin activos con mantenimiento realizado.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    SysAdmin · Reporte de activos con mantenimiento · Generado {{ generado|date:"d/m/Y H:i" }}
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,43 @@
+<div class="sa-card p-3">
+  {% if not q %}
+    <p class="text-muted mb-0">Escribí un serial, marca o modelo para buscar un activo.</p>
+  {% elif not resultados %}
+    <p class="text-muted mb-0">Sin resultados para «{{ q }}».</p>
+  {% else %}
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <span class="text-muted" style="font-size:.85rem;">
+        {{ resultados|length }} activo{{ resultados|length|pluralize }} encontrado{{ resultados|length|pluralize }}
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover sa-table mb-0">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Marca / Modelo</th>
+            <th>Serial</th>
+            <th class="text-center">N° interno</th>
+            <th>Estado</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for activo in resultados %}
+          <tr>
+            <td>{{ activo.get_tipo_dispositivo_display }}</td>
+            <td>{{ activo.marca }} {{ activo.modelo }}</td>
+            <td class="font-monospace" style="font-size:.85rem;">{{ activo.serial }}</td>
+            <td class="text-center">{{ activo.numero_interno|default:"—" }}</td>
+            <td><span class="sa-badge secondary">{{ activo.get_estado_display }}</span></td>
+            <td class="text-end">
+              <a href="{% url 'mantenimiento:hoja_de_vida' activo.pk %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-person-lines-fill"></i> Hoja de vida
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
