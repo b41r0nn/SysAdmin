@@ -44,6 +44,12 @@ body {
   flex-direction: column;
   padding: 24px 18px;
   gap: 20px;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar-brand {
@@ -143,6 +149,7 @@ body {
 
 .sa-content {
   flex: 1;
+  margin-left: var(--sa-sidebar-w);
   padding: 28px 32px 36px;
 }
 
@@ -662,9 +669,16 @@ img.sa-watermark {
     width: 100%;
     position: sticky;
     top: 0;
+    height: auto;
+    max-height: none;
+    overflow: visible;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
+  }
+
+  .sa-content {
+    margin-left: 0;
   }
 
   .sa-wordmark {

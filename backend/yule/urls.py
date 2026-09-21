@@ -6,6 +6,7 @@ app_name = "yule"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("configuracion/", views.configuracion, name="configuracion"),
     path("equipos/", views.equipos_lista, name="equipos_lista"),
     path("equipos/<int:pk>/", views.equipo_detalle, name="equipo_detalle"),
     path("equipos/sin-match/", views.equipos_sin_match, name="equipos_sin_match"),

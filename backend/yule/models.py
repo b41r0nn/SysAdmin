@@ -21,6 +21,18 @@ ESTADOS_SINCRONIZACION = [
 class ConfiguracionYule(models.Model):
     """Configuración global de Yule (OCS)"""
     nombre = models.CharField(max_length=100, default="Configuración OCS", unique=True)
+    # Conexión OCS (host/puerto en la URL, usuario y contraseña cifrada con Fernet)
+    url = models.URLField(max_length=300, blank=True, default="",
+                          verbose_name="URL OCS",
+                          help_text="Ej.: https://srv.ocs.redihos.local:8443/ocsapi/v1")
+    usuario = models.CharField(max_length=150, blank=True, default="",
+                               verbose_name="Usuario OCS")
+    password_cifrada = models.TextField(blank=True, default="",
+                                        verbose_name="Contraseña OCS")
+    # Interruptor general de la integración. False → el sync no corre y las
+    # vistas dependientes devuelven [] en vez de reventar.
+    integracion_activa = models.BooleanField(default=True,
+                                             verbose_name="Integración activa")
     ultima_sincronizacion = models.DateTimeField(null=True, blank=True)
     frecuencia_sync_minutos = models.PositiveIntegerField(default=60)
     auto_sync_habilitado = models.BooleanField(default=False)
@@ -42,6 +54,21 @@ class ConfiguracionYule(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    def set_ocs_password(self, raw):
+        """Cifra la contraseña OCS con Fernet y la guarda."""
+        from passwords.crypto import build_fernet
+        self.password_cifrada = build_fernet().encrypt(raw.encode()).decode()
+
+    def get_ocs_password(self):
+        """Devuelve la contraseña OCS descifrada (o cadena vacía)."""
+        if not self.password_cifrada:
+            return ""
+        from passwords.crypto import build_fernet
+        try:
+            return build_fernet().decrypt(self.password_cifrada.encode()).decode()
+        except Exception:
+            return ""
 
 
 class EquipoOCS(models.Model):

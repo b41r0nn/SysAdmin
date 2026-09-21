@@ -8,6 +8,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
 from .client import build_client
+from .forms import ConfiguracionYuleForm
 from .models import EquipoOCS, SincronizacionLog, ConfiguracionYule
 from .sync import sincronizar_equipos_ocs, verificar_equipos_sin_match, buscar_posibles_matches
 from accounts.permisos import requiere_permiso
@@ -28,7 +29,7 @@ def _mask_token(value: str) -> str:
 def index(request):
     """Vista principal de Yule - Status de configuración"""
     client = build_client()
-    config = ConfiguracionYule.objects.filter(activa=True).first()
+    config = ConfiguracionYule.objects.filter(activa=True).order_by("id").first()
     
     # Estadísticas
     total_equipos = EquipoOCS.objects.count()
@@ -38,7 +39,7 @@ def index(request):
     # Últimas sincronizaciones
     ultimas_syncs = SincronizacionLog.objects.all()[:5]
     
-    # Test de conexión
+    # Test de conexión (solo si la integración está activa y configurada)
     conexion_ok = False
     error_conexion = ""
     if client.is_configured():
@@ -46,12 +47,25 @@ def index(request):
         if not conexion_ok:
             error_conexion = "No se puede conectar a OCS. Verificar credenciales."
     
+    # Datos de conexión: prioridad BD, fallback settings (despliegue actual)
+    if config and config.url and config.usuario:
+        ocs_base_url = config.url
+        ocs_user = config.usuario
+        ocs_token = _mask_token(config.get_ocs_password())
+    else:
+        ocs_base_url = settings.OCS_BASE_URL
+        ocs_user = settings.OCS_USER
+        ocs_token = _mask_token(settings.OCS_TOKEN)
+    
+    integracion_activa = config.integracion_activa if config else bool(ocs_base_url and ocs_user)
+    
     context = {
-        "ocs_base_url": settings.OCS_BASE_URL,
-        "ocs_user": settings.OCS_USER,
-        "ocs_token": _mask_token(settings.OCS_TOKEN),
+        "ocs_base_url": ocs_base_url,
+        "ocs_user": ocs_user,
+        "ocs_token": ocs_token,
         "ocs_verify_ssl": settings.OCS_VERIFY_SSL,
         "ocs_configured": client.is_configured(),
+        "integracion_activa": integracion_activa,
         "conexion_ok": conexion_ok,
         "error_conexion": error_conexion,
         "config": config,
@@ -61,6 +75,32 @@ def index(request):
         "ultimas_syncs": ultimas_syncs,
     }
     return render(request, "yule/index.html", context)
+
+
+@requiere_permiso("inventario", "escritura")
+def configuracion(request):
+    """Editar la configuración OCS (url/usuario/contraseña/activa/sync)."""
+    config = ConfiguracionYule.objects.filter(activa=True).order_by("id").first()
+    
+    if request.method == "POST":
+        if config is None:
+            config = ConfiguracionYule(nombre="Configuración OCS", activa=True)
+        form = ConfiguracionYuleForm(request.POST, instance=config)
+        if form.is_valid():
+            instancia = form.save(commit=False)
+            if instancia.creada_por is None:
+                instancia.creada_por = request.user
+            instancia.save()
+            messages.success(request, "Configuración OCS guardada correctamente.")
+            return redirect("yule:index")
+    else:
+        form = ConfiguracionYuleForm(instance=config)
+    
+    return render(request, "yule/configuracion_form.html", {
+        "form": form,
+        "config": config,
+        "titulo": "Configuración OCS",
+    })
 
 
 @requiere_permiso("inventario", "lectura")

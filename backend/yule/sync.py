@@ -86,11 +86,20 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
                     log.save()
                     return log, msg
         
-        # Obtener equipos de OCS
+        # Obtener equipos de OCS. Si la integración está desactivada o el
+        # cliente no está configurado, no corre (degradación graciosa: log
+        # parcial, sin error).
         client = build_client()
         
         if not client.is_configured():
-            raise OCSClientException("OCS no está configurado")
+            msg = "Integración OCS desactivada o sin configurar. No se sincronizó."
+            logger.info(msg)
+            log.estado = "parcial"
+            log.mensaje_error = msg
+            log.fecha_fin = timezone.now()
+            log.duracion_segundos = int((log.fecha_fin - fecha_inicio).total_seconds())
+            log.save()
+            return log, msg
         
         logger.info("Iniciando sincronización con OCS...")
         equipos_ocs = client.get_computers()

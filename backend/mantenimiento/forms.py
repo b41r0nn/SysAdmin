@@ -72,7 +72,10 @@ class PlanMantenimientoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         actual = self.instance.tipo_dispositivo if self.instance and self.instance.pk else ""
-        self.fields["tipo_dispositivo"].choices = _opciones_categorias(actual)
+        opciones = _opciones_categorias(actual)
+        self.fields["tipo_dispositivo"].choices = opciones
+        if isinstance(self.fields["tipo_dispositivo"].widget, forms.Select):
+            self.fields["tipo_dispositivo"].widget.choices = opciones
 
 
 class ChecklistItemForm(forms.ModelForm):

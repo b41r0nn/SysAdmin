@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración OCS — Yule{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'yule:index' %}" class="text-decoration-none">Yule (OCS)</a></li>
+    <li class="breadcrumb-item active">Configuración</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-8">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-diagram-3"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Configuración OCS</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Conexión al servidor OCS Inventory NG y configuración de la sincronización.
+          </p>
+        </div>
+      </div>
+
+      {% if not config or not config.url %}
+      <div class="alert alert-info mb-4">
+        Aún no hay configuración de conexión guardada. Al guardar estos datos se
+        usará esta configuración (si ya existe una en variables de entorno, se
+        reemplaza para este despliegue).
+      </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Conexión al servidor</legend>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">URL OCS</label>
+              {{ form.url }}
+              <div class="form-text">Incluye host y puerto. Ej.: https://srv.ocs.redihos.local:8443/ocsapi/v1</div>
+              {% if form.url.errors %}
+                <div class="invalid-feedback d-block">{{ form.url.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Usuario</label>
+              {{ form.usuario }}
+              {% if form.usuario.errors %}
+                <div class="invalid-feedback d-block">{{ form.usuario.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">Contraseña</label>
+              {{ form.ocs_password }}
+              <div class="form-text">{{ form.ocs_password.help_text }}</div>
+              {% if form.ocs_password.errors %}
+                <div class="invalid-feedback d-block">{{ form.ocs_password.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="sa-fieldset mt-4">
+          <legend>Sincronización</legend>
+          <div class="row g-3">
+            <div class="col-12">
+              <div class="form-check">
+                {{ form.integracion_activa }}
+                <label class="form-check-label" for="{{ form.integracion_activa.id_for_label }}">
+                  Integración activa
+                </label>
+                <div class="form-text">
+                  Si se desactiva, la sincronización no se ejecuta y las pantallas
+                  que dependen de OCS muestran listas vacías en vez de errores.
+                </div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                {{ form.auto_sync_habilitado }}
+                <label class="form-check-label" for="{{ form.auto_sync_habilitado.id_for_label }}">
+                  Sincronización automática
+                </label>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-semibold">Frecuencia (minutos)</label>
+              {{ form.frecuencia_sync_minutos }}
+              {% if form.frecuencia_sync_minutos.errors %}
+                <div class="invalid-feedback d-block">{{ form.frecuencia_sync_minutos.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Descripción</label>
+              {{ form.descripcion }}
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'yule:index' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2-circle me-2"></i>Guardar cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
