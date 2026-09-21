@@ -9,6 +9,7 @@ urlpatterns = [
     path("nuevo/", views.crear_documento, name="crear"),
     path("<int:pk>/editar/", views.editar_documento, name="editar"),
     path("<int:pk>/eliminar/", views.eliminar_documento, name="eliminar"),
+    path("<int:pk>/ver/", views.ver_documento, name="ver"),
     path("<int:pk>/descargar/", views.descargar_documento, name="descargar"),
 
     # Categorías

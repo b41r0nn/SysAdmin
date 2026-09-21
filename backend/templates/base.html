@@ -23,16 +23,18 @@
     <div class="sa-shell{% if not user.is_authenticated %} sa-shell-auth{% endif %}">
         {% if user.is_authenticated %}
         <aside class="sidebar">
-            <div class="sidebar-brand">
-                <img src="{% static 'img/logo_redihos_mark.png' %}" alt="REDIHOS" class="brand-logo">
-            </div>
-            <div class="sa-wordmark">
-                <div class="sa-wordmark-text">
-                    <span class="sa-wordmark-sys">Sys</span><span class="sa-wordmark-admin">Admin</span>
+            <a href="{% url 'core:dashboard' %}" class="sidebar-brand-link text-decoration-none">
+                <div class="sidebar-brand">
+                    <img src="{% static 'img/logo_redihos_mark.png' %}" alt="REDIHOS" class="brand-logo">
                 </div>
-                <div class="sa-wordmark-bar"></div>
-                <div class="sa-wordmark-sub">Gestión de Activos TI</div>
-            </div>
+                <div class="sa-wordmark">
+                    <div class="sa-wordmark-text">
+                        <span class="sa-wordmark-sys">Sys</span><span class="sa-wordmark-admin">Admin</span>
+                    </div>
+                    <div class="sa-wordmark-bar"></div>
+                    <div class="sa-wordmark-sub">Gestión de Activos TI</div>
+                </div>
+            </a>
             <nav class="nav flex-column">
                 {% tiene_permiso 'usuarios' 'lectura' as puede_usuarios %}
                 {% tiene_permiso 'inventario' 'lectura' as puede_inventario %}
@@ -137,6 +139,16 @@
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
+            {% endif %}
+
+            {% if request.resolver_match %}
+              {% if request.resolver_match.app_name != 'core' %}
+              <div class="mb-3">
+                <a href="#" onclick="history.back(); return false;" class="btn btn-outline-secondary btn-sm">
+                  <i class="bi bi-arrow-left me-1"></i>Volver
+                </a>
+              </div>
+              {% endif %}
             {% endif %}
 
             {% block content %}{% endblock %}

@@ -80,6 +80,9 @@
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
               {% if doc.archivo %}
+                <a href="{% url 'documentos:ver' doc.pk %}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" title="Ver">
+                  <i class="bi bi-eye"></i>
+                </a>
                 <a href="{% url 'documentos:descargar' doc.pk %}" class="btn btn-sm btn-outline-primary" title="Descargar">
                   <i class="bi bi-download"></i>
                 </a>

@@ -93,6 +93,18 @@ def eliminar_documento(request, pk):
 
 
 @requiere_permiso("documentos", "lectura")
+def ver_documento(request, pk):
+    documento = get_object_or_404(Documento, pk=pk, activo=True)
+    if not documento.archivo:
+        raise Http404("El documento no tiene archivo adjunto.")
+    try:
+        nombre = documento.archivo.name.split("/")[-1]
+        return FileResponse(documento.archivo.open(), as_attachment=False, filename=nombre)
+    except FileNotFoundError:
+        raise Http404("Archivo no encontrado en el servidor.")
+
+
+@requiere_permiso("documentos", "lectura")
 def descargar_documento(request, pk):
     documento = get_object_or_404(Documento, pk=pk, activo=True)
     if not documento.archivo:

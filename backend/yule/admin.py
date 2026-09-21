@@ -18,11 +18,14 @@ def action_sincronizar_ahora(modeladmin, request, queryset):
 
 
 class ConfiguracionYuleAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "ultima_sincronizacion_display", "frecuencia_sync_minutos", "auto_sync_habilitado", "activa")
+    list_display = ("nombre", "url_resumen", "usuario", "integracion_activa", "auto_sync_habilitado", "ultima_sincronizacion_display")
     readonly_fields = ("fecha_creacion", "fecha_actualizacion", "ultima_sincronizacion")
     fieldsets = (
         ("Configuración", {
-            "fields": ("nombre", "activa", "descripcion"),
+            "fields": ("nombre", "activa", "integracion_activa", "descripcion"),
+        }),
+        ("Conexión OCS", {
+            "fields": ("url", "usuario", "password_cifrada"),
         }),
         ("Sincronización Automática", {
             "fields": ("auto_sync_habilitado", "frecuencia_sync_minutos"),
@@ -33,6 +36,10 @@ class ConfiguracionYuleAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
     )
+    
+    def url_resumen(self, obj):
+        return obj.url or "—"
+    url_resumen.short_description = "URL"
     
     def ultima_sincronizacion_display(self, obj):
         if obj.ultima_sincronizacion:

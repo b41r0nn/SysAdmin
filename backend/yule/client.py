@@ -7,6 +7,8 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
+from .models import ConfiguracionYule
+
 logger = logging.getLogger(__name__)
 
 
@@ -237,7 +239,29 @@ class OCSClient:
 
 
 def build_client() -> OCSClient:
-    """Factory para crear cliente OCS desde settings"""
+    """Factory para crear cliente OCS.
+
+    Prioridad:
+      1. Configuración de la BD (ConfiguracionYule activa). Si la banda
+         `integracion_activa` está desactivada, devuelve un cliente sin
+         configurar (is_configured() = False) → el sync no corre y las vistas
+         degradan a [].
+      2. Fallback a settings/env (OCS_BASE_URL, OCS_USER, OCS_TOKEN) cuando no
+         hay fila en BD, para no romper el despliegue actual.
+    """
+    config = ConfiguracionYule.objects.filter(activa=True).order_by("id").first()
+
+    if config is not None:
+        if not config.integracion_activa:
+            return OCSClient(base_url="", user="", token="", verify_ssl=settings.OCS_VERIFY_SSL)
+        if config.url and config.usuario:
+            return OCSClient(
+                base_url=config.url,
+                user=config.usuario,
+                token=config.get_ocs_password(),
+                verify_ssl=settings.OCS_VERIFY_SSL,
+            )
+
     return OCSClient(
         base_url=settings.OCS_BASE_URL,
         user=settings.OCS_USER,

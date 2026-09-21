@@ -24,8 +24,11 @@
     <div class="row g-4 mb-4">
         <div class="col-12 col-lg-6">
             <div class="card sa-card">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Configuración OCS</h5>
+                    <a href="{% url 'yule:configuracion' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil me-1"></i>Editar
+                    </a>
                 </div>
                 <div class="card-body">
                     <dl class="row mb-0">
@@ -35,7 +38,7 @@
                         <dt class="col-sm-5">Usuario</dt>
                         <dd class="col-sm-7"><code>{{ ocs_user|default:"—" }}</code></dd>
                         
-                        <dt class="col-sm-5">Token</dt>
+                        <dt class="col-sm-5">Contraseña</dt>
                         <dd class="col-sm-7"><code>{{ ocs_token }}</code></dd>
                         
                         <dt class="col-sm-5">Verificar SSL</dt>
@@ -47,10 +50,21 @@
                             {% endif %}
                         </dd>
                         
+                        <dt class="col-sm-5">Integración activa</dt>
+                        <dd class="col-sm-7">
+                            {% if integracion_activa %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Activa</span>
+                            {% else %}
+                                <span class="badge bg-secondary"><i class="bi bi-dash-circle me-1"></i>Desactivada</span>
+                            {% endif %}
+                        </dd>
+                        
                         <dt class="col-sm-5">Estado</dt>
                         <dd class="col-sm-7">
-                            {% if ocs_configured and conexion_ok %}
+                            {% if integracion_activa and ocs_configured and conexion_ok %}
                                 <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Conectado</span>
+                            {% elif not integracion_activa %}
+                                <span class="badge bg-secondary"><i class="bi bi-dash-circle me-1"></i>Desactivada</span>
                             {% elif ocs_configured %}
                                 <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-circle me-1"></i>Error conexión</span>
                             {% else %}

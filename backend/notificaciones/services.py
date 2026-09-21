@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.conf import settings
@@ -15,6 +16,9 @@ from licencias.models import DIAS_AVISO_VENCIMIENTO, LicenciaSoftware
 from mantenimiento.models import PlanMantenimiento
 from notificaciones.models import Notificacion, NotificacionEmail
 from yule.models import EquipoOCS
+
+
+logger = logging.getLogger(__name__)
 
 
 DIAS_GARANTIA = 30
@@ -217,6 +221,7 @@ def encolar_email(destinatario_email, asunto, cuerpo, adjunto_tipo="", adjunto_o
     El envío real lo hace el comando `enviar_notificaciones_email` (cron).
     """
     if not destinatario_email:
+        logger.info("Correo omitido: destinatario sin email registrado")
         return None
     return NotificacionEmail.objects.create(
         destinatario=destinatario_email,
