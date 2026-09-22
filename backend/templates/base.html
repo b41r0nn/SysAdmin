@@ -113,7 +113,7 @@
                 {% endif %}
                 {% if puede_administracion %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'administracion' %}active{% endif %}" href="{% url 'administracion:lista_auditoria' %}">
-                    <i class="bi bi-shield-lock me-2"></i>Administración
+                    <i class="bi bi-shield-lock me-2"></i>Configuración
                 </a>
                 {% endif %}
             </nav>
