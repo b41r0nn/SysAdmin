@@ -151,11 +151,15 @@ class Activo(models.Model):
     # ── Properties ───────────────────────────────────────────────────────────
     @property
     def fecha_vencimiento_garantia(self):
-        if not self.fecha_compra or not self.garantia_fabrica_meses:
+        if not self.fecha_compra:
             return None
-        meses = self.garantia_fabrica_meses
+        meses = 0
+        if self.garantia_fabrica_meses:
+            meses += self.garantia_fabrica_meses
         if self.garantia_extendida and self.anios_garantia_extendida:
             meses += self.anios_garantia_extendida * 12
+        if not meses:
+            return None
         return _add_months(self.fecha_compra, meses)
 
     @property

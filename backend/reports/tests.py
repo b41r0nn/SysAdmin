@@ -216,3 +216,16 @@ class ReportsLugarYGarantiaTests(TestCase):
         resp = self.client.get(self.url)
         self.assertContains(resp, "SN-GAR-002")
         self.assertContains(resp, "días")
+
+    def test_index_incluye_garantia_extendida_sin_fabrica(self):
+        hoy = timezone.now().date()
+        _crear_activo(
+            "SN-GAR-003",
+            fecha_compra=hoy - timedelta(days=100),
+            garantia_extendida=True,
+            anios_garantia_extendida=2,
+            proveedor="Distribuidora Z",
+        )
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "SN-GAR-003")
+        self.assertContains(resp, "días")
