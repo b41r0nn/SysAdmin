@@ -223,9 +223,7 @@ def _build_garantias():
     """
     hoy = timezone.now().date()
     items = []
-    for activo in Activo.objects.exclude(fecha_compra__isnull=True).exclude(
-        garantia_fabrica_meses__isnull=True
-    ):
+    for activo in Activo.objects.exclude(fecha_compra__isnull=True):
         vencimiento = activo.fecha_vencimiento_garantia
         if vencimiento is None:
             continue
