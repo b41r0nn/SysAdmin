@@ -29,7 +29,7 @@
       .pub-main { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; }
       .pub-card {
         width: 100%;
-        max-width: 560px;
+        max-width: 720px;
         background: var(--sa-card-bg, #fff);
         border: 1px solid var(--sa-border, #e2e8f0);
         border-radius: var(--sa-radius-lg, 16px);
@@ -97,12 +97,12 @@
             {{ form.contacto }}
             {% if form.contacto.errors %}<div class="invalid-feedback d-block">{{ form.contacto.errors|join:", " }}</div>{% endif %}
           </div>
-          <div class="col-12">
+          <div class="col-md-6">
             <label class="form-label fw-semibold">Tipo de dispositivo</label>
             {{ form.tipo_dispositivo }}
             {% if form.tipo_dispositivo.errors %}<div class="invalid-feedback d-block">{{ form.tipo_dispositivo.errors|join:", " }}</div>{% endif %}
           </div>
-          <div class="col-12">
+          <div class="col-md-6">
             <label class="form-label fw-semibold">Número de serie o etiqueta del equipo, si lo conocés</label>
             {{ form.numero_serie_etiqueta }}
             {% if form.numero_serie_etiqueta.errors %}<div class="invalid-feedback d-block">{{ form.numero_serie_etiqueta.errors|join:", " }}</div>{% endif %}
