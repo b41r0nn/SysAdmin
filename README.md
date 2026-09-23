@@ -475,6 +475,8 @@ Para documentación técnica detallada, configuración avanzada, y arquitectura:
 
 **Ver:** [SYSADMIN_HANDOFF.md](SYSADMIN_HANDOFF.md)
 
+**Etiquetas QR — tamaño e impresión:** [ETIQUETAS_IMPRESION.md](ETIQUETAS_IMPRESION.md) (plaqueta física **50 × 30 mm**, definida en `.label` de `etiqueta_pdf.html`)
+
 Este documento contiene:
 - Detalles de cada etapa implementada
 - Modelos de datos completos
@@ -597,7 +599,7 @@ BD: PostgreSQL 15 en contenedor
 ### 2026-09-10 — Fase 2: Etiquetas QR para activos
 
 - ✅ Código QR por activo (URL de la ficha) en PNG
-- ✅ PDF de etiqueta individual (92×58 mm) con datos del equipo
+- ✅ PDF de etiqueta individual (50×30 mm) con datos del equipo
 - ✅ Selección masiva de activos → PDF con hasta 8 etiquetas por hoja A4
 - ✅ Vista previa del QR en la ficha del activo + botones en lista y tabla
 - ✅ Dependencia nueva `qrcode==8.2`

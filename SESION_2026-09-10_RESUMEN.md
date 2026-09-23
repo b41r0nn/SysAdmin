@@ -44,7 +44,7 @@ Metodología transversal del sprint:
 - QR cifra la **URL absoluta** de la ficha del activo.
 - **Endpoints** (en `inventario`, `@requiere_permiso("inventario","lectura")`):
   - `GET /inventario/<pk>/qr/` → PNG
-  - `GET /inventario/<pk>/etiqueta/` → PDF individual 92×58 mm
+  - `GET /inventario/<pk>/etiqueta/` → PDF individual 50×30 mm
   - `GET/POST /inventario/etiquetas/` → selección masiva → PDF con hasta 8 etiquetas por hoja A4
 - **Plantillas**: `etiqueta_pdf.html` (standalone WeasyPrint, patrón `acta_pdf.html`) y `etiquetas_seleccion.html` (checkboxes + contador + "todos").
 - **Integración**: botón en lista, icono QR por fila y vista previa en detalle.

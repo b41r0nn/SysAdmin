@@ -63,7 +63,7 @@
 - Dependencia nueva: `qrcode==8.2` (PNG puro, sin GTK). QR cifra la URL absoluta de la ficha del activo (`inventario/detalle`).
 - Endpoints nuevos en `inventario` (todos `@requiere_permiso("inventario", "lectura")`):
   - `GET /inventario/<pk>/qr/` → PNG del código QR (usado en la ficha del activo).
-  - `GET /inventario/<pk>/etiqueta/` → PDF de etiqueta individual (92×58 mm).
+  - `GET /inventario/<pk>/etiqueta/` → PDF de etiqueta individual (50×30 mm).
   - `GET/POST /inventario/etiquetas/` → página de selección masiva → PDF con hasta 8 etiquetas por hoja A4.
 - Plantillas: `inventario/etiqueta_pdf.html` (standalone WeasyPrint, patrón `acta_pdf.html`) y `inventario/etiquetas_seleccion.html` (web con checkboxes, selector "todos" y contador).
 - Integración: botón en `lista.html`, icono QR por fila en `partials/tabla.html`, vista previa del QR + botón en `detalle.html`.
@@ -943,7 +943,7 @@ Pendiente únicamente aplicar patches en servidor y hacer `makemigrations + migr
 ### 2026-09-10 — Fase 2: Etiquetas QR para activos
 
 - `qrcode==8.2` (PNG puro, sin GTK). QR cifra URL absoluta de la ficha.
-- Endpoints: `/<pk>/qr/` (PNG), `/<pk>/etiqueta/` (PDF 92×58 mm), `/etiquetas/` (selección masiva → PDF A4, 8 por hoja).
+- Endpoints: `/<pk>/qr/` (PNG), `/<pk>/etiqueta/` (PDF 50×30 mm), `/etiquetas/` (selección masiva → PDF A4, 8 por hoja).
 - Plantillas: `etiqueta_pdf.html` (WeasyPrint) y `etiquetas_seleccion.html` (web).
 - Integración: botón en lista, icono QR por fila en tabla, vista previa + botón en detalle.
 - 10 tests en `inventario/tests.py`.

@@ -84,7 +84,7 @@ Establecer un sistema de **roles y permisos** centralizado, registro de **audito
 
 ### Objetivo
 
-Imprimir **etiquetas físicas** con código QR para los activos de inventario, que al escanearse abran la ficha del activo. Generadas como PDF imprimible (92×58 mm), individual o en masa.
+Imprimir **etiquetas físicas** con código QR para los activos de inventario, que al escanearse abran la ficha del activo. Generadas como PDF imprimible (50×30 mm), individual o en masa.
 
 ### Alcance
 
