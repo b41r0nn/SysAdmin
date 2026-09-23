@@ -9,6 +9,9 @@
     <p class="page-subtitle">Solicitudes de ayuda y escalamiento a mantenimiento.</p>
   </div>
   <div class="d-flex gap-2">
+    <a href="{% url 'soporte:excel' %}" class="btn btn-outline-success">
+      <i class="bi bi-file-earmark-excel"></i> Exportar
+    </a>
     <a href="{% url 'soporte:crear' %}" class="btn btn-primary">
       <i class="bi bi-plus-circle-fill"></i> Nuevo ticket
     </a>
@@ -107,6 +110,7 @@
           <th>#</th>
           <th>Asunto</th>
           <th>Solicitante</th>
+          <th>Tipo</th>
           <th>Prioridad</th>
           <th>Estado</th>
           <th>Asignado</th>
@@ -121,7 +125,16 @@
             <div class="fw-semibold" style="font-size:.9rem;">{{ t.asunto }}</div>
             <div class="text-muted" style="font-size:.85rem;">{{ t.fecha_creacion|date:"d/m/Y H:i" }}</div>
           </td>
-          <td style="font-size:.85rem;">{{ t.solicitante.username }}</td>
+          <td style="font-size:.85rem;">{{ t.nombre_solicitante|default:t.solicitante.username|default:"—" }}</td>
+          <td>
+            {% if t.tipo_dispositivo %}
+              <span class="badge bg-light text-dark border" style="font-size:.8rem;">
+                <i class="bi bi-device-ssd"></i> {{ t.get_tipo_dispositivo_display }}
+              </span>
+            {% else %}
+              <span class="text-muted" style="font-size:.85rem;">—</span>
+            {% endif %}
+          </td>
           <td>
             {% if t.prioridad == "alta" %}
               <span class="sa-badge danger">Alta</span>

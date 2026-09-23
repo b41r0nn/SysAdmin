@@ -1,0 +1,134 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportar falla — REDIHOS SysAdmin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/sysadmin.css' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon_32.png' %}">
+    <style>
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--sa-bg, #f1f5f9);
+      }
+      .pub-header {
+        background: var(--sa-sidebar-bg, #0f172a);
+        color: #fff;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .pub-header img { height: 40px; width: auto; }
+      .pub-main { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; }
+      .pub-card {
+        width: 100%;
+        max-width: 560px;
+        background: var(--sa-card-bg, #fff);
+        border: 1px solid var(--sa-border, #e2e8f0);
+        border-radius: var(--sa-radius-lg, 16px);
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+        padding: 32px;
+      }
+      .pub-footer {
+        text-align: center;
+        color: #6b7280;
+        font-size: .8rem;
+        padding: 16px;
+      }
+      .hp-field {
+        position: absolute;
+        left: -9999px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      }
+    </style>
+</head>
+<body>
+  <header class="pub-header">
+    <img src="{% static 'img/logo_redihos_mark.png' %}" alt="REDIHOS">
+    <div>
+      <div class="sa-wordmark">
+        <div class="sa-wordmark-text">
+          <span class="sa-wordmark-sys">Sys</span><span class="sa-wordmark-admin">Admin</span>
+        </div>
+        <div class="sa-wordmark-bar"></div>
+        <div class="sa-wordmark-sub">Reporte de fallas · Soporte TI</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="pub-main">
+    <div class="pub-card">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="sa-stat-icon bg-danger bg-opacity-10 text-danger" style="width:44px;height:44px;">
+          <i class="bi bi-bug"></i>
+        </div>
+        <div>
+          <h4 class="fw-bold mb-0">Reportar falla o novedad</h4>
+          <p class="text-muted mb-0" style="font-size:.85rem;">
+            Describe el problema y el equipo de TI se contactará contigo.
+          </p>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Nombre</label>
+            {{ form.nombre }}
+            {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold">Área o departamento</label>
+            {{ form.area }}
+            {% if form.area.errors %}<div class="invalid-feedback d-block">{{ form.area.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Correo o extensión de contacto</label>
+            {{ form.contacto }}
+            {% if form.contacto.errors %}<div class="invalid-feedback d-block">{{ form.contacto.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Tipo de dispositivo</label>
+            {{ form.tipo_dispositivo }}
+            {% if form.tipo_dispositivo.errors %}<div class="invalid-feedback d-block">{{ form.tipo_dispositivo.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Número de serie o etiqueta del equipo, si lo conocés</label>
+            {{ form.numero_serie_etiqueta }}
+            {% if form.numero_serie_etiqueta.errors %}<div class="invalid-feedback d-block">{{ form.numero_serie_etiqueta.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Descripción del problema</label>
+            {{ form.descripcion }}
+            {% if form.descripcion.errors %}<div class="invalid-feedback d-block">{{ form.descripcion.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12 hp-field" aria-hidden="true">
+            <label for="id_sitio_web">No llenar este campo</label>
+            {{ form.sitio_web }}
+          </div>
+        </div>
+
+        <div class="d-grid gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-send me-2"></i>Enviar reporte
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="pub-footer">
+    REDIHOS S.A.S. · Sistema de gestión de activos TI · Soporte interno
+  </footer>
+</body>
+</html>

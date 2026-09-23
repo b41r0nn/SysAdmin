@@ -15,7 +15,7 @@
 <div class="page-header mb-3 d-flex align-items-center justify-content-between">
   <div>
     <h1 class="page-title">Ticket #{{ ticket.pk }} · {{ ticket.asunto }}</h1>
-    <p class="text-muted mb-0">Solicitado por {{ ticket.solicitante.username }} el {{ ticket.fecha_creacion|date:"d/m/Y H:i" }}</p>
+    <p class="text-muted mb-0">Solicitado por {{ ticket.nombre_solicitante|default:ticket.solicitante.username|default:"Usuario público" }} el {{ ticket.fecha_creacion|date:"d/m/Y H:i" }}</p>
   </div>
   <span class="sa-badge {% if ticket.estado == 'resuelto' %}success{% elif ticket.estado == 'cerrado' %}secondary{% elif ticket.estado == 'escalado' %}info{% elif ticket.estado == 'en_proceso' %}warning{% else %}danger{% endif %}">
     {{ ticket.get_estado_display }}
@@ -51,7 +51,7 @@
         <i class="bi bi-person"></i>
       </div>
       <div class="stat-content">
-        <div class="stat-value text-truncate">{{ ticket.solicitante.username }}</div>
+        <div class="stat-value text-truncate">{{ ticket.nombre_solicitante|default:ticket.solicitante.username|default:"—" }}</div>
         <div class="stat-label">Solicitante</div>
       </div>
     </div>
@@ -74,6 +74,33 @@
     Descripcion
   </h6>
   <p class="mb-0">{{ ticket.descripcion|default:"—"|linebreaksbr }}</p>
+
+  {% if ticket.tipo_dispositivo or ticket.numero_serie_etiqueta %}
+  <hr>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="text-muted small mb-1"><i class="bi bi-device-ssd"></i> Tipo de dispositivo</div>
+      <div class="fw-semibold">{{ ticket.get_tipo_dispositivo_display|default:"—" }}</div>
+    </div>
+    <div class="col-md-6">
+      <div class="text-muted small mb-1"><i class="bi bi-upc-scan"></i> Nº de serie / etiqueta</div>
+      <div class="fw-semibold">{{ ticket.numero_serie_etiqueta|default:"—" }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if ticket.acciones_realizadas %}
+  <hr>
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+    Acciones realizadas
+  </h6>
+  <p class="mb-0">{{ ticket.acciones_realizadas|linebreaksbr }}</p>
+  {% if ticket.tiempo_empleado_minutos %}
+  <div class="mt-2 badge bg-info bg-opacity-10 text-info">
+    <i class="bi bi-stopwatch"></i> Tiempo empleado: {{ ticket.tiempo_empleado_minutos }} min
+  </div>
+  {% endif %}
+  {% endif %}
 </div>
 
 {% if ticket.ordenes.all %}
