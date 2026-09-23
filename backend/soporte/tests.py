@@ -1,8 +1,10 @@
+import io
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
+from openpyxl import load_workbook
 
 from inventario.models import Activo
 from mantenimiento.models import OrdenMantenimiento
@@ -93,6 +95,19 @@ class TicketsCRUDTests(TestCase):
         ticket = _ticket(self.user)
         resp = self.client.get(reverse("soporte:detalle", args=[ticket.pk]))
         self.assertEqual(resp.status_code, 200)
+
+    def test_crear_no_muestra_campos_tecnico(self):
+        resp = self.client.get(reverse("soporte:crear"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Acciones realizadas")
+        self.assertNotContains(resp, "Tiempo empleado")
+
+    def test_editar_muestra_campos_tecnico(self):
+        ticket = _ticket(self.user)
+        resp = self.client.get(reverse("soporte:editar", args=[ticket.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Acciones realizadas")
+        self.assertContains(resp, "Tiempo empleado (minutos)")
 
 
 # ─── Permisos por rol ──────────────────────────────────────────────
@@ -262,3 +277,261 @@ class TicketEmailTriggersTests(TestCase):
         self.ticket.save(update_fields=["solicitante"])
         _aviso_email_ticket(self.ticket, "en_proceso")
         self.assertEqual(NotificacionEmail.objects.count(), 0)
+
+
+# ─── Formulario público ───────────────────────────────────────────
+
+
+class ReportePublicoTests(TestCase):
+    URL = "/soporte/reportar-publico/"
+
+    def setUp(self):
+        self.admin = _user("admin")
+        self.tecnico = _user("tecnico")
+
+    def test_get_sin_login_200(self):
+        resp = self.client.get(self.URL)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Reportar falla")
+
+    def test_post_sin_login_crea_ticket_publico(self):
+        resp = self.client.post(self.URL, {
+            "nombre": "María Pérez",
+            "area": "Recursos Humanos",
+            "contacto": "maria@redihos.local",
+            "descripcion": "La impresora del 3er piso no imprime.",
+        })
+        self.assertEqual(resp.status_code, 200)
+        ticket = Ticket.objects.get()
+        self.assertIsNone(ticket.solicitante)
+        self.assertEqual(ticket.nombre_solicitante, "María Pérez")
+        self.assertEqual(ticket.area_solicitante, "Recursos Humanos")
+        self.assertEqual(ticket.contacto_solicitante, "maria@redihos.local")
+        self.assertContains(resp, f"#{ticket.pk}")
+
+    def test_post_guarda_tipo_dispositivo_y_numero_serie(self):
+        resp = self.client.post(self.URL, {
+            "nombre": "Juan",
+            "area": "Ventas",
+            "contacto": "",
+            "tipo_dispositivo": "portatil",
+            "numero_serie_etiqueta": "SN-PORT-999",
+            "descripcion": "Portátil no enciende.",
+        })
+        self.assertEqual(resp.status_code, 200)
+        ticket = Ticket.objects.get()
+        self.assertEqual(ticket.tipo_dispositivo, "portatil")
+        self.assertEqual(ticket.numero_serie_etiqueta, "SN-PORT-999")
+
+    def test_post_tipo_dispositivo_opcional(self):
+        resp = self.client.post(self.URL, {
+            "nombre": "Luis",
+            "area": "Sistemas",
+            "contacto": "",
+            "tipo_dispositivo": "",
+            "numero_serie_etiqueta": "",
+            "descripcion": "No enciende.",
+        })
+        self.assertEqual(resp.status_code, 200)
+        ticket = Ticket.objects.get()
+        self.assertEqual(ticket.tipo_dispositivo, "")
+        self.assertEqual(ticket.numero_serie_etiqueta, "")
+
+    def test_post_honeypot_lleno_no_crea_ticket(self):
+        resp = self.client.post(self.URL, {
+            "nombre": "Bot",
+            "area": "Spam",
+            "contacto": "",
+            "descripcion": "spam",
+            "sitio_web": "http://spam.example.com",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Ticket.objects.count(), 0)
+
+    def test_aviso_ti_solo_bandeja_sin_email(self):
+        with patch("soporte.views.encolar_email") as mock_email:
+            self.client.post(self.URL, {
+                "nombre": "Carlos",
+                "area": "Compras",
+                "contacto": "",
+                "descripcion": "PC no arranca.",
+            })
+        mock_email.assert_not_called()
+        for destinatario in (self.admin, self.tecnico):
+            self.assertTrue(Notificacion.objects.filter(
+                usuario=destinatario,
+                tipo="aviso",
+                objetokey__startswith="ticket:",
+            ).exists())
+
+    def test_aviso_no_suena_para_quien_no_es_ti(self):
+        operario = _user("operario")
+        self.client.post(self.URL, {
+            "nombre": "Carlos",
+            "area": "Compras",
+            "contacto": "",
+            "descripcion": "PC no arranca.",
+        })
+        self.assertFalse(Notificacion.objects.filter(usuario=operario).exists())
+
+
+# ─── Navegación ─────────────────────────────────────────────────
+
+
+class SidebarTests(TestCase):
+    def test_reportar_falla_no_aparece_en_nav_autenticado(self):
+        user = _user("admin")
+        self.client.login(username=user.username, password="x")
+        resp = self.client.get(reverse("soporte:lista"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "mantenimiento:reportar")
+
+
+class LoginLinkTests(TestCase):
+    def test_login_muestra_link_publico(self):
+        resp = self.client.get(reverse("accounts:login"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "¿Necesitás reportar una falla?")
+        self.assertContains(resp, reverse("soporte:reportar_publico"))
+
+    def test_link_publico_accesible_sin_cuenta(self):
+        resp = self.client.get(reverse("soporte:reportar_publico"))
+        self.assertEqual(resp.status_code, 200)
+
+
+# ─── Edición técnica (acciones + tiempo) ─────────────────────────
+
+
+class EdicionTecnicaTests(TestCase):
+    def setUp(self):
+        self.tecnico = _user("tecnico")
+        self.client.force_login(self.tecnico)
+
+    def _ticket_en_proceso(self):
+        ticket = _ticket(self.tecnico)
+        ticket.estado = "en_proceso"
+        ticket.save(update_fields=["estado"])
+        return ticket
+
+    def test_tecnico_puede_editar_acciones_y_tiempo(self):
+        ticket = self._ticket_en_proceso()
+        resp = self.client.post(
+            reverse("soporte:editar", args=[ticket.pk]),
+            {
+                "asunto": ticket.asunto,
+                "descripcion": ticket.descripcion,
+                "prioridad": ticket.prioridad,
+                "acciones_realizadas": "Se actualizó el BIOS y quedó funcionando.",
+                "tiempo_empleado_minutos": "45",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.acciones_realizadas, "Se actualizó el BIOS y quedó funcionando.")
+        self.assertEqual(ticket.tiempo_empleado_minutos, 45)
+
+    def test_editar_sin_tiempo_lo_deja_null(self):
+        ticket = self._ticket_en_proceso()
+        resp = self.client.post(
+            reverse("soporte:editar", args=[ticket.pk]),
+            {
+                "asunto": ticket.asunto,
+                "descripcion": ticket.descripcion,
+                "prioridad": ticket.prioridad,
+                "acciones_realizadas": "",
+                "tiempo_empleado_minutos": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        ticket.refresh_from_db()
+        self.assertIsNone(ticket.tiempo_empleado_minutos)
+
+
+# ─── Export Excel ─────────────────────────────────────────────────
+
+
+class TicketExcelTests(TestCase):
+    def setUp(self):
+        self.user = _user("admin")
+        self.tecnico = _user("tecnico")
+        self.client.login(username=self.user.username, password="x")
+
+    def test_export_sin_session_requiere_login(self):
+        c = Client()
+        resp = c.get(reverse("soporte:excel"))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_export_responde_xlsx(self):
+        _ticket(self.user)
+        resp = self.client.get(reverse("soporte:excel"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            resp["Content-Type"],
+        )
+        self.assertIn("tickets_soporte.xlsx", resp["Content-Disposition"])
+
+    def test_export_ticket_publico_no_rompe(self):
+        Ticket.objects.create(
+            asunto="Falla reportada: pc lento",
+            descripcion="pc lento",
+            nombre_solicitante="Ana",
+            area_solicitante="Contabilidad",
+            contacto_solicitante="",
+        )
+        resp = self.client.get(reverse("soporte:excel"))
+        self.assertEqual(resp.status_code, 200)
+
+    def _valor_metrica(self, resp, metrica):
+        wb = load_workbook(io.BytesIO(resp.content))
+        ws = wb["Resumen"]
+        for row in ws.iter_rows():
+            if row[0].value == metrica:
+                return row[1].value
+        return None
+
+    def test_export_tiempo_real_cuando_existe(self):
+        t1 = _ticket(self.user)
+        t1.estado = "resuelto"
+        t1.tiempo_empleado_minutos = 30
+        t1.save(update_fields=["estado", "tiempo_empleado_minutos"])
+        t2 = _ticket(self.user, asunto="Segundo ticket")
+        t2.estado = "cerrado"
+        t2.tiempo_empleado_minutos = 60
+        t2.save(update_fields=["estado", "tiempo_empleado_minutos"])
+        t3 = _ticket(self.user, asunto="Tercer ticket")
+        t3.estado = "resuelto"
+        t3.tiempo_empleado_minutos = None
+        t3.save(update_fields=["estado", "tiempo_empleado_minutos"])
+
+        resp = self.client.get(reverse("soporte:excel"))
+        valor = self._valor_metrica(resp, "Tiempo promedio de resolución")
+        # Promedio de los valores reales cargados (30+60)/2 = 45 min; el tercero
+        # sin cargar NO se usa para el promedio real.
+        self.assertEqual(valor, "45 min")
+
+    def test_export_tiempo_fallback_proxy_sin_real(self):
+        t1 = _ticket(self.user)
+        t1.estado = "resuelto"
+        t1.tiempo_empleado_minutos = None
+        t1.save(update_fields=["estado", "tiempo_empleado_minutos"])
+
+        resp = self.client.get(reverse("soporte:excel"))
+        valor = self._valor_metrica(resp, "Tiempo promedio de resolución")
+        self.assertIn("días", valor)
+
+    def test_export_tiempo_real_incluye_cero_minutos(self):
+        t1 = _ticket(self.user)
+        t1.estado = "resuelto"
+        t1.tiempo_empleado_minutos = 0
+        t1.save(update_fields=["estado", "tiempo_empleado_minutos"])
+        t2 = _ticket(self.user, asunto="Segundo ticket")
+        t2.estado = "cerrado"
+        t2.tiempo_empleado_minutos = 60
+        t2.save(update_fields=["estado", "tiempo_empleado_minutos"])
+
+        resp = self.client.get(reverse("soporte:excel"))
+        valor = self._valor_metrica(resp, "Tiempo promedio de resolución")
+        # (0+60)/2 = 30 min: el ticket resuelto en 0 minutos cuenta en el
+        # promedio real y NO cae al proxy.
+        self.assertEqual(valor, "30 min")

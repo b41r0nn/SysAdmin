@@ -56,9 +56,6 @@
                           hx-trigger="load"
                           hx-swap="innerHTML"></span>
                 </a>
-                <a class="nav-link {% if request.resolver_match.url_name == 'reportar' %}active{% endif %}" href="{% url 'mantenimiento:reportar' %}">
-                    <i class="bi bi-bug me-2"></i>Reportar falla
-                </a>
                 {% if puede_usuarios %}
                 <a class="nav-link {% if request.resolver_match.app_name == 'usuarios' %}active{% endif %}" href="{% url 'usuarios:lista' %}">
                     <i class="bi bi-people me-2"></i>Usuarios

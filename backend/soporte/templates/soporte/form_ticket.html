@@ -47,6 +47,18 @@
             {{ form.descripcion }}
             {% if form.descripcion.errors %}<div class="invalid-feedback d-block">{{ form.descripcion.errors|join:", " }}</div>{% endif %}
           </div>
+          {% if "acciones_realizadas" in form.fields %}
+          <div class="col-12">
+            <label class="form-label fw-semibold">Acciones realizadas</label>
+            {{ form.acciones_realizadas }}
+          </div>
+          {% endif %}
+          {% if "tiempo_empleado_minutos" in form.fields %}
+          <div class="col-12 col-md-4">
+            <label class="form-label fw-semibold">Tiempo empleado (minutos)</label>
+            {{ form.tiempo_empleado_minutos }}
+          </div>
+          {% endif %}
         </div>
 
         <div class="d-flex gap-2 mt-4">
