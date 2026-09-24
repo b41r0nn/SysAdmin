@@ -1,8 +1,12 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
 # SysAdmin
-# Script de preparación del Ubuntu Server
+# Script de preparación del Ubuntu Server (convive con otros servicios en el host)
 # Ejecutar como: sudo bash setup_server.sh
+#
+# NOTA: idempotente y NO destructivo. Detecta lo ya instalado y NO toca
+# las reglas UFW ni los contenedores de otros servicios (p.ej. Hikvision
+# Extractor: 80/8000). Solo agrega lo que SysAdmin necesita (6060/6061).
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -e  # Detener si cualquier comando falla
@@ -36,37 +40,42 @@ apt-get install -y -qq \
     apt-transport-https
 echo "✅ Utilidades instaladas."
 
-# ─── 3. Instalar Docker ───────────────────────────────────────────────────────
-echo "🐳 [3/7] Instalando Docker..."
+# ─── 3. Instalar Docker (solo si no está) ─────────────────────────────────────
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    echo "🐳 [3/7] Docker ya está instalado — se omite la instalación:"
+    echo "   ✅ $(docker --version) / $(docker compose version)"
+else
+    echo "🐳 [3/7] Instalando Docker..."
 
-# Agregar clave GPG oficial de Docker
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
+    # Agregar clave GPG oficial de Docker
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+        gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
 
-# Agregar repositorio Docker
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | \
-  tee /etc/apt/sources.list.d/docker.list > /dev/null
+    # Agregar repositorio Docker
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+      https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" | \
+      tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Instalar Docker Engine + Compose
-apt-get update -qq
-apt-get install -y -qq \
-    docker-ce \
-    docker-ce-cli \
-    containerd.io \
-    docker-buildx-plugin \
-    docker-compose-plugin
+    # Instalar Docker Engine + Compose
+    apt-get update -qq
+    apt-get install -y -qq \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-compose-plugin
 
-# Habilitar Docker al arranque
-systemctl enable docker
-systemctl start docker
+    # Habilitar Docker al arranque
+    systemctl enable docker
+    systemctl start docker
 
-echo "✅ Docker instalado: $(docker --version)"
-echo "✅ Docker Compose: $(docker compose version)"
+    echo "✅ Docker instalado: $(docker --version)"
+    echo "✅ Docker Compose: $(docker compose version)"
+fi
 
 # ─── 4. Configurar usuario para Docker (sin sudo) ─────────────────────────────
 echo "👤 [4/7] Configurando permisos Docker..."
@@ -79,15 +88,19 @@ else
     echo "   ℹ️  Ejecutando como root, no se agrega a grupo."
 fi
 
-# ─── 5. Configurar Firewall UFW ───────────────────────────────────────────────
-echo "🔒 [5/7] Configurando firewall..."
+# ─── 5. Configurar Firewall UFW (respetando reglas de otros servicios) ────────
+echo "🔒 [5/7] Asegurando firewall (se respetan reglas existentes de otros servicios)..."
 ufw default deny incoming
 ufw default allow outgoing
+# Reglas de SysAdmin (SÓLO se agregan; las de otros servicios, p.ej. Hikvision
+# 80/3000/8000, ya existentes NO se tocan):
 ufw allow ssh          # Puerto 22 — acceso SSH
-ufw allow 6060/tcp     # HTTPS interno (nginx) — app web
+ufw allow 6060/tcp     # HTTPS interno (nginx) — app web SysAdmin
 ufw allow 6061/tcp     # HTTP → redirect 301 a HTTPS
-ufw --force enable
-echo "✅ Firewall configurado. Reglas activas:"
+if ! ufw status | grep -q "Status: active"; then
+    ufw --force enable
+fi
+echo "✅ Firewall asegurado. Reglas activas:"
 ufw status numbered
 
 # ─── 6. Configurar rsync hacia NAS ───────────────────────────────────────────
