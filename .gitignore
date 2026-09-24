@@ -34,3 +34,10 @@ Thumbs.db
 
 # Certificados (nunca versionar claves privadas)
 nginx/certs/
+
+# Artefactos accidentales locales
+get-pip.py
+mnt/
+backend/a1_output.txt
+backend/a2_output.txt
+tmp_scratch.sqlite3
