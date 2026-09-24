@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.template import Context, Template
 from django.test import TestCase
 from django.urls import reverse
@@ -126,3 +127,122 @@ class PermisosExtrasTagTests(TestCase):
             template.render(Context({"user": None, "modulo": "usuarios", "nivel": "lectura"})),
             "NO",
         )
+
+
+class LoginSeguridadTests(TestCase):
+    """Endurecimiento del login: mensajes genéricos, axes y auditoría."""
+
+    LOGIN_URL_PATH = "/accounts/login/"
+
+    def setUp(self):
+        from axes.models import AccessAttempt, AccessFailureLog
+
+        AccessAttempt.objects.all().delete()
+        AccessFailureLog.objects.all().delete()
+        self.usuario = crear_usuario("tecnico", username="seg_login")
+
+    def _intentar_login(self, username="seg_login", password="password-incorrecta"):
+        return self.client.post(
+            self.LOGIN_URL_PATH,
+            {"username": username, "password": password},
+        )
+
+    def test_mensaje_error_generico_usuario_inexistente(self):
+        resp = self._intentar_login(username="no_existe")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Usuario o contraseña incorrectos.")
+
+    def test_mensaje_error_generico_password_mala(self):
+        resp = self._intentar_login()
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Usuario o contraseña incorrectos.")
+
+    def test_mensaje_generico_no_revela_existencia(self):
+        resp_inexistente = self._intentar_login(username="no_existe")
+        resp_mala_clave = self._intentar_login()
+        for resp in (resp_inexistente, resp_mala_clave):
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, "Usuario o contraseña incorrectos.")
+            self.assertNotContains(resp, "no existe")
+            self.assertNotContains(resp, "no está registrado")
+
+    def test_cinco_intentos_fallidos_registran_lockout_en_bd(self):
+        from axes.models import AccessAttempt
+
+        for _ in range(5):
+            self._intentar_login()
+            self.assertLess(AccessAttempt.objects.filter(username="seg_login").count(), 6)
+
+        self.assertFalse(
+            CustomUser.objects.filter(username="seg_login").exclude(is_active=True).exists()
+        )
+
+    def test_login_bloqueado_devuelve_429(self):
+        for _ in range(5):
+            self._intentar_login()
+        resp = self._intentar_login()
+        self.assertEqual(resp.status_code, 429)
+
+    def test_bloqueo_crea_registros_auditoria(self):
+        from administracion.models import RegistroAuditoria
+
+        for _ in range(5):
+            self._intentar_login()
+        self._intentar_login()
+
+        fallidos = RegistroAuditoria.objects.filter(accion="login_fallido")
+        bloqueos = RegistroAuditoria.objects.filter(accion="cuenta_bloqueada")
+        self.assertGreaterEqual(fallidos.count(), 5)
+        self.assertGreaterEqual(bloqueos.count(), 1)
+        self.assertEqual(bloqueos.first().modulo, "auth")
+
+    def test_login_exitoso_resetea_contador(self):
+        from axes.models import AccessAttempt
+
+        self._intentar_login()
+        self._intentar_login()
+        self._intentar_login()
+
+        resp = self.client.post(
+            self.LOGIN_URL_PATH,
+            {"username": "seg_login", "password": "testpass123"},
+        )
+        self.assertRedirects(resp, reverse("core:dashboard"))
+        self.assertEqual(AccessAttempt.objects.filter(username="seg_login").count(), 0)
+
+    def test_cookies_sesion_seguras(self):
+        from django.conf import settings
+
+        self.client.post(
+            self.LOGIN_URL_PATH,
+            {"username": "seg_login", "password": "testpass123"},
+        )
+        self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
+        self.assertEqual(settings.SESSION_COOKIE_SAMESITE, "Lax")
+        self.assertEqual(settings.SESSION_COOKIE_AGE, 28800)
+        self.assertTrue(settings.SESSION_EXPIRE_AT_BROWSER_CLOSE)
+
+    def test_headers_seguridad_presentes(self):
+        resp = self.client.get(self.LOGIN_URL_PATH)
+        self.assertEqual(resp.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(resp.get("X-Frame-Options"), "DENY")
+        self.assertEqual(resp.get("Referrer-Policy"), "same-origin")
+
+    def test_axes_configuracion_activa(self):
+        from django.conf import settings
+
+        self.assertTrue(settings.AXES_FAILURE_LIMIT == 5)
+        self.assertEqual(settings.AXES_LOCKOUT_PARAMETERS, [["username", "ip_address"]])
+        self.assertTrue(settings.AXES_RESET_ON_SUCCESS)
+        self.assertIn(
+            "axes.backends.AxesStandaloneBackend",
+            settings.AUTHENTICATION_BACKENDS,
+        )
+
+    def test_password_validators_min_length_10(self):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            validate_password("corta123", user=self.usuario)
+        validate_password("clavelargadeseguridad", user=self.usuario)

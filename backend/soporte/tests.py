@@ -381,7 +381,7 @@ class ReportePublicoTests(TestCase):
 class SidebarTests(TestCase):
     def test_reportar_falla_no_aparece_en_nav_autenticado(self):
         user = _user("admin")
-        self.client.login(username=user.username, password="x")
+        self.client.force_login(user)
         resp = self.client.get(reverse("soporte:lista"))
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, "mantenimiento:reportar")
@@ -454,7 +454,7 @@ class TicketExcelTests(TestCase):
     def setUp(self):
         self.user = _user("admin")
         self.tecnico = _user("tecnico")
-        self.client.login(username=self.user.username, password="x")
+        self.client.force_login(self.user)
 
     def test_export_sin_session_requiere_login(self):
         c = Client()

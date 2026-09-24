@@ -56,10 +56,12 @@ services:
     container_name: sysadmin_nginx
     restart: always
     ports:
-      - "6060:80"
+      - "6060:443"   # HTTPS interno (cert autofirmado)
+      - "6061:80"    # HTTP → redirect 301 a HTTPS
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       django:
         condition: service_healthy

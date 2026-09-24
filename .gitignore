@@ -31,3 +31,6 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Certificados (nunca versionar claves privadas)
+nginx/certs/
