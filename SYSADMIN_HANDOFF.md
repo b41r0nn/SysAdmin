@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-10 · v1.4.0 + Fase 1/2/3/4 · 142 tests OK
+> Documento actualizado: 2026-09-24 · v1.10.0 + Fase 7 (seguridad) · 313 tests OK
 
 ---
 
@@ -26,27 +26,33 @@
 | v1.9.0 | Detector vencimiento de licencias en notificaciones | ✅ COMPLETA 2026-09-10 · `c9f18ac` |
 | v1.9.0 | Gestión de cuentas de usuario `/administracion/cuentas/` | ✅ COMPLETA 2026-09-10 · `36d58bb` |
 | — | Commits del sprint §13 (9) ejecutados | ✅ COMPLETA 2026-09-10 · `1565d08`→`5094cba` |
+| Fase 7 | Seguridad del login (django-axes) + auditoría de fallos | ✅ COMPLETA 2026-09-24 · 313 tests |
+| Fase 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA 2026-09-24 · pendiente validar en Docker |
 
 ---
 
 ## 🔴 TAREAS CRÍTICAS PENDIENTES
 
-1. **Deploy v1.1.0 + Fases 1-6 + v1.9.0 en servidor**
+1. **Deploy v1.1.0 + Fases 1-7 + v1.9.0 en servidor**
    - Ejecutar `migrate` para aplicar migraciones pendientes de todas las etapas/fases (incluye `licencias/0002` y `notificaciones/0002` de las features de cierre)
-   - Reconstruir imagen Docker (dependencia nueva `qrcode==8.2`)
+   - Reconstruir imagen Docker (dependencia nueva `qrcode==8.2` y `django-axes==8.3.1`)
    - `collectstatic --noinput` y reiniciar contenedor Django
    - Configurar `SECRET_KEY` y `PASSWORDS_ENCRYPTION_KEY` reales en `.env`
    - Verificar módulo Administración (auditoría + configuración + **Cuentas**), sidebar por rol, etiquetas QR y detector de licencias en la campana de notificaciones
 
-2. **Decidir manejo de `admin.py`**: la mayoría de apps registran modelos sin restricciones (borrado/CRUD completo vía /admin/). Solo `administracion` (auditoría) y `yule/SincronizacionLog` son read-only. Decidir `unregister` vs `has_delete_permission`.
+2. **Validar HTTPS (Fase 7) en el servidor**: el acceso ahora es `https://192.168.1.250:6060` (cert autofirmado `nginx/certs/`); `http://...:6061` debe redirigir 301 a HTTPS. Confirmar con `docker compose up -d --build` que https carga sin 500 (warning del cert autofirmado es esperable en LAN). Recordar renovar el cert (~dic 2028).
 
-3. **Usuarios legados**: cuentas creadas antes de la migración de roles o vía `createsuperuser` pueden tener `rol != superadmin` con `is_staff=True` → aún entran a /admin/. Validador manual.
+3. **Decidir manejo de `admin.py`**: la mayoría de apps registran modelos sin restricciones (borrado/CRUD completo vía /admin/). Solo `administracion` (auditoría) y `yule/SincronizacionLog` son read-only. Decidir `unregister` vs `has_delete_permission`.
 
-4. **Tests automatizados activos**: 217/217 tests OK (todas las apps — Fases 1-6 + features de cierre). Ejecutar con `manage.py test`.
+4. **Usuarios legados**: cuentas creadas antes de la migración de roles o vía `createsuperuser` pueden tener `rol != superadmin` con `is_staff=True` → aún entran a /admin/. Validador manual.
 
-5. ~~drift de migraciones~~ → **RESUELTO 2026-09-10**: se generaron y aplicaron `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` con módulos nuevos). `makemigrations --check` → *No changes detected*.
+5. **Tests automatizados activos**: 313/313 tests OK (todas las apps — Fases 1-7). Ejecutar con `manage.py test`.
 
-6. **BD local dev reconstruida el 2026-09-10**: el `db.sqlite3` previo tenía historial de migraciones inconsistente (sin `accounts_customuser` ni datos de negocio). Se reconstruyó de cero: `migrate` (42 migraciones), superuser `admin` (rol `superadmin`) y singleton `ConfiguracionSistema`. Credencial dev generada localmente, **no versionada** (no registrar en commits ni en `.env.example`).
+6. ~~drift de migraciones~~ → **RESUELTO 2026-09-10**: se generaron y aplicaron `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` con módulos nuevos). `makemigrations --check` → *No changes detected*.
+
+7. **BD local dev reconstruida el 2026-09-10**: el `db.sqlite3` previo tenía historial de migraciones inconsistente (sin `accounts_customuser` ni datos de negocio). Se reconstruyó de cero: `migrate` (42 migraciones), superuser `admin` (rol `superadmin`) y singleton `ConfiguracionSistema`. Credencial dev generada localmente, **no versionada** (no registrar en commits ni en `.env.example`).
+
+8. **Cambios de seguridad sin commitear (Fase 7)**: el endurecimiento del login (django-axes, forms, signals, headers, cookies, HTTPS) quedó en el working tree para revisión del arquitecto. Ver detalle en `SESION_2026-09-24_RESUMEN.md`.
 
 ---
 
@@ -97,6 +103,54 @@
 - **Bug real corregido**: `passwords/views.py` — `_log_action` corría después de `delete()` (FK apuntaba a objeto borrado → `ValueError: save() prohibited`). Ahora el log se escribe antes del borrado (`vault_eliminar`, `credencial_eliminar`).
 - Detalle: en ModelForm, un campo con `blank=False` y `default` sigue siendo `required`; los tests ahora envían `estado`/`orden` donde corresponde.
 - Suite completa: **142/142 tests OK**, `manage.py check` 0 issues.
+
+## ✅ FASE 7 — Seguridad del login + HTTPS interno [Completada 2026-09-24]
+
+Endurecimiento del login siguiendo instrucciones del arquitecto (7 tareas). Los cambios quedaron **en el working tree, SIN commitear** (revisión del arquitecto).
+
+### 1. Rate limit / lockout — django-axes 8.3.1
+- `django-axes==8.3.1` en `requirements.txt` (raíz). Migraciones de axes aplicadas.
+- Settings (`sysadmin/settings/base.py`):
+  - `INSTALLED_APPS += "axes"`; `MIDDLEWARE` reemplaza `accounts.middleware.LoginRateLimitMiddleware` (eliminado) por `axes.middleware.AxesMiddleware`.
+  - `AUTHENTICATION_BACKENDS = ["axes.backends.AxesStandaloneBackend", "django.contrib.auth.backends.ModelBackend"]`
+  - `AXES_FAILURE_LIMIT = 5`, `AXES_COOLOFF_TIME = 1` (hora), `AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]`, `AXES_RESET_ON_SUCCESS = True`
+  - Mensajes de lockout genéricos (`AXES_IP_COOLOFF_MESSAGE`, `AXES_COOLOFF_MESSAGE`, `AXES_LOCKOUT_MESSAGE`).
+- Runtime real verificado: 5 intentos fallidos → HTTP **429** (bloqueo); login exitoso → `AccessAttempt` reseteado a 0.
+
+### 2. Mensajes de error genéricos — `accounts/forms.py` (nuevo)
+- `SysAdminAuthenticationForm(AuthenticationForm)`: `invalid_login` = "Usuario o contraseña incorrectos." (no revela si el usuario existe); `inactive` = "Esta cuenta está inactiva. Contacte al administrador."
+- Conectado vía `authentication_form=` en `accounts/urls.py`.
+
+### 3. Auditoría de intentos fallidos — `accounts/signals.py` (nuevo)
+- `user_login_failed` → `registrar_auditoria(modulo="auth", accion="login_fallido", detalle="…usuario '<username>'.")`.
+- `axes.signals.user_locked_out` → `accion="cuenta_bloqueada"` (usuario + IP).
+- IP: soporta `HTTP_X_FORWARDED_FOR` (primer hop) detrás de nginx.
+- Cargado en `accounts/apps.py::ready()`.
+
+### 4. Password validators
+- `AUTH_PASSWORD_VALIDATORS`: `MinimumLengthValidator(min_length=10)`, `UserAttributeSimilarityValidator`, `CommonPasswordValidator`, `NumericPasswordValidator`.
+
+### 5. Headers de seguridad
+- `SECURE_CONTENT_TYPE_NOSNIFF = True`, `X_FRAME_OPTIONS = "DENY"`, `SECURE_REFERRER_POLICY = "same-origin"` (verificados en runtime: `nosniff`/`DENY`/`same-origin`).
+
+### 6. Cookies de sesión
+- `SESSION_COOKIE_HTTPONLY = True`, `SESSION_COOKIE_SAMESITE = "Lax"`, `SESSION_COOKIE_AGE = 28800` (8 h), `SESSION_EXPIRE_AT_BROWSER_CLOSE = True`.
+- `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`/`SECURE_SSL_REDIRECT` siguen configurables por env (default `False`).
+
+### 7. HTTPS interno LAN
+- Cert autofirmado `nginx/certs/server.crt` + `server.key` (CN=192.168.1.250, 825 días: 24-sep-2026 → 27-dic-2028), generado con OpenSSL de Git (Windows).
+- `nginx/nginx.conf`: puerto 80 → `return 301 https://$host$request_uri`; puerto 443 ssl con certificates + headers de seguridad; proxy a `django:8000` con `X-Forwarded-Proto`.
+- `docker-compose.yml`: puertos nginx `6060:443` (HTTPS) + `6061:80` (HTTP → redirect); volumen `./nginx/certs:/etc/nginx/certs:ro`.
+- CSRF trusted origins incluyen `https://localhost:6060` / `https://192.168.1.250:6060` (defaults y `.env`).
+
+### Tests
+- `accounts/tests.py`: clase `LoginSeguridadTests` (~11 tests: mensaje genérico, no revela existencia, 5 fallos en BD, 429, auditoría, reset por éxito, cookies, headers, config axes, validators).
+- `administracion/tests.py` y `soporte/tests.py`: migrados a `force_login` (axes exige request en `authenticate`).
+- Suite completa: **313/313 OK** (302 + 11) · `manage.py check` 0 issues · `makemigrations --check` sin cambios.
+
+### Notas
+- **Pendiente de validar con Docker**: https:// carga sin 500 y http:// → 301 (Docker Desktop no corriendo en la máquina local).
+- Credenciales de test usadas en validación (`validacion_seg`) y registros `auth/login_fallido` en la `db.sqlite3` de dev (no versionada).
 
 ## CRONOGRAMA ETAPAS 6 Y 7 (PROPUESTA vs REALIDAD)
 
@@ -272,24 +326,25 @@ C:\Users\Sistemas\OneDrive - EMPRESA\Escritorio\Vscode\SysAdmin\
 
 ```
 SysAdmin/
-├── docker-compose.yml
+├── docker-compose.yml                ← puertos 6060:443 (https) + 6061:80 (http→https)
 ├── .env
 ├── .gitignore
 ├── README.md                        ← DOCUMENTACIÓN CON YULE 7B
 ├── SYSADMIN_HANDOFF.md              ← ESTE DOCUMENTO
 ├── setup_server.sh
-├── requirements.txt
+├── requirements.txt                 ← fuente de verdad de dependencias (incluye django-axes)
 ├── INSTRUCCIONES_PATCHES_3F.txt
 ├── get-pip.py
 ├── mnt/
 ├── nginx/
 │   ├── Dockerfile
-│   └── nginx.conf
+│   ├── nginx.conf                   ← 443 ssl + redirect 301 desde 80
+│   └── certs/                       ← FASE 7: server.crt + server.key (autofirmado)
 └── backend/
     ├── Dockerfile
     ├── entrypoint.sh
     ├── manage.py
-    ├── requirements.txt
+    ├── requirements.txt             ← copia histórica (puede desalinearse)
     ├── static/
     │   ├── css/sysadmin.css
     │   ├── js/sysadmin.js
@@ -302,7 +357,7 @@ SysAdmin/
     │   │   └── base.py
     │   ├── urls.py
     │   └── wsgi.py
-    ├── accounts/                ← ETAPA 0-1 COMPLETA
+    ├── accounts/                ← ETAPA 0-1 COMPLETA · FASE 7: forms.py (login genérico) + signals.py (auditoría de fallos)
     ├── core/                    ← ETAPA 0 COMPLETA
     ├── usuarios/                ← ETAPA 2 COMPLETA
     ├── inventario/              ← ETAPA 3 COMPLETA
@@ -358,6 +413,7 @@ INSTALLED_APPS = [
     "documentos",        # ← ETAPA 8: Repositorio documental v1.1.0
     "administracion",    # ← FASE 1: Auditoría + configuración + roles
     "notificaciones",    # ← FASE 3: Notificaciones por usuario
+    "axes",              # ← FASE 7: Rate limit / lockout del login
 ]
 ```
 
@@ -614,7 +670,10 @@ Pillow==10.3.0
 django-htmx==1.17.3
 whitenoise==6.6.0
 qrcode==8.2
+django-axes==8.3.1        ← FASE 7: rate limit/lockout del login
 ```
+
+> **Nota:** la dependencia nueva `django-axes==8.3.1` está en el `requirements.txt` de la raíz (versión Docker). El `backend/requirements.txt` es una copia histórica que puede desalinearse; usar el de la raíz como fuente de verdad.
 
 ---
 
@@ -867,6 +926,19 @@ Pendiente únicamente aplicar patches en servidor y hacer `makemigrations + migr
 ---
 
 ## CHANGELOG RECIENTE
+
+### 2026-09-24 — v1.10.0 · Seguridad del login + HTTPS interno (Fase 7)
+
+- **django-axes 8.3.1**: rate limit/lockout por usuario+IP (5 intentos → bloqueo 1h), reset por login exitoso. Reemplaza `accounts.middleware.LoginRateLimitMiddleware` (eliminado). Dependencia `django-axes==8.3.1` en `requirements.txt` (raíz). Migraciones de axes aplicadas.
+- **Mensajes genéricos de login**: `accounts/forms.py` → `SysAdminAuthenticationForm` ("Usuario o contraseña incorrectos." / "Esta cuenta está inactiva…"), conectado en `accounts/urls.py`.
+- **Auditoría de fallos**: `accounts/signals.py` registra `login_fallido` (señal `user_login_failed`) y `cuenta_bloqueada` (señal `user_locked_out` de axes) en `RegistroAuditoria` con usuario+IP. Cargado desde `accounts/apps.py::ready()`.
+- **Password validators**: `AUTH_PASSWORD_VALIDATORS` con `MinimumLength(min_length=10)` + simitud + comunes + numéricos.
+- **Headers de seguridad**: `SECURE_CONTENT_TYPE_NOSNIFF`, `X_FRAME_OPTIONS=DENY`, `SECURE_REFERRER_POLICY=same-origin` (verificados en runtime).
+- **Cookies de sesión**: `HttpOnly`, `SameSite=Lax`, `SESSION_COOKIE_AGE=28800` (8 h), `SESSION_EXPIRE_AT_BROWSER_CLOSE=True`.
+- **HTTPS interno LAN**: cert autofirmado en `nginx/certs/` (CN=192.168.1.250, 825 días); `nginx/nginx.conf` con server 443 ssl + redirect 301 desde puerto 80; `docker-compose.yml` con `6060:443` (https) y `6061:80` (http→https), volumen `./nginx/certs`; CSRF trusted origins https.
+- **Tests**: `LoginSeguridadTests` en `accounts/tests.py` (+11); `administracion`/`soporte` migrados a `force_login`. Suite completa **313/313 OK** · `manage.py check` 0 issues.
+- **Login "reportar falla" en nueva pestaña** (`26d0a6d`): `accounts/templates/accounts/login.html` con `target="_blank" rel="noopener"`.
+- ⚠️ **SIN COMMITEAR**: los cambios de seguridad (10 modificados + 1 eliminado + 3 nuevos) quedan en el working tree para revisión del arquitecto. Ver `SESION_2026-09-24_RESUMEN.md`.
 
 ### 2026-09-10 — v1.9.0 · Cierre del plan por fases (11 commits ejecutados)
 
