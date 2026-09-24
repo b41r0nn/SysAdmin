@@ -374,7 +374,7 @@ Control de salidas temporales de inventario a usuarios internos, con detección 
 
 ### Objetivo
 
-Endurecer el login siguiendo las 7 tareas indicadas por el arquitecto: rate limit/lockout, mensajes de error genéricos, auditoría de intentos fallidos, password validators, headers de seguridad, cookies de sesión seguras y HTTPS interno (LAN) con cert autofirmado. El archivo de referencia es `SESION_2026-09-24_RESUMEN.md`.
+Endurecer el login siguiendo las 7 tareas indicadas por el arquitecto: rate limit/lockout, mensajes de error genéricos, auditoría de intentos fallidos, password validators, headers de seguridad, cookies de sesión seguras y HTTPS interno (LAN) con cert autofirmado. El archivo de referencia es `docs/sesiones/SESION_2026-09-24_RESUMEN.md`.
 
 ### Alcance
 
