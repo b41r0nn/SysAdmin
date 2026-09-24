@@ -27,7 +27,7 @@
 
 
 
-> **Versión:** 1.9.1 · **Fecha:** 2026-09-17 · **Estado:** Etapas 0-8 + Fases 1-6 (plan completo)  
+> **Versión:** 1.10.0 · **Fecha:** 2026-09-24 · **Estado:** Etapas 0-8 + Fases 1-7 (plan completo + seguridad)  
 > Sistema integral de gestión de inventario IT, usuarios, mantenimiento, hoja de vida por activo, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets, préstamos, detección de vencimiento de licencias y gestión de cuentas
 
 
@@ -53,6 +53,8 @@
 | 💠 Licencias de software       | `licencias`      | ✅ Completa | Fase 5 |
 | 🔁 Préstamos de equipos        | `prestamos`      | ✅ Completa | Fase 6 |
 | 🧪 Tests de cobertura          | todas las apps   | ✅ Completa | Fase 4 |
+| 🛡️ Seguridad del login (django-axes) + auditoría de fallos | `accounts` | ✅ Completa | Fase 7 |
+| 🔒 HTTPS interno (nginx + cert autofirmado) | infraestructura | ✅ Completa | Fase 7 |
 
 ---
 
@@ -200,15 +202,21 @@ Seguir las instrucciones en pantalla para crear usuario y contraseña.
 
 ### Paso 6: Acceder a la Aplicación
 
-Desde cualquier PC de la red LAN:
+Desde cualquier PC de la red LAN (el acceso es **HTTPS** con cert autofirmado → aviso de seguridad esperable al primer ingreso):
 
 ```
-http://192.168.1.250
+https://192.168.1.250:6060
+```
+
+El puerto `6061` redirige automáticamente de HTTP → HTTPS:
+
+```
+http://192.168.1.250:6061   →   https://192.168.1.250:6060
 ```
 
 Admin panel:
 ```
-http://192.168.1.250/admin
+https://192.168.1.250:6060/admin
 ```
 
 ---
@@ -269,7 +277,7 @@ docker exec -it sysadmin_django python manage.py sync_ocs --force
 docker exec -it sysadmin_django python manage.py sync_ocs --user=admin
 
 # Ver historial en web
-# http://192.168.1.250/yule/historial/
+# https://192.168.1.250:6060/yule/historial/
 ```
 
 ### Backups
@@ -310,7 +318,7 @@ Gestión completa de activos IT con soporte para múltiples tipos de dispositivo
 - ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
 - ✅ **Plantilla Excel** con 39 columnas, 2 ejemplos (Portátil/Celular) y hoja Instrucciones
 
-**Acceso:** `http://192.168.1.250/inventario/`
+**Acceso:** `https://192.168.1.250:6060/inventario/`
 
 ---
 
@@ -333,7 +341,7 @@ Gestión de personal de la organización.
 - ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
 - ✅ **Plantilla Excel** con 6 columnas, 2 ejemplos y hoja Instrucciones
 
-**Acceso:** `http://192.168.1.250/usuarios/`
+**Acceso:** `https://192.168.1.250:6060/usuarios/`
 
 ---
 
@@ -350,7 +358,7 @@ Generación de reportes y exportación de datos.
 
 **Pantalla de opciones de exportación:** `/inventario/exportar/opciones/` permite elegir formato (Excel/PDF), tipo de dispositivo y columnas.
 
-**Acceso:** `http://192.168.1.250/reports/`
+**Acceso:** `https://192.168.1.250:6060/reports/`
 
 ---
 
@@ -365,7 +373,7 @@ Gestión de órdenes de mantenimiento preventivo y correctivo.
 - Costos estimados vs reales
 - Historial completo
 
-**Acceso:** `http://192.168.1.250/mantenimiento/`
+**Acceso:** `https://192.168.1.250:6060/mantenimiento/`
 
 ---
 
@@ -380,7 +388,7 @@ Vault seguro de credenciales con cifrado.
 - ✅ Auditoría de accesos
 - ✅ Exportación segura
 
-**Acceso:** `http://192.168.1.250/passwords/`
+**Acceso:** `https://192.168.1.250:6060/passwords/`
 
 ---
 
@@ -397,7 +405,7 @@ Repositorio centralizado de manuales, procedimientos, políticas y documentos ge
 - ✅ Descarga directa de archivos
 - ✅ Iconos por tipo de archivo (PDF, Word, Excel, etc.)
 
-**Acceso:** `http://192.168.1.250/documentos/`
+**Acceso:** `https://192.168.1.250:6060/documentos/`
 
 ---
 
@@ -434,12 +442,12 @@ OCS_VERIFY_SSL=True
 
 1. **Web UI** (Recomendado para pruebas)
    ```
-   http://192.168.1.250/yule/ → Botón "Sincronizar ahora"
+   https://192.168.1.250:6060/yule/ → Botón "Sincronizar ahora"
    ```
 
 2. **Django Admin**
    ```
-   http://192.168.1.250/admin/yule/configuracionyule/
+   https://192.168.1.250:6060/admin/yule/configuracionyule/
    ```
 
 3. **Command Line** (Automatización)
@@ -465,7 +473,9 @@ OCS_VERIFY_SSL=True
    - Reiniciar contenedor Django
    - Verificar módulos Fases 1-6 (tickets, licencias, préstamos) y validación manual de reportes configurables + importación masiva + etiquetas QR
 
-2. **Tests**: Suite automatizada — ✅ **271/271 OK** (Fases 1-6, plan completo + hoja de vida por activo)
+2. **HTTPS (Fase 7)**: el acceso ahora es `https://192.168.1.250:6060` (cert autofirmado en `nginx/certs/`); `http://...:6061` redirige a HTTPS. Al desplegar, levantar con `docker compose up -d --build` y confirmar que https carga sin 500 y el redirect funciona.
+
+3. **Tests**: Suite automatizada — ✅ **313/313 OK** (Fases 1-6 + seguridad Fase 7)
 
 ---
 
@@ -521,6 +531,17 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-09-24 — v1.10.0 · Seguridad del login + HTTPS interno (Fase 7)
+
+- ✅ **django-axes 8.3.1**: rate limit/lockout del login (5 intentos fallidos por usuario+IP → bloqueo con cooloff 1h). Reemplaza el middleware custom `LoginRateLimitMiddleware`. Reset del contador con login exitoso (`AXES_RESET_ON_SUCCESS`). `django-axes==8.3.1` agregada a `requirements.txt`
+- ✅ **Mensajes de error genéricos**: `SysAdminAuthenticationForm` ("Usuario o contraseña incorrectos.") — no revela si el usuario existe; mensaje propio para cuenta inactiva
+- ✅ **Auditoría de intentos fallidos**: signals en `accounts/signals.py` registran `login_fallido` y `cuenta_bloqueada` (usuario + IP) en `RegistroAuditoria` (módulo `auth`)
+- ✅ **Password validators**: min 10 caracteres + similitud con atributos + comunes + numéricos
+- ✅ **Headers de seguridad**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin` (verificados en runtime)
+- ✅ **Cookies de sesión**: `HttpOnly`, `SameSite=Lax`, sesión expira al cerrar navegador; tiempo de vida 8 h
+- ✅ **HTTPS interno LAN**: cert autofirmado en `nginx/certs/` (CN=192.168.1.250, 825 días); nginx con server 443 ssl + redirect 301 de HTTP; accesos `https://192.168.1.250:6060` y `http://...:6061` → https
+- ✅ Suite automatizada **313/313 OK** · `manage.py check` 0 issues · `makemigrations --check` sin cambios
 
 ### 2026-09-17 — v1.9.1 · Hoja de vida por activo + Reporte PDF de activos con mantenimiento
 
@@ -675,5 +696,5 @@ Para documentación técnica completa, ver **SYSADMIN_HANDOFF.md**
 
 ---
 
-**Última actualización:** 2026-09-10  
+**Última actualización:** 2026-09-24  
 **Proyecto:** 100% Funcional · Listo para producción

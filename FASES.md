@@ -16,6 +16,8 @@
 | 4 | Helpdesk / Tickets (app `soporte`) | ✅ COMPLETA | 2026-09-10 | `soporte` (14) → **167 en total** |
 | 5 | Licencias de software (app `licencias`) | ✅ COMPLETA | 2026-09-10 | `licencias` (19) → **186 en total** |
 | 6 | Préstamos de equipos (app `prestamos`) | ✅ COMPLETA | 2026-09-10 | `prestamos` (16) → **202 en total** |
+| 7 | Seguridad del login (django-axes) + auditoría de fallos | ✅ COMPLETA | 2026-09-24 | `accounts` (+11) → **313 en total** |
+| 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA | 2026-09-24 | pendiente validar en Docker |
 
 ---
 
@@ -363,3 +365,55 @@ Control de salidas temporales de inventario a usuarios internos, con detección 
 
 - **Plan por fases completado**: Fases 1-6 del roadmap original quedan cerradas.
 - No se hizo ningún commit; los cambios quedan en el working tree.
+
+---
+
+## ✅ FASE 7 — Seguridad del login + HTTPS interno
+
+**Fecha:** 2026-09-24 · **Estado:** ✅ COMPLETA
+
+### Objetivo
+
+Endurecer el login siguiendo las 7 tareas indicadas por el arquitecto: rate limit/lockout, mensajes de error genéricos, auditoría de intentos fallidos, password validators, headers de seguridad, cookies de sesión seguras y HTTPS interno (LAN) con cert autofirmado. El archivo de referencia es `SESION_2026-09-24_RESUMEN.md`.
+
+### Alcance
+
+1. **django-axes 8.3.1** (rate limit/lockout):
+   - `AXES_FAILURE_LIMIT=5`, `AXES_COOLOFF_TIME=1` (hora), `AXES_LOCKOUT_PARAMETERS=[["username","ip_address"]]`, `AXES_RESET_ON_SUCCESS=True`.
+   - `axes.middleware.AxesMiddleware` en `MIDDLEWARE` (reemplaza el custom `LoginRateLimitMiddleware`, eliminado); backends `AxesStandaloneBackend` + `ModelBackend`.
+   - Bloqueo real tras el 5.º intento fallido → HTTP **429**; login exitoso resetea el contador.
+2. **Mensajes genéricos**: `SysAdminAuthenticationForm` ("Usuario o contraseña incorrectos."), no revela si el usuario existe.
+3. **Auditoría de fallos**: signals `user_login_failed` (`login_fallido`) y `user_locked_out` de axes (`cuenta_bloqueada`) → `RegistroAuditoria`, módulo `auth`, usuario+IP.
+4. **Password validators**: `AUTH_PASSWORD_VALIDATORS` (min 10 + simitud + comunes + numéricos).
+5. **Headers**: `SECURE_CONTENT_TYPE_NOSNIFF`, `X_FRAME_OPTIONS=DENY`, `SECURE_REFERRER_POLICY=same-origin`.
+6. **Cookies**: `HttpOnly`, `SameSite=Lax`, `SESSION_COOKIE_AGE=28800` (8 h), `SESSION_EXPIRE_AT_BROWSER_CLOSE=True`.
+7. **HTTPS interno**: cert autofirmado `nginx/certs/` (CN=192.168.1.250, 825 días); nginx 443 ssl + redirect 301 desde 80; docker-compose `6060:443` + `6061:80` y volumen de certs; CSRF trusted origins https.
+
+### Archivos clave
+
+- `backend/sysadmin/settings/base.py` (axes, validators, headers, cookies, CSRF origins)
+- `backend/accounts/forms.py` (nuevo, `SysAdminAuthenticationForm`), `backend/accounts/signals.py` (nuevo), `backend/accounts/urls.py`, `backend/accounts/apps.py`
+- `backend/accounts/middleware.py` (eliminado)
+- `nginx/nginx.conf`, `nginx/certs/server.crt` + `server.key`, `docker-compose.yml`
+- `requirements.txt` (raíz: `django-axes==8.3.1`)
+- Tests: `backend/accounts/tests.py` (`LoginSeguridadTests`), `administracion/tests.py`, `soporte/tests.py`
+
+### Migraciones
+
+- Ninguna propia del proyecto (axes aporta sus migraciones; se aplicaron en dev con `migrate`).
+
+### Dependencias
+
+- `django-axes==8.3.1`.
+
+### Tests
+
+- Suite completa: **313/313 tests OK** (302 previos + 11 de seguridad).
+- `manage.py check` 0 issues · `makemigrations --check` sin cambios.
+- Runtime: bloqueo 429, reset de contador, headers presentes, auditoría `login_fallido`/`cuenta_bloqueada`.
+
+### Notas
+
+- **HTTPS pendiente de validar en vivo**: requiere `docker compose up -d --build` en el servidor (Docker no corriendo en local).
+- El login de "reportar falla" abre en pestaña nueva (`accounts/templates/accounts/login.html`, commit `26d0a6d`).
+- Los cambios de seguridad quedan **sin commitear** en el working tree, para revisión del arquitecto.
