@@ -920,6 +920,15 @@ docker exec -it sysadmin_django python manage.py migrate
 
 ## CHANGELOG RECIENTE
 
+### 2026-09-24 — Deploy producción completado (Docker Compose · 192.168.1.250) · migración de datos
+
+- **Contenedores 3/3 arriba**: `sysadmin_db` (postgres:15-alpine, healthy), `sysadmin_django` (healthy), `sysadmin_nginx` (started). Conviven con el stack Hikvision (puertos/red/volúmenes propios, sin colisión).
+- **Acceso**: `https://192.168.1.250:6060` (nginx SSL → django), `http://192.168.1.250:6061` → 301 → https. Cert autofirmado CN=192.168.1.250 (825 días) en `nginx/certs/`.
+- **Fix redirect-loop (crítico)**: `backend/sysadmin/settings/base.py` ahora define `SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')`. Sin esto, con `SECURE_SSL_REDIRECT=True` + `DEBUG=False`, Django ignora el `X-Forwarded-Proto` de nginx y 301-redirige todo → healthcheck entra en loop → `unhealthy`. El healthcheck de django en `docker-compose.yml` manda `X-Forwarded-Proto: https` para que responda 200.
+- **`.env` producción**: `DEBUG=False`, `SECRET_KEY`, `PASSWORDS_ENCRYPTION_KEY`, `POSTGRES_PASSWORD` + flags de seguridad `True`. Invalidado con `unofficial` superuser `Administrador`.
+- **Migración de datos**: `pg_dump -Fc` del SysAdmin local (contenedor `sysadmin_db`) → `scp` → `pg_restore --clean --if-exists --no-owner --no-privileges` en el servidor. Conteos verificados desde el propio `sysadmin_db`: 67 usuarios_usuario · 23 activos · 2 documentos · 1 credencial · 1 ticket. Login real corre sobre `accounts.CustomUser` (2 superusuarios); `usuarios.usuario` es el registro de personal/activantes (sin `username`/`is_superuser` — no confundir con el modelo de login).
+- **Pendientes**: (1) backups a NAS — `backup.sh` en `/opt/sysadmin/backups/` sin destino configurado ni cron (el cron actual del server es de Hikvision, no pisar); (2) OCS/Yule — endpoint no configurado en el servidor (`Error OCS: OCS no está configurado`), solo agregar credenciales/endpoint para activar sincronización.
+
 ### 2026-09-24 — v1.10.0 · Seguridad del login + HTTPS interno (Fase 7)
 
 - **django-axes 8.3.1**: rate limit/lockout por usuario+IP (5 intentos → bloqueo 1h), reset por login exitoso. Reemplaza `accounts.middleware.LoginRateLimitMiddleware` (eliminado). Dependencia `django-axes==8.3.1` en `requirements.txt` (raíz). Migraciones de axes aplicadas.
