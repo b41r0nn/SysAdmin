@@ -88,7 +88,7 @@ class RegistroAuditoriaTests(TestCase):
 
     def test_signal_login_crea_registro(self):
         self.assertEqual(RegistroAuditoria.objects.count(), 0)
-        self.client.login(username="auditor_user", password="testpass123")
+        self.client.force_login(self.usuario)
         self.assertEqual(RegistroAuditoria.objects.count(), 1)
         registro = RegistroAuditoria.objects.get()
         self.assertEqual(registro.accion, "login")
@@ -96,7 +96,7 @@ class RegistroAuditoriaTests(TestCase):
         self.assertEqual(registro.usuario, self.usuario)
 
     def test_signal_logout_crea_registro(self):
-        self.client.login(username="auditor_user", password="testpass123")
+        self.client.force_login(self.usuario)
         self.client.post(reverse("accounts:logout"))
         self.assertEqual(RegistroAuditoria.objects.filter(accion="logout").count(), 1)
 
@@ -218,4 +218,8 @@ class AdministracionCuentasTests(TestCase):
                 temporal = texto.split("Temporal: ")[1].split(" ")[0]
         self.assertIsNotNone(temporal)
         self.client.logout()
-        self.assertTrue(self.client.login(username="pwd_cta", password=temporal))
+        resp = self.client.post(
+            reverse("accounts:login"),
+            {"username": "pwd_cta", "password": temporal},
+        )
+        self.assertRedirects(resp, reverse("core:dashboard"))

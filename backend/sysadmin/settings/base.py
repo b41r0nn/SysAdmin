@@ -36,7 +36,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
+    # Third-party
+    'axes',
+
     # Custom apps
     'accounts',
     'core',
@@ -63,7 +66,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
-    'accounts.middleware.LoginRateLimitMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'sysadmin.urls'
@@ -109,8 +112,46 @@ LOGIN_URL = 'accounts:login'
 LOGIN_REDIRECT_URL = 'core:dashboard'
 LOGOUT_REDIRECT_URL = 'accounts:login'
 
+# ─── Validadores de contraseña ────────────────────────────────────────────────
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 10,
+        },
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
+
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 3600
+SESSION_COOKIE_AGE = 28800  # 8h
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# ─── Seguridad del login ─────────────────────────────────────────────────────
+# django-axes: rate limit / lockout por combinación usuario+IP
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1  # hora
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+AXES_RESET_ON_SUCCESS = True
+
+# Mensajes genéricos: no revelar si el usuario existe o no
+AXES_IP_COOLOFF_MESSAGE = "Demasiados intentos fallidos. Intente de nuevo más tarde."
+AXES_COOLOFF_MESSAGE = "Cuenta temporalmente bloqueada por demasiados intentos fallidos. Intente de nuevo más tarde."
+AXES_LOCKOUT_MESSAGE = "Cuenta temporalmente bloqueada por demasiados intentos fallidos. Intente de nuevo más tarde."
 
 LANGUAGE_CODE = 'es-co'
 TIME_ZONE = 'America/Bogota'
@@ -135,6 +176,11 @@ OCS_VERIFY_SSL = os.environ.get('OCS_VERIFY_SSL', 'True') == 'True'
 def _env_bool(name, default):
     return os.environ.get(name, str(default)).lower() in ("1", "true", "yes")
 
+# Headers de seguridad (nativos Django, activos siempre)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+
 # Por defecto desactivados para no romper login en LAN sin HTTPS.
 # Activar explícitamente en producción con HTTPS mediante variables de entorno.
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
@@ -151,6 +197,8 @@ _default_csrf_origins = [
     'http://127.0.0.1:8000',
     'http://localhost:8000',
     'http://localhost:8001',
+    'https://localhost:6060',
+    'https://192.168.1.250:6060',
 ]
 _env_csrf_origins = os.environ.get('TRUSTED_ORIGINS', '')
 CSRF_TRUSTED_ORIGINS = (
