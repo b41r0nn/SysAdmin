@@ -52,7 +52,7 @@
 
 7. **BD local dev reconstruida el 2026-09-10**: el `db.sqlite3` previo tenía historial de migraciones inconsistente (sin `accounts_customuser` ni datos de negocio). Se reconstruyó de cero: `migrate` (42 migraciones), superuser `admin` (rol `superadmin`) y singleton `ConfiguracionSistema`. Credencial dev generada localmente, **no versionada** (no registrar en commits ni en `.env.example`).
 
-8. **Cambios de seguridad sin commitear (Fase 7)**: el endurecimiento del login (django-axes, forms, signals, headers, cookies, HTTPS) quedó en el working tree para revisión del arquitecto. Ver detalle en `SESION_2026-09-24_RESUMEN.md`.
+8. **Cambios de seguridad sin commitear (Fase 7)**: el endurecimiento del login (django-axes, forms, signals, headers, cookies, HTTPS) quedó en el working tree para revisión del arquitecto. Ver detalle en `docs/sesiones/SESION_2026-09-24_RESUMEN.md`.
 
 ---
 
@@ -331,11 +331,11 @@ SysAdmin/
 ├── .gitignore
 ├── README.md                        ← DOCUMENTACIÓN CON YULE 7B
 ├── SYSADMIN_HANDOFF.md              ← ESTE DOCUMENTO
+├── CHECKLIST_DEPLOY.md              ← runbook de despliegue en producción
+├── FASES.md                         ← registro del plan por fases
 ├── setup_server.sh
-├── requirements.txt                 ← fuente de verdad de dependencias (incluye django-axes)
-├── INSTRUCCIONES_PATCHES_3F.txt
-├── get-pip.py
-├── mnt/
+├── docs/
+│   └── sesiones/                    ← bitácora histórica de sesiones (resúmenes)
 ├── nginx/
 │   ├── Dockerfile
 │   ├── nginx.conf                   ← 443 ssl + redirect 301 desde 80
@@ -447,7 +447,7 @@ Cada sub-etapa cabe en un chat sin problemas de tokens.
 3C → Views movimientos + acta    ✅ COMPLETA (vistas + URLs wired)
 3D → Templates lista + detalle   ✅ COMPLETA (lista + tabla partial + detalle + catalogo_lista)
 3E → Templates form + acta PDF   ✅ COMPLETA (form.html + asignacion_form.html + acta_pdf.html)
-3F → Patches + integración       ✅ COMPLETA · pendiente aplicar INSTRUCCIONES_PATCHES_3F.txt en servidor
+3F → Patches + integración       ✅ COMPLETA · integrada en repo (deploy vía Docker; patches obsoletos eliminados)
 ```
 
 ### SUB-ETAPA 3A — Models + Migration
@@ -668,12 +668,11 @@ argon2-cffi==23.1.0
 python-decouple==3.8
 Pillow==10.3.0
 django-htmx==1.17.3
-whitenoise==6.6.0
 qrcode==8.2
 django-axes==8.3.1        ← FASE 7: rate limit/lockout del login
 ```
 
-> **Nota:** la dependencia nueva `django-axes==8.3.1` está en el `requirements.txt` de la raíz (versión Docker). El `backend/requirements.txt` es una copia histórica que puede desalinearse; usar el de la raíz como fuente de verdad.
+> **Nota:** `backend/requirements.txt` es la fuente de verdad de dependencias (el build de Docker la instala desde `./backend`). El duplicado de la raíz se eliminó en 2026-09-24 para evitar divergencias.
 
 ---
 
@@ -777,7 +776,7 @@ Mejoras post-release sobre los reportes de inventario: export Excel/PDF ahora co
 
 ### Commits
 - `4ab2594` feat(reports): reporte de inventario configurable en PDF/Excel con filtros y estilo de marca
-- `a7a0258` docs: actualiza SESION_2026-09-04_RESUMEN con hash final 4ab2594
+- `a7a0258` docs: actualiza docs/sesiones/SESION_2026-09-04_RESUMEN con hash final 4ab2594
 
 ---
 
@@ -879,24 +878,18 @@ docker exec -it sysadmin_django python manage.py migrate
 
 ### 2026-05-04 — Sub-etapa 3F: Patches + integración
 
-**Archivo creado:**
-- `INSTRUCCIONES_PATCHES_3F.txt` — Instrucciones completas para aplicar en el servidor:
-  1. `backend/sysadmin/settings/base.py` → descomentar `"inventario"` en INSTALLED_APPS
-  2. `backend/sysadmin/urls.py` → agregar `path("inventario/", include("inventario.urls", namespace="inventario"))`
-  3. `backend/core/views.py` → agregar import `Activo` y 4 stats al contexto del dashboard
-  4. `backend/templates/base.html` → quitar `disabled` del link Inventario en sidebar
-  5. `backend/usuarios/views.py` → (bonus) conectar activos reales en `detalle_usuario`
+> ⚠️ Histórico: el flujo de "aplicar patches a mano en servidor" quedó reemplazado
+> por el deploy vía Docker (`docker compose up -d --build`). Los archivos
+> `INSTRUCCIONES_PATCHES*.txt` fueron eliminados por obsoletos (2026-09-24).
 
-**Comandos Docker incluidos:**
-```bash
-docker exec -it sysadmin_django python manage.py makemigrations inventario
-docker exec -it sysadmin_django python manage.py migrate
-docker exec -it sysadmin_django python manage.py collectstatic --noinput
-docker compose restart django
-```
+**Cambios que aplicaban (para contexto histórico):**
+1. `backend/sysadmin/settings/base.py` → descomentar `"inventario"` en INSTALLED_APPS
+2. `backend/sysadmin/urls.py` → agregar `path("inventario/", include("inventario.urls", namespace="inventario"))`
+3. `backend/core/views.py` → agregar import `Activo` y 4 stats al contexto del dashboard
+4. `backend/templates/base.html` → quitar `disabled` del link Inventario en sidebar
+5. `backend/usuarios/views.py` → (bonus) conectar activos reales en `detalle_usuario`
 
-**Estado final:** Todo el código del módulo inventario está listo.
-Pendiente únicamente aplicar patches en servidor y hacer `makemigrations + migrate`.
+**Estado final:** Todo el código del módulo inventario está listo e integrado en el repo.
 
 ---
 
@@ -938,7 +931,7 @@ Pendiente únicamente aplicar patches en servidor y hacer `makemigrations + migr
 - **HTTPS interno LAN**: cert autofirmado en `nginx/certs/` (CN=192.168.1.250, 825 días); `nginx/nginx.conf` con server 443 ssl + redirect 301 desde puerto 80; `docker-compose.yml` con `6060:443` (https) y `6061:80` (http→https), volumen `./nginx/certs`; CSRF trusted origins https.
 - **Tests**: `LoginSeguridadTests` en `accounts/tests.py` (+11); `administracion`/`soporte` migrados a `force_login`. Suite completa **313/313 OK** · `manage.py check` 0 issues.
 - **Login "reportar falla" en nueva pestaña** (`26d0a6d`): `accounts/templates/accounts/login.html` con `target="_blank" rel="noopener"`.
-- ⚠️ **SIN COMMITEAR**: los cambios de seguridad (10 modificados + 1 eliminado + 3 nuevos) quedan en el working tree para revisión del arquitecto. Ver `SESION_2026-09-24_RESUMEN.md`.
+- ⚠️ **SIN COMMITEAR**: los cambios de seguridad (10 modificados + 1 eliminado + 3 nuevos) quedan en el working tree para revisión del arquitecto. Ver `docs/sesiones/SESION_2026-09-24_RESUMEN.md`.
 
 ### 2026-09-10 — v1.9.0 · Cierre del plan por fases (11 commits ejecutados)
 
