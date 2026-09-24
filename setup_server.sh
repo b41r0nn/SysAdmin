@@ -15,12 +15,12 @@ echo "╚═══════════════════════�
 echo ""
 
 # ─── 1. Actualizar el sistema ─────────────────────────────────────────────────
-echo "📦 [1/6] Actualizando el sistema..."
+echo "📦 [1/7] Actualizando el sistema..."
 apt-get update -qq && apt-get upgrade -y -qq
 echo "✅ Sistema actualizado."
 
 # ─── 2. Instalar utilidades base ──────────────────────────────────────────────
-echo "🔧 [2/6] Instalando utilidades base..."
+echo "🔧 [2/7] Instalando utilidades base..."
 apt-get install -y -qq \
     curl \
     wget \
@@ -37,7 +37,7 @@ apt-get install -y -qq \
 echo "✅ Utilidades instaladas."
 
 # ─── 3. Instalar Docker ───────────────────────────────────────────────────────
-echo "🐳 [3/6] Instalando Docker..."
+echo "🐳 [3/7] Instalando Docker..."
 
 # Agregar clave GPG oficial de Docker
 install -m 0755 -d /etc/apt/keyrings
@@ -69,7 +69,7 @@ echo "✅ Docker instalado: $(docker --version)"
 echo "✅ Docker Compose: $(docker compose version)"
 
 # ─── 4. Configurar usuario para Docker (sin sudo) ─────────────────────────────
-echo "👤 [4/6] Configurando permisos Docker..."
+echo "👤 [4/7] Configurando permisos Docker..."
 SUDO_USER_NAME="${SUDO_USER:-$USER}"
 if [ -n "$SUDO_USER_NAME" ] && [ "$SUDO_USER_NAME" != "root" ]; then
     usermod -aG docker "$SUDO_USER_NAME"
@@ -80,19 +80,33 @@ else
 fi
 
 # ─── 5. Configurar Firewall UFW ───────────────────────────────────────────────
-echo "🔒 [5/6] Configurando firewall..."
+echo "🔒 [5/7] Configurando firewall..."
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow ssh          # Puerto 22 — acceso SSH
-ufw allow 80/tcp       # Puerto 80 — app web
+ufw allow 6060/tcp     # HTTPS interno (nginx) — app web
+ufw allow 6061/tcp     # HTTP → redirect 301 a HTTPS
 ufw --force enable
 echo "✅ Firewall configurado. Reglas activas:"
 ufw status numbered
 
 # ─── 6. Configurar rsync hacia NAS ───────────────────────────────────────────
-echo "💾 [6/6] Preparando directorio de backups..."
+echo "💾 [6/7] Preparando directorio de backups..."
 mkdir -p /opt/sysadmin/backups
 chmod 750 /opt/sysadmin/backups
+
+# ─── 7. Certificado autofirmado (HTTPS interno) ──────────────────────────────
+echo "🔐 [7/7] Generando certificado autofirmado..."
+mkdir -p /opt/sysadmin/app/nginx/certs
+if [ ! -f /opt/sysadmin/app/nginx/certs/server.crt ]; then
+    openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+        -keyout /opt/sysadmin/app/nginx/certs/server.key \
+        -out /opt/sysadmin/app/nginx/certs/server.crt \
+        -subj "/CN=192.168.1.250"
+    echo "✅ Certificado generado (CN=192.168.1.250, 825 días)."
+else
+    echo "   ℹ️  Certificado ya existe, no se regenera."
+fi
 
 # Script de backup diario
 cat > /opt/sysadmin/backups/backup.sh << 'BACKUP_SCRIPT'
@@ -149,8 +163,9 @@ echo "╠═══════════════════════�
 echo "║  Próximos pasos:                                     ║"
 echo "║  1. Copia el proyecto SysAdmin a /opt/sysadmin/app   ║"
 echo "║  2. Edita el archivo .env con tus credenciales       ║"
+echo "║     (ver CHECKLIST_DEPLOY.md)                        ║"
 echo "║  3. Edita backup.sh con la IP y usuario de tu NAS    ║"
-echo "║  4. Ejecuta: docker compose up -d                    ║"
+echo "║  4. Ejecuta: docker compose up -d --build            ║"
 echo "║  5. Ejecuta: docker exec sysadmin_django             ║"
 echo "║             python manage.py createsuperuser         ║"
 echo "╚══════════════════════════════════════════════════════╝"
