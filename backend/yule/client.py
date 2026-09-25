@@ -35,6 +35,7 @@ class OCSClient:
     verify_ssl: bool = True
     timeout: int = 15
     max_retries: int = 3
+    computers_limit: int = 1000
 
     def is_configured(self) -> bool:
         """Verifica si el cliente está configurado correctamente"""
@@ -158,20 +159,48 @@ class OCSClient:
         # Si llegamos aquí, agotamos reintentos
         raise last_exception or OCSConnectionError("Failed after max retries")
 
+    def _json_body(self, response: requests.Response) -> Any:
+        """Devuelve el JSON de la respuesta de OCS.
+
+        OCS Inventory NG no siempre devuelve JSON válido: con `limit=0` (o sin
+        `limit`) en `/computers` responde texto plano con un error de PHP, y sin
+        filas devuelve `null` o cuerpo vacío. Sin esto, `response.json()` lanzaba
+        `Expecting value: line 1 column 1` y el error real quedaba escondido.
+
+        - cuerpo vacío o `null` → `None` (el llamador lo trata como lista vacía)
+        - cuerpo no-JSON → OCSClientException con el texto real de OCS
+        """
+        body = (response.text or "").strip()
+        if not body:
+            return None
+        try:
+            return response.json()
+        except ValueError as e:
+            raise OCSClientException(
+                f"OCS devolvió una respuesta que no es JSON "
+                f"(HTTP {response.status_code}): {body[:200]}"
+            ) from e
+
     def get_computers(self) -> List[Dict[str, Any]]:
         """
         Obtiene lista de computadoras desde OCS.
-        
+
         Returns:
             Lista de computadoras con sus datos
-            
+
         Raises:
             OCSClientException: Si hay error en la sincronización
         """
         try:
-            response = self.request("computers", params={"limit": 0})
+            # OCS 2.12 rechaza limit=0: con ese valor /computers devuelve texto
+            # plano ("Argument...") en vez de JSON. Hay que pedir un límite
+            # positivo explícito.
+            response = self.request("computers", params={"limit": self.computers_limit})
             response.raise_for_status()
-            data = response.json()
+            data = self._json_body(response)
+
+            if data is None:
+                return []
 
             # OCS retorna en formato: {"computers": [...]}
             if isinstance(data, dict) and "computers" in data:
@@ -201,7 +230,7 @@ class OCSClient:
         try:
             response = self.request(f"computer/{computer_id}")
             response.raise_for_status()
-            data = response.json()
+            data = self._json_body(response)
 
             if isinstance(data, dict) and "software" in data:
                 raw = data["software"]

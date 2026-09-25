@@ -49,11 +49,22 @@ OCS_TOKEN=<token_ocs>
 OCS_VERIFY_SSL=False
 ```
 
-> **⚠️ CRÍTICO — Vault de contraseñas:** si falta `PASSWORDS_ENCRYPTION_KEY`, el vault
-> (`passwords/crypto.py`) deriva la clave de `SECRET_KEY`. Si `SECRET_KEY` tampoco está
-> configurado, se genera **una distinta en cada arranque** y las credenciales guardadas
-> en el vault quedan **ilegibles para siempre**. Definir ambas claves ANTES del primer
-> arranque y respaldarlas (el `backup.sh` ya incluye el `.env` en el paquete).
+> **⚠️ CRÍTICO — Vault de contraseñas:** `PASSWORDS_ENCRYPTION_KEY` debe ser una
+> **clave Fernet válida de 44 caracteres** (`Fernet.generate_key()`), no una frase
+> cualquiera. Si el valor existe pero no es una clave Fernet válida,
+> `build_fernet()` (`passwords/crypto.py:15`) lanza
+> `ValueError: Fernet key must be 32 url-safe base64-encoded bytes` y **nada se
+> puede cifrar**: ni las credenciales del vault ni la contraseña de OCS en Yule
+> (el formulario de configuración revienta en el `save()`).
+> Si además `SECRET_KEY` falta, `base.py:15` genera una clave aleatoria **en cada
+> arranque** (y distinta en cada worker de gunicorn) → sesiones perdidas en cada
+> restart y descifrado intermitente del vault.
+> Definir ambas claves ANTES del primer arranque, respaldarlas (el `backup.sh` ya
+> incluye el `.env` en el paquete) y validar:
+> ```bash
+> docker exec sysadmin_django python -c 'import os,django;os.environ["DJANGO_SETTINGS_MODULE"]="sysadmin.settings.base";django.setup();from django.conf import settings;from passwords.crypto import build_fernet;build_fernet();print("FERNET_OK len:",len(settings.PASSWORDS_ENCRYPTION_KEY or ""),"| SK len:",len(settings.SECRET_KEY or ""))'
+> ```
+> Esperado: `FERNET_OK len: 44`.
 
 ## 3. Variables de contexto (código)
 

@@ -63,6 +63,57 @@ nginx. No hay que volver a subirlos.
 
 Detalle completo en `OCS_INVENTORY_SETUP.md` (reescrito) y `AGENT_RUNBOOK.md`.
 
+### 2026-09-25 (tarde) · Yule "Parcial" + `PASSWORDS_ENCRYPTION_KEY` inválida
+
+**Síntoma:** el historial de Yule mostraba todas las sincronizaciones en estado
+*Parcial* con 0 detectados y la lista de equipos vacía.
+
+**Causa raíz (dos, encadenadas):**
+
+1. `PASSWORDS_ENCRYPTION_KEY` del `.env` de producción **no era una clave Fernet
+   válida**. `build_fernet()` (`passwords/crypto.py:15`) lanzaba
+   `ValueError: Fernet key must not be 32 url-safe base64-encoded bytes`, así que
+   `ConfiguracionYule.set_ocs_password()` nunca podía guardar la contraseña: el
+   `save()` del formulario de `/yule/configuracion/` moría con el error y
+   `password_cifrada` quedaba vacío. Con el token vacío, `is_configured()`
+   (`client.py:41`) es `False` y `sincronizar_equipos_ocs()` corta en `sync.py:97`
+   con estado *parcial* y el mensaje "Integración OCS desactivada o sin
+   configurar. No se sincronizó." — **sin llegar a llamar a OCS**. El vault de
+   passwords estaba igual de roto.
+   Corregido con una clave Fernet de 44 chars. **La 1 credencial que venía del
+   dump local quedó ilegible** (estaba cifrada con la clave del entorno de
+   desarrollo): hay que volver a capturarla.
+2. La URL configurada era `http://192.168.1.250:8081/ocsreports` (la web de OCS)
+   en vez de `.../ocsapi/v1`. Fijada en BD y en el `.env`.
+
+**Otros fixes de la misma sesión:**
+
+- Usuario de API de OCS `sistemas` creado en `operators` (`sadmin`,
+  `PASSWORD_VERSION=1`); su contraseña queda cifrada en
+  `yule_configuracionyule.password_cifrada` y en `OCS_TOKEN` del `.env` como
+  fallback. `test_connection()` = `True` por ambos caminos.
+- El `.env` tenía `OCS_BASE_URL=http://localhost:8080` y `OCS_TOKEN` vacío →
+  corregidos a `http://192.168.1.250:8081/ocsapi/v1` y `OCS_USER=sistemas`.
+- `SECRET_KEY` sí estaba correctamente fijado en el `.env` (67 chars).
+- **Trampa documentada:** `backend/sysadmin/settings/__init__.py` está vacío; el
+  módulo real es `sysadmin.settings.base`. Con `sysadmin.settings` cualquier
+  script responde "The SECRET_KEY setting must not be empty".
+- **Trampa documentada:** los bcrypt de OCS contienen `$`, así que `$HASH` no
+  puede ir dentro de un `-e "..."` de mysql entre comillas dobles (bash expande
+  `$2y$...`); hay que usar un heredoc sin comillas.
+- Esta versión de OCS **no tiene tabla `ocs_computers`** (ni `hosts`): el
+  inventario vive en `hardware`, `bios`, `networks`, `software`, etc. El
+  indicador de equipos inventariados es `SELECT COUNT(*) FROM hardware` (0 por
+  ahora: ningún agente ha reportado).
+- **Bug del cliente corregido:** `OCSClient.get_computers()` pedía
+  `computers?limit=0` y OCS 2.12 rechaza ese valor (responde texto plano que
+  empieza con `Argument...`, no JSON), así que `response.json()` lanzaba
+  `Expecting value: line 1 column 1 (char 0)` y el sync quedaba en *fallo*
+  aunque la autenticación funcionara. Ahora pide `limit=1000`
+  (`OCSClient.computers_limit`) y el parseo pasa por `_json_body()`, que trata
+  cuerpo vacío/`null` como lista vacía y, si OCS devuelve texto plano, reporta el
+  mensaje real de OCS en el error. 6 tests nuevos (319 en total, OK).
+
 ---
 
 ## ESTADO ACTUAL (2026-06-05)

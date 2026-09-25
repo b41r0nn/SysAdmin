@@ -174,7 +174,25 @@ Reglas que seonoraron en la práctica:
 - `PASSWORD_VERSION=1`. Con `2` OCS fuerza cambio de clave al primer ingreso y el flujo se traba.
 - El hash se genera con el **PHP del contenedor** (`password_hash`), no con `htpasswd` (eso es del proxy, que no se usa).
 
-Usuarios que quedaron en producción: `admin`, `Administrador`, `yule` (todos `sadmin`).
+Usuarios que quedaron en producción: `admin`, `Administrador`, `yule`,
+`sistemas` (todos `sadmin`). El que usa Yule es **`sistemas`**; su contraseña
+vive cifrada (Fernet) en `yule_configuracionyule.password_cifrada` y también en
+`OCS_TOKEN` del `.env` como fallback. No está en este repo.
+
+> Ojo con el hash: los bcrypt contienen `$`, así que **nunca** pongas `$HASH`
+> dentro de un `-e "..."` de mysql entre comillas dobles (bash expande `$2y$...`
+> y el hash queda corrupto). Usa un heredoc sin comillas, que hace una sola
+> expansión:
+> ```bash
+> HASH=$(docker exec -e C="$CLAVE" ocsinventory-server php -r 'echo password_hash(getenv("C"), PASSWORD_BCRYPT);')
+> cat > /tmp/set_ops.sql <<SQL
+> INSERT INTO operators (ID,FIRSTNAME,LASTNAME,PASSWD,ACCESSLVL,COMMENTS,NEW_ACCESSLVL,EMAIL,USER_GROUP,PASSWORD_VERSION)
+> VALUES ('sistemas','SysAdmin','Sistemas','${HASH}',1,'Usuario API para Yule','sadmin','sistemas@redihos.local','sadmin',1)
+> ON DUPLICATE KEY UPDATE PASSWD=VALUES(PASSWD),NEW_ACCESSLVL='sadmin',USER_GROUP='sadmin',ACCESSLVL=1,PASSWORD_VERSION=1;
+> SQL
+> docker exec -i ocsinventory-db mysql -uocsuser -pocspass ocsweb < /tmp/set_ops.sql
+> rm -f /tmp/set_ops.sql
+> ```
 
 ## Validar la API
 
@@ -191,6 +209,31 @@ curl -s -o /dev/null -w 'api=%{http_code}\n' -u '<OCS_USER>:<OCS_TOKEN>' \
 `200` = autenticación OK. `null` en el cuerpo = todavía no hay equipos
 inventariados, no es un error.
 
+**No existe una tabla `ocs_computers`** en esta versión (ni `hosts`). El
+inventario vive en las tablas por sección: `hardware`, `bios`, `networks`,
+`software`, `memories`, `storages`, `monitors`, `usbdevices`, `registry`, etc.
+El indicador de "hay equipos" es el conteo de `hardware` (una fila por máquina
+inventariada):
+
+```bash
+docker exec ocsinventory-db mysql -uocsuser -pocspass ocsweb -e "SELECT COUNT(*) AS equipos FROM hardware;"
+```
+
+### Trampa: `/computers` NO acepta `limit=0`
+
+| Petición | Respuesta |
+|---|---|
+| `?limit=0` | texto plano que empieza con `Argu...` (error de argumento) |
+| sin `limit` | igual: texto plano |
+| `?limit=1` / `5` / `100` | JSON (`null` si no hay equipos) |
+
+OCS 2.12 rechaza `limit=0`, así que **`get_computers()` no puede pedir "todos"
+con `limit=0`** (que era lo que hacía la app antes del fix del 2026-09-25:
+`response.json()` moría con *"Expecting value: line 1 column 1 (char 0)"* y el
+sync quedaba en *fallo*). Ahora el cliente pide `limit=1000`
+(`OCSClient.computers_limit`) y, si OCS contesta texto plano, el error que se
+reporta incluye el mensaje real de OCS en vez de un error de parseo de JSON.
+
 Autenticación: HTTP **Basic** con el usuario OCS como user y la contraseña como
 token, más el header `ocs-apirequest: true`.
 
@@ -198,14 +241,49 @@ token, más el header `ocs-apirequest: true`.
 
 En `https://192.168.1.250:6060/yule/configuracion/`:
 
-- **URL**: `http://192.168.1.250:8081/ocsapi/v1` (termina en `/v1`, no en `/`)
-- **Usuario**: `Administrador`
-- **Token**: el mismo valor que `OCS_TOKEN` en el `.env` del server
+- **URL**: `http://192.168.1.250:8081/ocsapi/v1` (termina en `/v1`, no en `/`,
+  y tampoco es `/ocsreports` que es la web)
+- **Usuario**: `sistemas`
+- **Contraseña**: la del usuario OCS `sistemas` (se guarda cifrada con Fernet)
 - **Integración activa**: sí
 
 Prioridad: `build_client()` (`backend/yule/client.py:241`) usa **primero** la
 fila `ConfiguracionYule` activa en BD. `OCS_BASE_URL`/`OCS_USER`/`OCS_TOKEN` del
 `.env` son solo fallback si no hay fila en BD.
+
+### Si Yule queda en "Parcial" y no trae nada
+
+"Parcial" en el historial **no** significa sincronización parcial: significa que
+el sync ni siquiera se ejecutó. Casi siempre es `is_configured()` en falso
+(`client.py:41` exige URL + usuario + token), y el mensaje en
+`yule_sincronizacionlog.mensaje_error` lo dice literal:
+"Integración OCS desactivada o sin configurar. No se sincronizó."
+
+Diagnóstico (siempre por `sysadmin.settings.base`: el paquete
+`sysadmin.settings` está vacío y con él Django responde "The SECRET_KEY setting
+must not be empty"):
+
+```bash
+docker exec sysadmin_db psql -U sysadmin_user -d sysadmin_db -x -c "SELECT id, activa, integracion_activa, url, usuario, (password_cifrada <> '') AS tiene_password FROM yule_configuracionyule;"
+docker exec sysadmin_db psql -U sysadmin_user -d sysadmin_db -c "SELECT fecha_inicio, estado, coalesce(mensaje_error,'') AS mensaje FROM yule_sincronizacionlog ORDER BY id DESC LIMIT 5;"
+docker exec sysadmin_django python manage.py shell -c 'from yule.client import build_client; c = build_client(); print("configurado:", c.is_configured(), "| url:", c.base_url, "| user:", c.user, "| token_len:", len(c.token), "| test:", c.test_connection())'
+```
+
+Causas, en orden de frecuencia:
+
+1. **Contraseña vacía** → `token: ''` → `is_configured()` falso. Es el caso más
+   común: se llena la URL y el usuario pero no la contraseña.
+2. **URL sin `/v1`** (o apuntando a `/ocsreports`) → 404 → error de cliente.
+3. **`integracion_activa` desmarcado** → `build_client()` devuelve un cliente
+   vacío a propósito (`client.py:255`).
+4. **`PASSWORDS_ENCRYPTION_KEY` inválida en el `.env`** → `build_fernet()` lanza
+   `ValueError: Fernet key must be 32 url-safe base64-encoded bytes` y **la
+   contraseña nunca se puede guardar** (ni desde el formulario, que revienta en
+   el `save()`). Debe ser una clave Fernet válida de 44 caracteres.
+
+Si la clave Fernet estaba mal, la 1 credencial del vault de passwords que
+venía del dump local queda ilegible (no se puede recuperar: estaba cifrada con
+la clave del entorno de desarrollo). Hay que volver a capturarla.
 
 ## Agente en los equipos cliente
 
