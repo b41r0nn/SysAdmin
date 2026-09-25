@@ -322,3 +322,24 @@ class OCSClientGetComputersTests(TestCase):
         body = '{"computers": [{"id": 7, "name": "PC-07"}]}'
         self.assertEqual(self._client(body).get_computers(), [{"id": 7, "name": "PC-07"}])
 
+    def test_dict_indexado_por_id_se_parsea(self):
+        # Así responde OCS 2.12 en producción: {"1": {...}} y no una lista.
+        body = '{"1": {"hardware": {"ID": 1, "NAME": "PC-01", "DEVICEID": "PC-01-2026-01-01-00-00-00"}}}'
+        self.assertEqual(
+            self._client(body).get_computers(),
+            [{"hardware": {"ID": 1, "NAME": "PC-01", "DEVICEID": "PC-01-2026-01-01-00-00-00"}}],
+        )
+
+    def test_software_desde_dict_indexado_por_id(self):
+        from yule.client import OCSClient
+
+        client = OCSClient(base_url="http://ocs/ocsapi/v1", user="u", token="t")
+        client.request = lambda *a, **kw: _FakeResponse(
+            '{"1": {"software": [{"NAME": "Chrome", "VERSION": "120.0"}]}}'
+        )
+
+        self.assertEqual(
+            client.get_software("1"),
+            [{"name": "Chrome", "version": "120.0", "publisher": ""}],
+        )
+

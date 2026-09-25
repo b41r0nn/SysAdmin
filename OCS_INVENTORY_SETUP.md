@@ -1,7 +1,14 @@
-# Instalación de OCS Inventory NG y conexión con Yule
+﻿# Instalación de OCS Inventory NG y conexión con Yule
 
 > Estado real verificado el **2026-09-25** en `192.168.1.250`. Este documento
 > refleja lo que quedó funcionando, no la guía ideal del fabricante.
+
+> **Antes de copiar cualquier bloque `mysql`:** definir las credenciales de la BD
+> de OCS (vienen por defecto de la imagen oficial y hay que rotarlas):
+> ```bash
+> OCSUSER=<usuario de la BD ocsweb>
+> OCSPASS=<clave de ese usuario>
+> ```
 
 ## Qué es y cómo se relaciona con SysAdmin
 
@@ -110,7 +117,7 @@ Consecuencias reales (verificadas 2026-09-25):
 Contar tablas para saber si el schema está completo:
 
 ```bash
-docker exec ocsinventory-db mysql -uocsuser -pocspass ocsweb -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ocsweb';"
+docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ocsweb';"
 # 105-109 = correcto
 ```
 
@@ -162,7 +169,7 @@ Crear un usuario de API dedicado (NO usar `admin`):
 
 ```bash
 HASH=$(docker exec ocsinventory-server php -r 'echo password_hash("CLAVE_OCS_AQUI", PASSWORD_BCRYPT);')
-docker exec ocsinventory-db mysql -uocsuser -pocspass ocsweb -e "
+docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "
 INSERT INTO operators (ID,FIRSTNAME,LASTNAME,PASSWD,ACCESSLVL,COMMENTS,NEW_ACCESSLVL,EMAIL,USER_GROUP,PASSWORD_VERSION)
 VALUES ('Administrador','SysAdmin','Superusuario','$HASH',1,'Super usuario SysAdmin','sadmin','sistemas@redihos.local','sadmin',1)
 ON DUPLICATE KEY UPDATE PASSWD=VALUES(PASSWD),NEW_ACCESSLVL='sadmin',USER_GROUP='sadmin',ACCESSLVL=1,PASSWORD_VERSION=1;"
@@ -190,7 +197,7 @@ vive cifrada (Fernet) en `yule_configuracionyule.password_cifrada` y también en
 > VALUES ('sistemas','SysAdmin','Sistemas','${HASH}',1,'Usuario API para Yule','sadmin','sistemas@redihos.local','sadmin',1)
 > ON DUPLICATE KEY UPDATE PASSWD=VALUES(PASSWD),NEW_ACCESSLVL='sadmin',USER_GROUP='sadmin',ACCESSLVL=1,PASSWORD_VERSION=1;
 > SQL
-> docker exec -i ocsinventory-db mysql -uocsuser -pocspass ocsweb < /tmp/set_ops.sql
+> docker exec -i ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb < /tmp/set_ops.sql
 > rm -f /tmp/set_ops.sql
 > ```
 
@@ -216,7 +223,7 @@ El indicador de "hay equipos" es el conteo de `hardware` (una fila por máquina
 inventariada):
 
 ```bash
-docker exec ocsinventory-db mysql -uocsuser -pocspass ocsweb -e "SELECT COUNT(*) AS equipos FROM hardware;"
+docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "SELECT COUNT(*) AS equipos FROM hardware;"
 ```
 
 ### Trampa: `/computers` NO acepta `limit=0`
@@ -236,6 +243,26 @@ reporta incluye el mensaje real de OCS en vez de un error de parseo de JSON.
 
 Autenticación: HTTP **Basic** con el usuario OCS como user y la contraseña como
 token, más el header `ocs-apirequest: true`.
+
+### Trampa: `/computers` devuelve un dict indexado por ID, no una lista
+
+Con equipos inventariados, OCS 2.12 responde:
+
+```json
+{ "1": { "hardware": { "ID": 1, "NAME": "PC-01", "DEVICEID": "PC-01-2026-09-25-14-30-00" },
+         "bios": [], "software": [], "networks": [] } }
+```
+
+Es un **dict keyed por ID**, no `[...]`. `get_computers()` solo miraba
+`{"computers": [...]}` o una lista, así que contaba **0 equipos aunque OCS
+devolviera el equipo** (log: `Unexpected OCS response format`). Corregido el
+2026-09-25 con `OCSClient._computers_from_payload()`, que acepta las tres
+formas; `get_software()` también acepta el dict indexado para
+`computer/{id}`. Cubierto por `test_dict_indexado_por_id_se_parsea` y
+`test_software_desde_dict_indexado_por_id` en `backend/yule/tests.py`.
+
+La clave de cada equipo (el `ID` de `hardware`) es el `computer_id` que se pasa
+a `computer/{id}` para traer el software.
 
 ## Configurar Yule en SysAdmin
 
@@ -327,26 +354,115 @@ URL final de descarga: `http://192.168.1.250:8081/download/OcsInventoryAgent.exe
 
 ```powershell
 Start-Process "$env:USERPROFILE\Downloads\ocs_agent\OCS-Windows-Agent-2.11.0.1_x64\OCS-Windows-Agent-Setup-x64.exe" `
-  -ArgumentList '/S','/SERVER=http://192.168.1.250:8081/ocsreports','/TAG=REDIHOS' -Wait
+  -ArgumentList '/S','/SERVER=http://192.168.1.250:8081/ocsinventory','/TAG=REDIHOS' -Wait
 ```
 
-Verificar que reportó:
+> **La URL del agente es `http://192.168.1.250:8081/ocsinventory`**, NO
+> `/ocsreports`. `/ocsreports` es la aplicación web; el handler Perl que recibe
+> el XML del inventario está en la raíz (`<Location /ocsinventory>` en
+> `/etc/apache2/conf-available/z-ocsinventory-server.conf`). Con `/ocsreports`
+> el agente no registra nada.
+
+Verificar que reportó (no existe tabla `hosts`; el inventario vive en `hardware`):
 
 ```bash
-docker exec ocsinventory-db mysql -uocsuser -pocspass ocsweb -e "SELECT ID,NAME,LAST_POLL FROM hosts ORDER BY ID DESC LIMIT 5;"
+docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "SELECT ID,NAME,OSNAME,LASTCOME FROM hardware ORDER BY ID DESC LIMIT 5;"
 ```
 
-## Limitación conocida: SOAP
+## El receptor de inventarios: `/ocsinventory` (no `/ocsreports`)
+
+Este es el punto que más cuesta: **la web de OCS puede verse perfecta y aun así
+no registrar ningún equipo**, porque el receptor es otro modulo Perl.
+
+| Ruta | Qué es | Quién la usa |
+|---|---|---|
+| `/ocsreports/` | aplicación web (PHP) | el operador en el navegador |
+| `/ocsapi/v1/...` | API JSON | Yule (`backend/yule/client.py`) |
+| `/ocsinventory` | **handler Perl que ingiere el XML del agente** | el agente en cada cliente |
+| `/download/*.exe` | descarga de agentes | el operador |
+| `/ocsinterface` | web service SOAP legacy | nadie (ver más abajo) |
+
+El agente manda XML (opcionalmente comprimido con zlib) y OCS lo guarda por
+secciones en `hardware`, `bios`, `networks`, `software`, etc.
+
+### Por qué el receptor nace roto en esta imagen
+
+La imagen `ocsinventory/ocsinventory-docker-image:2.12.1` (Ubuntu 22.04) arranca
+con el stack Perl incompleto. Al hacer `apache2ctl -S` (o al mirar
+`docker logs ocsinventory-server`):
 
 ```
 ocsinventory-server: (SOAP): Cannot find XML::Entities
 ocsinventory-server: Can't load SOAP::Transport::HTTP* - Web service will be unavailable
 ```
 
-El paquete `libxml-entities-perl` **no existe** en Ubuntu 22.04 (jammy) y el
-`apt-cache search entities` solo ofrece `node-entities`. Sin él, el **agente
-SOAP no funciona**; la **API JSON/REST y la web sí**. No es bloqueante para
-Yule. Se deja así a propósito.
+Son **dos** módulos faltantes, y cada uno tapa al anterior:
+
+1. `XML::Entities` — el paquete `libxml-entities-perl` **no existe en jammy**
+   (no está en el índice de `apt`). Se instala desde CPAN:
+   `cpanm --notest XML::Entities` (Perl puro, sin dependencias).
+2. `SOAP::Transport::HTTP2` — `Apache::Ocsinventory::SOAP` lo pide en la rama
+   mod_perl2, pero ni la imagen ni `libsoap-lite-perl` lo traen (el dist de
+   SOAP::Lite 1.27 **no** incluye `HTTP2.pm`). Se crea como alias de
+   `SOAP::Transport::HTTP::Apache`, que ya trae la rama mod_perl2:
+   ```perl
+   package SOAP::Transport::HTTP2;
+   use strict;
+   require SOAP::Transport::HTTP;
+   package SOAP::Transport::HTTP2::Apache;
+   our @ISA = q(SOAP::Transport::HTTP::Apache);
+   1;
+   ```
+
+Con ambos, el "Web service will be unavailable" desaparece y `/ocsinventory`
+empieza a devolver 200 en vez de 404.
+
+> Estos cambios viven **dentro del contenedor**: un
+> `docker compose up -d --force-recreate` los borra. Para eso está
+> `patch_ocs_server.sh` (idempotente) en la raíz del repo.
+
+### Formato del XML (para probar el receptor a mano)
+
+Dos requisitos que el handler valida y que no son obvios:
+
+- `QUERY` y `DEVICEID` van **en la raíz** del XML, no dentro de `HEADER`:
+  `<OCS><QUERY>INVENTORY</QUERY><CONTENT><DEVICEID>…</DEVICEID>…`.
+- El `DEVICEID` **debe** cumplir `NOMBRE-AAAA-MM-DD-HH-MM-SS`
+  (`Apache::Ocsinventory::Server::System.pm:236`,
+  `$DeviceID =~ /^.+-\d{4}(?:-\d{2}){5}$/`). Con un id tipo `PRUEBA-001` el
+  handler responde **400** y no registra nada.
+
+Prueba rápida (el equipo insertado sirve para verificar el pipeline completo):
+
+```bash
+cat > /tmp/inv.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<OCS>
+  <QUERY>INVENTORY</QUERY>
+  <CONTENT>
+    <DEVICEID>PRUEBA-2026-09-25-14-30-00</DEVICEID>
+    <HARDWARE><ID>1</ID><TYPE>1</TYPE><NAME>PRUEBA-PC</NAME>
+      <OSNAME>Windows 11 Pro</OSNAME><MEMORY>16384</MEMORY></HARDWARE>
+    <BIOS><SN>SN-PRUEBA-0001</SN><SSN>1</SSN></BIOS>
+  </CONTENT>
+</OCS>
+XML
+U=$(grep -E '^OCS_USER=' /opt/sysadmin/app/.env | cut -d= -f2)
+P=$(grep -E '^OCS_TOKEN=' /opt/sysadmin/app/.env | cut -d= -f2)
+curl -s -o /dev/null -w 'POST=%{http_code}\n' -X POST -u "$U:$P" \
+  -H 'Content-Type: text/xml' --data-binary @/tmp/inv.xml \
+  'http://192.168.1.250:8081/ocsinventory'
+docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "SELECT ID,NAME FROM hardware;"
+```
+
+Limpiar después: `DELETE FROM hardware WHERE DEVICEID LIKE 'PRUEBA-%';`
+
+## SOAP: limitation real (distinta al bug del receptor)
+
+Arreglado `XML::Entities`, el web service SOAP de `/ocsinterface` carga, pero la
+API SOAP de OCS NG 2.12 sigue sin ser usable de forma práctica (solo expone
+operaciones de la base, no inventarios). Para Yule no hace falta: se usa la API
+JSON de `/ocsapi/v1`. No usar SOAP.
 
 ## Comandos de uso diario
 
@@ -358,21 +474,32 @@ docker ps --filter name=ocsinventory --format '{{.Names}}\t{{.Status}}\t{{.Ports
 curl -s -o /dev/null -w 'WEB=%{http_code}\n' http://192.168.1.250:8081/ocsreports/
 
 # ver usuarios y perfiles
-docker exec ocsinventory-db mysql -uocsuser -pocspass ocsweb -e "SELECT ID,NEW_ACCESSLVL,USER_GROUP,ACCESSLVL,PASSWORD_VERSION FROM operators;"
+docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "SELECT ID,NEW_ACCESSLVL,USER_GROUP,ACCESSLVL,PASSWORD_VERSION FROM operators;"
 
-# errores PHP recientes
-docker logs --tail 40 ocsinventory-server 2>&1 | grep -iE "fatal|uncaught" | tail -5
+# errores PHP/Perl recientes
+docker logs --tail 60 ocsinventory-server 2>&1 | grep -iE "fatal|uncaught|error|unavailable" | tail -10
 ```
+
+> **Los logs de Apache/OCS se leen con `docker logs ocsinventory-server`, no
+> con `tail` dentro del contenedor**: `/var/log/apache2/error.log` es un symlink
+> a `/proc/self/fd/2`, o sea a la salida del proceso `docker exec` que lo lee
+> (siempre vacío). Por eso el error "Web service will be unavailable" se ve al
+> arrancar el contenedor o con `apache2ctl -S`, no en `error.log`.
 
 ## Troubleshooting
 
 | Síntoma | Causa | Qué hacer |
 |---|---|---|
-| Solo el logo, página vacía | Parche `html_header.php` no aplicado o recreaste el contenedor | Reaplicar el parche de la sección de parche |
+| Solo el logo, página vacía | Parche `html_header.php` no aplicado o recreaste el contenedor | `bash patch_ocs_server.sh` |
+| **Ningún equipo aparece, ni en la web ni en `hardware`** | Receptor `/ocsinventory` roto (`XML::Entities` / `SOAP::Transport::HTTP2` faltantes) o agente apuntando a `/ocsreports` | `bash patch_ocs_server.sh` + URL del agente = `http://<server>:8081/ocsinventory` |
+| `POST /ocsinventory` devuelve 404 | Web service Perl sin cargar | `bash patch_ocs_server.sh` + `apache2ctl -S` (el error sale por `docker logs`, no por `error.log`) |
+| `POST /ocsinventory` devuelve 400 | `QUERY`/`DEVICEID` no están en la raíz, o el `DEVICEID` no cumple `NOMBRE-AAAA-MM-DD-HH-MM-SS` | Corregir el XML (ver "Formato del XML") |
+| Yule marca *Conectado* pero 0 equipos | OCS no tiene equipos (nadie instaló el agente) **o** `/computers` devolvió dict por ID (bug ya corregido) | `SELECT COUNT(*) FROM hardware;` y revisar que el cliente esté actualizado |
 | "NO HAY DEFINIDO NINGÚN NIVEL DE PERMISOS" | `operators.NEW_ACCESSLVL` NULL | `UPDATE operators SET NEW_ACCESSLVL='sadmin' ...` |
 | Login rechaza la clave correcta | `PASSWORD_VERSION=2` (fuerza cambio) | `UPDATE operators SET PASSWORD_VERSION=1;` |
 | API devuelve 404 | Se consultó `/ocsapi/v1/` (no existe) | Consultar `/ocsapi/v1/computers?limit=1` |
 | API devuelve 401/403 | Usuario/token mal, o falta header | Reusar `ocs-apirequest: true` + Basic auth |
+| `/computers` devuelve texto plano `Argu...` | Se pidió `limit=0` | Usar `limit` positivo (`client.computers_limit`) |
 | `/download/` da 403 | Requiere sesión de OCS | Enlace directo al archivo, o sesión iniciada |
 | `ocsproxy` reinicia en loop | Choca con Hikvision en 80/443 | `docker compose stop ocsproxy` y usar `:8081` |
 | Sin salida a GitHub | Proxy del server filtra sub-rutas | Descargar en Windows y `scp` |

@@ -181,6 +181,29 @@ class OCSClient:
                 f"(HTTP {response.status_code}): {body[:200]}"
             ) from e
 
+    @staticmethod
+    def _computers_from_payload(data: Any) -> List[Dict[str, Any]]:
+        """Normaliza a lista la respuesta de `/computers`.
+
+        OCS 2.12 devuelve un **dict indexado por ID** (`{"1": {...}}`) cuando hay
+        equipos, no una lista; otras versiones devuelven `{"computers": [...]}` o
+        una lista directa. Sin normalizar, el sync contaba 0 equipos.
+        """
+        if data is None:
+            return []
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        if isinstance(data, dict):
+            computers = data.get("computers")
+            if isinstance(computers, list):
+                return [item for item in computers if isinstance(item, dict)]
+            # Dict indexado por ID: el valor es cada equipo.
+            values = [value for value in data.values() if isinstance(value, dict)]
+            if values:
+                return values
+        logger.warning(f"Unexpected OCS response format: {str(data)[:200]}")
+        return []
+
     def get_computers(self) -> List[Dict[str, Any]]:
         """
         Obtiene lista de computadoras desde OCS.
@@ -197,19 +220,7 @@ class OCSClient:
             # positivo explícito.
             response = self.request("computers", params={"limit": self.computers_limit})
             response.raise_for_status()
-            data = self._json_body(response)
-
-            if data is None:
-                return []
-
-            # OCS retorna en formato: {"computers": [...]}
-            if isinstance(data, dict) and "computers" in data:
-                return data["computers"]
-            elif isinstance(data, list):
-                return data
-            else:
-                logger.warning(f"Unexpected OCS response format: {data}")
-                return []
+            return self._computers_from_payload(self._json_body(response))
 
         except OCSClientException:
             raise
@@ -236,9 +247,15 @@ class OCSClient:
                 raw = data["software"]
             elif isinstance(data, list) and data and isinstance(data[0], dict) and "software" in data[0]:
                 raw = data[0]["software"]
+            elif isinstance(data, dict):
+                # OCS 2.12 indexa por ID: {"1": {"software": [...]}}
+                raw = []
+                for value in data.values():
+                    if isinstance(value, dict) and "software" in value:
+                        raw = value["software"]
+                        break
             else:
-                # Algunas versiones ubican la sección en "result"
-                raw = data.get("result", []) if isinstance(data, dict) else []
+                raw = []
 
             software = []
             if isinstance(raw, list):
