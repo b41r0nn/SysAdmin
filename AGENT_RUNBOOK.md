@@ -58,6 +58,12 @@ Reglas:
 
 ## Diagnóstico rápido
 
+> Ojo: el paquete `backend/sysadmin/settings/__init__.py` está **vacío**. Para
+> `python -c` o scripts usar `DJANGO_SETTINGS_MODULE=sysadmin.settings.base`
+> (como hace `manage.py`). Con `sysadmin.settings` Django responde
+> *"The SECRET_KEY setting must not be empty"*.
+> Para todo lo demás usar `manage.py shell -c '...'`.
+
 ```bash
 # estado contenedores
 sudo docker compose -f /opt/sysadmin/app/docker-compose.yml ps
@@ -108,6 +114,23 @@ se activa `USER` no-root en el `Dockerfile`, hay que `sudo chown -R 1000:1000
 
 ## Notas de seguridad / fixes aplicados (importante)
 
+- `PASSWORDS_ENCRYPTION_KEY` del `.env` de producción era un valor que **no era
+  una clave Fernet válida**, así que `build_fernet()` (`passwords/crypto.py:15`)
+  lanzaba `ValueError` y **nada se podía cifrar**: ni la contraseña de OCS en
+  Yule (el `save()` del formulario moría con el error) ni el vault de
+  credenciales. Corregido el 2026-09-25 con una clave Fernet de 44 caracteres.
+  Consecuencia: la 1 credencial que venía del dump local quedó ilegible (estaba
+  cifrada con la clave del entorno de desarrollo) y hay que volver a capturarla.
+  Verificar que la clave es válida:
+  ```bash
+  docker exec sysadmin_django python -c 'import os,django;os.environ["DJANGO_SETTINGS_MODULE"]="sysadmin.settings.base";django.setup();from django.conf import settings;from passwords.crypto import build_fernet;build_fernet();print("FERNET_OK len:",len(settings.PASSWORDS_ENCRYPTION_KEY or ""))'
+  ```
+  Si `PASSWORDS_ENCRYPTION_KEY` estuviera vacía, `build_fernet()` deriva la clave
+  de `SECRET_KEY` (`crypto.py:13`) y con gunicorn multi-worker cada worker
+  tendría una distinta → el vault se descifra de forma intermitente.
+- `SECRET_KEY` **sí** está fijado en el `.env` de producción (67 chars). Si
+  faltara, `base.py:15` genera una clave aleatoria en cada arranque: se pierden
+  las sesiones en cada restart.
 - `base.py` define `SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')` — sin esto, con `SECURE_SSL_REDIRECT=True` detrás de nginx → **redirect loop** → healthcheck Django falla → compose aborta.
 - El healthcheck de `sysadmin_django` manda `X-Forwarded-Proto: https` en la request (requerido, ver `docker-compose.yml`).
 - Login: django-axes (5 intentos fallidos → lockout 1h) · auditoría vía signals · mensajes de error genéricos.
@@ -116,14 +139,22 @@ se activa `USER` no-root en el `Dockerfile`, hay que `sudo chown -R 1000:1000
 ## Estado de OCS / Yule
 
 - OCS responde en `http://192.168.1.250:8081/ocsreports/` (HTTP 200) y su API
-  REST responde 200 con las credenciales de `OCS_USER`/`OCS_TOKEN` del `.env`.
+  REST responde 200 con el usuario OCS `sistemas`.
 - La consola **exige un parche** en `html_header.php` (bug PHP 8 de OCS
   2.12.1) o muestra solo el logo. Ver `OCS_INVENTORY_SETUP.md`.
-- Yule: configurar en `https://192.168.1.250:6060/yule/configuracion/` con
-  URL `http://192.168.1.250:8081/ocsapi/v1`. La fila en BD manda sobre el
-  `.env` (`build_client()` en `backend/yule/client.py:241`).
-- Sin equipos inventariados todavía: la API devuelve `null` y Yule lista vacío.
-  No es error.
+- Yule: configurado en `https://192.168.1.250:6060/yule/configuracion/` con
+  URL `http://192.168.1.250:8081/ocsapi/v1`, usuario `sistemas` y su contraseña
+  (cifrada con Fernet en `yule_configuracionyule.password_cifrada`). El `.env`
+  tiene los mismos valores como fallback. `test_connection()` = `True`.
+- **En "Parcial" en el historial = la sincronización ni se ejecutó**, no que
+  fuera parcial. Casi siempre es URL sin `/v1` o contraseña vacía
+  (`is_configured()` en `client.py:41`). Diagnóstico y causas en
+  `OCS_INVENTORY_SETUP.md`.
+- Sin equipos inventariados todavía: `SELECT COUNT(*) FROM hardware` = 0 y la API
+  devuelve `null`. No es error; falta que un agente OCS reporte.
+  (En esta versión de OCS **no** existe la tabla `ocs_computers`; el inventario
+  vive en `hardware`, `bios`, `networks`, `software`, etc.)
+- OCS y SysAdmin comparten host: OCS quedó en `:8081` justamente para no tocar los puertos de Hikvision.
 
 ## Pendientes
 

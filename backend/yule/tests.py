@@ -252,3 +252,73 @@ class YuleSyncTests(TestCase):
 
         self.assertEqual(log.estado, "parcial")
         self.assertIn("No se sincronizó", msg)
+
+
+class _FakeResponse:
+    """Respuesta mínima para probar el parseo de OCS sin red."""
+
+    def __init__(self, text, status_code=200):
+        self.text = text
+        self.status_code = status_code
+
+    def json(self):
+        import json
+
+        return json.loads(self.text)
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise AssertionError(f"HTTP {self.status_code}")
+
+
+class OCSClientGetComputersTests(TestCase):
+    """OCS 2.12 quirks: con limit=0 /computers devuelve texto plano, no JSON."""
+
+    def _client(self, body, status_code=200):
+        from yule.client import OCSClient
+
+        client = OCSClient(base_url="http://ocs/ocsapi/v1", user="u", token="t")
+        client.request = lambda *a, **kw: _FakeResponse(body, status_code)
+        return client
+
+    def test_usa_limit_positivo_en_la_peticion(self):
+        # limit=0 rompe contra OCS 2.12: devuelve "Argument..." en vez de JSON.
+        client = self._client("null")
+        capturadas = {}
+
+        def fake_request(path, params=None, **kw):
+            capturadas["path"] = path
+            capturadas["params"] = params
+            return _FakeResponse("null")
+
+        client.request = fake_request
+        client.get_computers()
+
+        self.assertEqual(capturadas["path"], "computers")
+        self.assertGreater(capturadas["params"]["limit"], 0)
+
+    def test_null_de_ocs_devuelve_lista_vacia(self):
+        self.assertEqual(self._client("null").get_computers(), [])
+
+    def test_cuerpo_vacio_devuelve_lista_vacia(self):
+        self.assertEqual(self._client("").get_computers(), [])
+
+    def test_texto_plano_no_json_reporta_el_error_real(self):
+        # Antes esto terminaba en "Failed to parse OCS response: Expecting
+        # value: line 1 column 1 (char 0)", sin decir qué devolvió OCS.
+        from yule.client import OCSClientException
+
+        with self.assertRaises(OCSClientException) as ctx:
+            self._client("Argument limit must be a positive integer").get_computers()
+
+        self.assertIn("no es JSON", str(ctx.exception))
+        self.assertIn("Argument limit", str(ctx.exception))
+
+    def test_lista_de_computers_se_parsea(self):
+        body = '[{"id": 42, "name": "PC-01"}]'
+        self.assertEqual(self._client(body).get_computers(), [{"id": 42, "name": "PC-01"}])
+
+    def test_dict_con_clave_computers_se_parsea(self):
+        body = '{"computers": [{"id": 7, "name": "PC-07"}]}'
+        self.assertEqual(self._client(body).get_computers(), [{"id": 7, "name": "PC-07"}])
+
