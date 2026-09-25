@@ -38,11 +38,13 @@ SECURE_HSTS_SECONDS=31536000
 TRUSTED_ORIGINS=https://192.168.1.250:6060,https://localhost:6060
 
 # ── OCS (Yule) ─────────────────────────────────────────────────
-# Servidor OCS en el MISMO host (192.168.1.250), puerto 8080.
+# Servidor OCS en el MISMO host (192.168.1.250), puerto 8081.
+# (8080/80/443 están ocupados o reservados; Hikvision usa 80/443.)
 # Vista /yule/api/test-conexion/ y /yule/configuracion/ permiten
 # validar la conexión sin tocar código.
-OCS_BASE_URL=http://192.168.1.250:8080
-OCS_USER=<usuario_ocs>
+# La URL debe terminar en /ocsapi/v1.
+OCS_BASE_URL=http://192.168.1.250:8081/ocsapi/v1
+OCS_USER=Administrador
 OCS_TOKEN=<token_ocs>
 OCS_VERIFY_SSL=False
 ```
@@ -51,7 +53,7 @@ OCS_VERIFY_SSL=False
 > (`passwords/crypto.py`) deriva la clave de `SECRET_KEY`. Si `SECRET_KEY` tampoco está
 > configurado, se genera **una distinta en cada arranque** y las credenciales guardadas
 > en el vault quedan **ilegibles para siempre**. Definir ambas claves ANTES del primer
-> arranque y respaldarlas.
+> arranque y respaldarlas (el `backup.sh` ya incluye el `.env` en el paquete).
 
 ## 3. Variables de contexto (código)
 
@@ -87,6 +89,10 @@ Claves que lee `settings/base.py`:
 ```bash
 cd /opt/sysadmin/app
 
+# 0. MEDIA_ROOT debe existir ANTES de levantar (bind mount ./backend/media).
+#    Docker lo crearía como root y el contenedor corre como uid 1000.
+mkdir -p backend/media && chmod 777 backend/media
+
 # 1. Build con --no-cache (entorno WSL/mnt-c conocido por cachear mal)
 docker compose build --no-cache django
 
@@ -99,6 +105,11 @@ docker ps --filter name=sysadmin
 
 # 4. Crear superusuario (si primera vez)
 docker exec -it sysadmin_django python manage.py createsuperuser
+
+# 5. Verificar que /app/media es la carpeta del host y no un volumen suelto
+docker exec sysadmin_django sh -c 'touch /app/media/PRUEBA && ls -la /app/media'
+ls -la backend/media && rm -f backend/media/PRUEBA
+# Esperado: PRUEBA aparece en los dos listados
 ```
 
 ## 5. Validación post-deploy
@@ -110,13 +121,17 @@ docker exec -it sysadmin_django python manage.py createsuperuser
 - [ ] `/admin/` accesible con cert aceptado.
 - [ ] `docker exec sysadmin_django python manage.py check` → `0 issues`.
 - [ ] `docker logs sysadmin_django --tail 20` → sin tracebacks.
-- [ ] Cortafuegos: desde otro PC, `telnet 192.168.1.250 6060` y `6061` responden; `8080/5432/22` no expuestos innecesariamente.
+- [ ] Documento subido desde la web se ve en el host: `ls -laR /opt/sysadmin/app/backend/media/documentos/`.
+- [ ] Cortafuegos: desde otro PC, `telnet 192.168.1.250 6060` y `6061` responden; `8081/5432/22` no expuestos innecesariamente.
 
 ### Validación específica OCS (Yule)
 
-- [ ] El servidor OCS responde en `http://192.168.1.250:8080/ocsreports` (asistente OK).
+- [ ] El servidor OCS responde en `http://192.168.1.250:8081/ocsreports` (200) y el login muestra el **menú completo**, no solo el logo.
+      Si muestra solo el logo → falta el parche de `html_header.php` (ver `OCS_INVENTORY_SETUP.md`).
+- [ ] API de OCS responde 200 con credenciales:
+      `curl -s -o /dev/null -w '%{http_code}\n' -u '<OCS_USER>:<OCS_TOKEN>' -H 'ocs-apirequest: true' -H 'Accept: application/json' 'http://192.168.1.250:8081/ocsapi/v1/computers?limit=1'`
 - [ ] Desde el contenedor Django alcanza OCS:
-      `docker exec sysadmin_django python -c "import requests; print(requests.get('http://192.168.1.250:8080/ocsapi/v1/computers', timeout=5).status_code)"`
+      `docker exec sysadmin_django python -c "import requests; print(requests.get('http://192.168.1.250:8081/ocsapi/v1/computers', timeout=5).status_code)"`
       → `200` (o `401` si aún no configura credenciales, pero **no** timeout/connection refused).
 - [ ] En la UI: `https://192.168.1.250:6060/yule/api/test-conexion/` → `{"success": true}`.
 - [ ] Si se configuró por `/yule/configuracion/`, verificar que la fila guardada sea la que aplica
@@ -136,8 +151,12 @@ docker exec -it sysadmin_django python manage.py createsuperuser
 ## 7. Pendientes conocidos
 
 - [ ] `DEBUG=True` en `.env` local de desarrollo (no usar en servidor).
-- [ ] **OCS**: el servidor OCS (puerto 8080) es infraestructura independiente; si se expone
-      fuera de la LAN, habilitar en UFW (`sudo ufw allow 8080/tcp`). OCS usa HTTP plano en LAN
+- [ ] **OCS**: el servidor OCS (puerto 8081) es infraestructura independiente; si se expone
+      fuera de la LAN, habilitar en UFW (`sudo ufw allow 8081/tcp`). OCS usa HTTP plano en LAN
       con `OCS_VERIFY_SSL=False` — no exponer fuera de la red interna sin TLS.
+- [ ] **SOAP de OCS**: `Cannot find XML::Entities` — el paquete `libxml-entities-perl` no existe
+      en Ubuntu 22.04. El agente SOAP no funciona; la web y la API JSON sí. No bloqueante para Yule.
+- [ ] **Documentos**: los 2 PDFs de `documentos/2026/09/` están en el bind mount y
+      `curl` a `https://192.168.1.250:6060/media/documentos/2026/09/<archivo>.pdf` devuelve 200.
 - [ ] Renovar cert autofirmado (~dic 2028).
 - [ ] Credenciales NAS para `backup.sh` (IP, usuario, ruta).

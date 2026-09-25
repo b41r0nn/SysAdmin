@@ -1,5 +1,67 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-24 · v1.10.0 + Fase 7 (seguridad) · 313 tests OK
+> Documento actualizado: 2026-09-25 · v1.10.0 + Fase 7 (seguridad) · 313 tests OK
+
+---
+
+## CHANGELOG DE PRODUCCIÓN
+
+### 2026-09-25 · OCS Inventory NG en producción + fix de MEDIA_ROOT
+
+**MEDIA_ROOT: volumen con nombre → bind mount (fix real).**
+El primer deploy usaba `media_volume:/app/media` en `docker-compose.yml`.
+Consecuencias: los archivos subidos por la web quedaban dentro de
+`/var/lib/docker/volumes/`, invisibles desde el host, imposibles de respaldar,
+y el `rsync` de despliegue los excluía (`backend/media/` en los excludes). Los
+registros de `documentos_documento` existían en la BD pero "ver" fallaba porque
+el archivo no estaba en disco. Además nginx servía `/media/` desde el mismo
+volumen (`nginx.conf:40-42`), así que cambiar solo un servicio no bastaba.
+
+Cambios aplicados:
+- `docker-compose.yml`: `./backend/media:/app/media` en **django y nginx**; se
+  eliminó la declaración del volumen `media_volume` (ya sin uso).
+- `setup_server.sh`: crea `/opt/sysadmin/app/backend/media` con `chmod 777`
+  antes de levantar (si no, Docker lo crea como root y el contenedor corre como
+  uid 1000 → `Permission denied` al subir).
+- `setup_server.sh` (`backup.sh`): la ruta de media era
+  `/opt/sysadmin/media/` (inexistente) → corregida a
+  `/opt/sysadmin/app/backend/media/`, y se agregó el `.env` al paquete
+  (contiene `SECRET_KEY` y `PASSWORDS_ENCRYPTION_KEY`, sin los cuales el vault
+  queda ilegible).
+
+**Documentos: los 2 PDFs sí estaban en el server.** El dump de BD no
+transporta archivos, y la búsqueda en la máquina local dio negativo (los 365
+archivos de `backend/media/` local son casi todos de 0 KB, uploads de pruebas;
+el volumen Docker `SysAdmin_media_volume` estaba vacío), lo que llevó a pensar
+que los archivos se habían perdido. Corrección: **estaban en
+`/opt/sysadmin/app/backend/media/documentos/2026/09/`** y no se veían desde el
+contenedor por el bug del volumen con nombre, no por ausencia. Ahora con el bind
+mount: `MANUAL_PARA_RESTAURAR_BASE_DE_DATOS.pdf` (453 458 B, PDF 1.7, 7 pág.) y
+`Actualizacion_version_de_DMS.pdf` (425 403 B, PDF 1.7, 4 pág.) sirven **200** vía
+nginx. No hay que volver a subirlos.
+
+### 2026-09-25 · OCS Inventory NG 2.12.1 desplegado (puerto 8081)
+
+- Puerto `:8081` (no 8080) porque el host tiene **80/443 ocupados por
+  Hikvision**. Por eso el `ocsproxy` de OCS (que pide `80:80` y `443:443`)
+  queda en `Restarting (1)` y se deja **detenido** a propósito; el acceso
+  directo al server en 8081 lo reemplaza.
+- La tabla de usuarios es **`operators`**, no `users`. `NEW_ACCESSLVL` debe ser
+  `'sadmin'` (NULL → "NO HAY DEFINIDO NINGÚN NIVEL DE PERMISOS") y
+  `PASSWORD_VERSION` debe ser `1` (con `2` se traba el primer ingreso).
+- **Parche obligatorio** en `require/html_header.php:236`: bug de PHP 8 donde
+  `array_search()` recibe `null` (a diferencia de la línea 92 del mismo archivo,
+  que sí valida `is_array()`). Sin el parche la consola muestra solo el logo.
+- API JSON: `/ocsapi/v1/` responde 404 (normal, no existe) pero
+  `/ocsapi/v1/computers` responde 200. `null` en el cuerpo = sin equipos
+  inventariados, no es error.
+- Agente Windows publicado en `http://192.168.1.250:8081/download/OcsInventoryAgent.exe`.
+  El repo correcto es `OCSInventory-NG/WindowsAgent` (no `OCSInventory-Agent`).
+  El server no puede descargar de GitHub (proxy: raíz 200, sub-rutas 404), hay
+  que bajar en Windows y hacer `scp`.
+- SOAP no funciona (`Cannot find XML::Entities`): `libxml-entities-perl` no
+  existe en Ubuntu 22.04. La web y la API JSON sí.
+
+Detalle completo en `OCS_INVENTORY_SETUP.md` (reescrito) y `AGENT_RUNBOOK.md`.
 
 ---
 
@@ -1484,9 +1546,9 @@ docker exec -it sysadmin_django python manage.py check
 - Documentación de procedimientos de respaldo (backup) y recuperación.
 
 **Archivos actualizados:**
-- `backend/yule/views.py` - l�gicas de sincronizaci�n con OCS.
+- `backend/yule/views.py` - lógicas de sincronización con OCS.
 - `backend/passwords/utils.py` - mejoras en el cifrado.
-- `docker-compose.yml` - ajustes en l�mites de memoria.
+- `docker-compose.yml` - ajustes en límites de memoria.
 
 ---
 
@@ -1524,7 +1586,7 @@ Auditoría exhaustiva realizada el 2026-07-22. Se aplicaron **10 cambios seguros
 
 Estos hallazgos **no se aplicaron** porque pueden romper funcionalidad existente. Se documentan aquí para revisión futura:
 
-1. **Usuario no-root en Docker**: el `Dockerfile` actual ejecuta como root. Agregar `USER django-user` puede romper permisos en volúmenes montados (`./backend`, `static_volume`, `media_volume`). Requiere migración de permisos en el servidor.
+1. **Usuario no-root en Docker**: el `Dockerfile` actual ejecuta como root. Agregar `USER django-user` puede romper permisos en volúmenes montados (`./backend`, `static_volume` y el bind mount `./backend/media`). Requiere migración de permisos en el servidor (`chown -R 1000:1000 backend/media`).
 
 2. **Content-Security-Policy (CSP)**: agregar CSP puede romper scripts inline y Bootstrap JS usados en templates. Requiere auditoría de todos los templates para ajustar nonces/policies.
 

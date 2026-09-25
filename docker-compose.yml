@@ -31,7 +31,10 @@ services:
     volumes:
       - ./backend:/app
       - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      # Bind mount (NO volumen con nombre): MEDIA_ROOT = BASE_DIR/'media' = /app/media.
+      # Con un volumen nombrado, los archivos subidos por la web quedan dentro de
+      # /var/lib/docker y NO se pueden respaldar ni ver desde el host. Ver AGENT_RUNBOOK.md.
+      - ./backend/media:/app/media
     depends_on:
       db:
         condition: service_healthy
@@ -58,7 +61,8 @@ services:
       - "6061:80"    # HTTP → redirect 301 a HTTPS
     volumes:
       - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      # Debe coincidir con el bind mount de django: nginx sirve /media/ (nginx.conf)
+      - ./backend/media:/app/media
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       django:
@@ -69,7 +73,6 @@ services:
 volumes:
   postgres_data:
   static_volume:
-  media_volume:
 
 networks:
   sysadmin_net:
