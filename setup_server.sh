@@ -103,8 +103,16 @@ fi
 echo "✅ Firewall asegurado. Reglas activas:"
 ufw status numbered
 
-# ─── 6. Configurar rsync hacia NAS ───────────────────────────────────────────
-echo "💾 [6/7] Preparando directorio de backups..."
+# ─── 6. MEDIA_ROOT (bind mount) + directorio de backups ───────────────────────
+# MEDIA_ROOT = BASE_DIR/'media' = /app/media, montado como bind mount
+# (docker-compose.yml: ./backend/media:/app/media en django Y nginx).
+# Docker lo crea como root si falta y el contenedor corre como uid 1000 → los
+# uploads fallan con Permission denied. Crearlo antes, con permisos abiertos.
+echo "📂 [6/7] Preparando MEDIA_ROOT y directorio de backups..."
+mkdir -p /opt/sysadmin/app/backend/media
+chmod 777 /opt/sysadmin/app/backend/media
+echo "✅ MEDIA_ROOT listo en /opt/sysadmin/app/backend/media (bind mount, 777)."
+
 mkdir -p /opt/sysadmin/backups
 chmod 750 /opt/sysadmin/backups
 
@@ -141,10 +149,13 @@ echo "[$(date)] Iniciando backup..."
 # Exportar base de datos PostgreSQL
 docker exec sysadmin_db pg_dumpall -U sysadmin_user > "${BACKUP_DIR}/db_dump.sql"
 
-# Comprimir DB + media (actas, fotos)
+# Comprimir DB + media (actas, fotos) + .env (claves de cifrado del vault)
+# IMPORTANTE: /opt/sysadmin/app/backend/media es el bind mount de MEDIA_ROOT
+# (ver docker-compose.yml). La ruta antigua /opt/sysadmin/media/ no existe.
 tar -czf "${BACKUP_DIR}/${BACKUP_FILE}" \
     "${BACKUP_DIR}/db_dump.sql" \
-    /opt/sysadmin/media/ 2>/dev/null || true
+    /opt/sysadmin/app/backend/media/ \
+    /opt/sysadmin/app/.env 2>/dev/null || true
 
 # Eliminar dump temporal
 rm -f "${BACKUP_DIR}/db_dump.sql"

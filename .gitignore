@@ -41,3 +41,5 @@ mnt/
 backend/a1_output.txt
 backend/a2_output.txt
 tmp_scratch.sqlite3
+
+sysadmin_data.dump
