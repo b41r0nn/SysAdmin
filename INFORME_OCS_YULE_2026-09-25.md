@@ -3,7 +3,85 @@
 **Fecha:** 2026-09-25
 **Servidor:** 192.168.1.250 (Ubuntu Server 22.04, `sistemas@ubuntuserver`)
 **Solicitante:** Sistemas (REDIHOS) · **Destinatario:** Arquitectura / Analista
-**Estado:** **ABIERTO — el problema persiste.** La recepción de inventarios se reparó parcialmente, pero **ningún equipo ha reportado todavía** y hay un **fallo 500 sin causa identificada** en la ingesta de inventario.
+**Estado:** **RESUELTO (2026-09-28).** Un agente real reporta a OCS y Yule muestra el inventario completo. Causa raíz: el agente no apuntaba a `/ocsinventory`. El `500` con XML sintético no era un defecto del servidor. Ver sección 0.
+
+---
+
+## 0. Resolución (2026-09-28)
+
+### 0.1 Causa raíz
+
+El agente de inventario estaba configurado contra una URL equivocada. OCS expone
+tres rutas distintas que no son intercambiables:
+
+| Ruta | Propósito | Configurar en |
+|---|---|---|
+| `/ocsinventory` | **receptor** de inventarios (el agente debe apuntar aquí) | agente Windows / Linux |
+| `/ocsapi/v1` | API JSON que consume Yule | Yule (`/yule/configuracion/`) |
+| `/ocsreports/` | panel web | navegador |
+
+El agente apuntaba a `/ocsreports` o a `/ocsapi/v1`, por lo que nunca hubo un
+`POST` al receptor. **No era un fallo del servidor OCS**: no había tráfico que
+ingerir. Con la URL corregida, el primer inventario entró sin tocar nada del lado
+servidor más allá de los parches ya aplicados.
+
+Consecuencia sobre el `500`: el XML de prueba manual no era un inventario válido
+(venía con la sección `hardware` vacía), por eso creaba la fila a medias y
+fallaba al digerir. **Era un artefacto de la prueba, no un bug de OCS.** Las
+hipótesis H1-H13 y el test de descarte de H14 quedan retiradas.
+
+### 0.2 Verificación end-to-end
+
+| Verificación | Resultado |
+|---|---|
+| `POST /ocsinventory` (agente real) | `200 OK` |
+| Access log Apache | `28/Sep/2026:22:27:57 +0200` · `OCS-NG_WINDOWS_AGENT_v2.11.0.1` |
+| Fila en OCS `hardware` | ID `3` · `W11F35F` · Windows 11 Pro `10.0.26200` |
+| Secciones OCS | `bios` 1 · `networks` 48 · `software` 122 |
+| `GET /ocsapi/v1/computers?limit=1` | `200` con el equipo indexado por ID |
+| Yule `sync_ocs --force` | 1 detectados · 1 nuevos · 0 desaparecidos |
+| Tests SysAdmin | 335/335 local · 44/44 en el server |
+
+### 0.3 Bugs del lado Yule encontrados al mapear el JSON real
+
+Al contrastar contra la respuesta real de OCS 2.12 aparecieron cinco campos que
+llegaban vacíos o incorrectos. Todos estaban en el parser, no en los datos:
+
+| Campo | Síntoma | Causa | Corrección |
+|---|---|---|---|
+| `serial_bios` | vacío | `bios` llega como **lista** y el serial está en `SSN`, no en `SN` | `_section()` normaliza listas; se lee `SSN` con fallback a `SN`/`MSN` |
+| `procesador` | vacío | `hardware.PROCESSORS` es la frecuencia en MHz (entero `1300`), no el nombre | se lee `hardware.PROCESSORT`; fallback a `cpus[0].TYPE` |
+| `ip_address` | vacío | se tomaba la 1.ª de 48 interfaces, que es virtual y no tiene IP | se usa `hardware.IPADDR` y se cruza con la interfaz que la tiene |
+| `mac_address` | `00:09:0F:AA:00:01` | esa MAC es de la interfaz virtual del firewall, inservible para cruzar contra el inventario local | se elige la MAC de la interfaz con la IP real (`E8:CF:83:0A:8C:0E`) |
+| `usuario_dominio` | vacío | OCS no manda `user` en la raíz: va en `hardware.USERID` + `hardware.WORKGROUP` | se compone `redihossas.local\Sistemas` |
+
+Dos defectos adicionales de la misma causa raíz:
+
+- **Software vacío en todos los equipos (el más grave).** `/computer/{id}`
+  devuelve el software bajo la **clave literal vacía**:
+  `{"3": {"": [{NAME, VERSION, PUBLISHER}, ...]}}`. `get_software()` buscaba
+  la clave `"software"` y devolvía siempre `[]`. Ahora recorre la respuesta y
+  toma la primera lista de filas con nombre y versión, sin confundirla con
+  `memories`, `monitors` y demás.
+- **`ultimo_reporte_ocs` con 5 horas de desfase.** OCS escribe `LASTCOME` con
+  `NOW()` evaluado por la base de datos, que corre en **UTC**, y lo devuelve sin
+  zona. El access log marcaba `22:27:57 +0200` y `LASTCOME` traía `20:27:57`:
+  el mismo instante. Interpretarlo como hora local (America/Bogota) lo movía a
+  `2026-09-29 01:27:57+00`. Ahora se interpreta como UTC.
+
+Estado verificado tras el despliegue: `usuario_dominio` `redihossas.local\Sistemas`,
+`serial_bios` `F35F284`, `mac_address` `E8:CF:83:0A:8C:0E`, `ip_address`
+`192.168.1.137`, `procesador` `13th Gen Intel(R) Core(TM) i5-1335U`,
+`almacenamiento_total_gb` `476`, `ultimo_reporte_ocs` `2026-09-28 20:27:57+00`.
+
+### 0.4 Pendientes que quedan abiertos
+
+1. `OCS_OPT_LOGLEVEL` está en `512` (subió para diagnosticar). **Volver a `0`.**
+2. La contraseña de la base de datos de OCS sigue siendo la de fábrica, que es
+   pública. **Rotarla.**
+3. Los parches Perl/PHP del contenedor son efímeros: se pierden con
+   `--force-recreate` y hay que correr `patch_ocs_server.sh` otra vez.
+4. Backup de SysAdmin al NAS: falta definir destino.
 
 ---
 
@@ -92,17 +170,20 @@ está vacía.
 - **Receptor Perl de inventario carga** (desapareció el mensaje "Web service will
   be unavailable") y **acepta un POST en `/ocsinventory`** (crea registro en
   `hardware`).
-- Yule: detección *Conectado*, `sync_ocs --force` ejecuta sin error, **321/321
+- Yule: detección *Conectado*, `sync_ocs --force` ejecuta sin error, **335/335
   tests OK**.
 - Cambios persistidos en script idempotente: `patch_ocs_server.sh`.
 
 ### NO funciona / pendiente
 
-- **Ningún equipo registrado en OCS** (`hardware` = 0 filas).
-- **Error 500** al digerir un inventario, con fila creada a medias.
-- Agente Windows **no verificado** de punta a punta.
-- La primera verificación end-to-end (agente real → OCS → Yule) **nunca se
-  completó**.
+*(Estado al 2026-09-25, ya superado — ver sección 0. Se conserva el histórico.)*
+
+- ~~**Ningún equipo registrado en OCS** (`hardware` = 0 filas).~~ Resuelto: 1 equipo real.
+- ~~**Error 500** al digerir un inventario, con fila creada a medias.~~ Era el XML de prueba incompleto.
+- ~~Agente Windows **no verificado** de punta a punta.~~ Verificado: `POST 200`, inventario en Yule.
+- ~~La primera verificación end-to-end **nunca se completó**.~~ Completada.
+
+Pendientes reales: ver 0.4.
 
 ---
 
@@ -124,12 +205,20 @@ repositorio del proyecto.
 
 | Archivo | Cambio |
 |---|---|
-| `backend/yule/client.py` | `computers_limit=1000` (OCS 2.12 rechaza `limit=0`); helper `_json_body()` con error real de OCS; **`_computers_from_payload()`** que acepta lista, `{"computers": […]}` y **dict indexado por ID**; `get_software()` acepta el dict de `computer/{id}` |
-| `backend/yule/tests.py` | 6 + 2 tests nuevos que cubren `limit=0`, `null`, cuerpo vacío, texto no-JSON, dict indexado y software desde dict |
+| `backend/yule/client.py` | `computers_limit=1000` (OCS 2.12 rechaza `limit=0`); helper `_json_body()` con error real de OCS; **`_computers_from_payload()`** que acepta lista, `{"computers": [.]}` y **dict indexado por ID**; inyecta `id` desde la clave del dict; **`_find_software_rows()`** que localiza la sección de software bajo la clave `""` |
+| `backend/yule/sync.py` | `_get_ci()` sin distinguir mayúsculas; `_section()` acepta dict o lista; `_lista()` para secciones 1-a-N; `_red_principal()` empareja `hardware.IPADDR` con la interfaz física; `_procesador()` usa `PROCESSORT`/`cpus`; `_almacenamiento_gb()` desde `storages.DISKSIZE`; `_parse_ocs_datetime()` interpreta `LASTCOME` como UTC; ID desde `accountinfo`/`hardware` |
+| `backend/yule/tests.py` | 6 + 2 + 6 tests nuevos: `limit=0`, `null`, cuerpo vacío, texto no-JSON, dict indexado, software desde dict, payload real de OCS 2.12 completo, `LASTCOME` en UTC, MAC física frente a virtual |
 | `OCS_INVENTORY_SETUP.md`, `AGENTS.md` | Documentación de todos los hallazgos |
 | `patch_ocs_server.sh` | Reaplica los parches del contenedor |
 
 ---
+
+## 7. Posibles causas a analizar (punto abierto)
+
+> **Cerrado el 2026-09-28.** Ninguna de estas hipótesis era la causa: el
+> receptor funcionaba y no recibía tráfico. La causa real fue la URL del agente
+> (0.1) y los campos vacíos eran bugs del parser de Yule (0.3). Se conserva el
+> análisis original.
 
 ## 7. Posibles causas a analizar (punto abierto)
 
@@ -298,7 +387,7 @@ docker exec sysadmin_django python manage.py shell -c \
 ```bash
 docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True \
   sysadmin_django python manage.py test --noinput
-# -> Ran 321 tests ... OK
+# -> Ran 335 tests ... OK (44 de yule)
 ```
 
 > Los overrides son obligatorios en el server: con `SECURE_SSL_REDIRECT=True`
