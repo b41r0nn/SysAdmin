@@ -197,10 +197,20 @@ class OCSClient:
             computers = data.get("computers")
             if isinstance(computers, list):
                 return [item for item in computers if isinstance(item, dict)]
-            # Dict indexado por ID: el valor es cada equipo.
-            values = [value for value in data.values() if isinstance(value, dict)]
-            if values:
-                return values
+            # Dict indexado por ID: el valor es cada equipo. OCS 2.12 NO pone el
+            # ID dentro del objeto, solo en la clave, así que se inyecta: sin
+            # esto `id_ocs` queda vacío y, como es `unique=True`, todos los
+            # equipos se colapso en un mismo registro.
+            items = []
+            for key, value in data.items():
+                if not isinstance(value, dict):
+                    continue
+                item = dict(value)
+                if not item.get("id"):
+                    item["id"] = key
+                items.append(item)
+            if items:
+                return items
         logger.warning(f"Unexpected OCS response format: {str(data)[:200]}")
         return []
 
@@ -227,9 +237,39 @@ class OCSClient:
         except Exception as e:
             raise OCSClientException(f"Failed to parse OCS response: {str(e)}")
 
+    @staticmethod
+    def _find_software_rows(data: Any) -> List[Dict[str, Any]]:
+        """Localiza la lista de software dentro de la respuesta de OCS.
+
+        La forma real de `/computer/{id}` es `{"3": {"": [{NAME, VERSION, ...}]}}`:
+        la sección de software llega con la clave literal vacía, así que buscar
+        la clave "software" devolvía lista vacía y el equipo aparecía sin
+        software. Se recorre la respuesta buscando la primera lista de filas que
+        tengan nombre y versión.
+        """
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        if not isinstance(data, dict):
+            return []
+
+        candidates: List[Dict[str, Any]] = []
+        for value in data.values():
+            if isinstance(value, list):
+                candidates.extend(item for item in value if isinstance(item, dict))
+            elif isinstance(value, dict):
+                for inner in value.values():
+                    if isinstance(inner, list):
+                        candidates.extend(item for item in inner if isinstance(item, dict))
+
+        for item in candidates:
+            keys = {str(k).lower() for k in item}
+            if "name" in keys and ("version" in keys or "publisher" in keys):
+                return candidates
+        return []
+
     def get_software(self, computer_id: str) -> List[Dict[str, Any]]:
         """Obtiene el software instalado de una computadora OCS (endpoint
-        `computer/{id}` con su sección `software`).
+        `computer/{id}`, aceptando cualquiera de las formas de la sección).
 
         Returns:
             Lista normalizada de {"name", "version", "publisher"}.
@@ -243,30 +283,13 @@ class OCSClient:
             response.raise_for_status()
             data = self._json_body(response)
 
-            if isinstance(data, dict) and "software" in data:
-                raw = data["software"]
-            elif isinstance(data, list) and data and isinstance(data[0], dict) and "software" in data[0]:
-                raw = data[0]["software"]
-            elif isinstance(data, dict):
-                # OCS 2.12 indexa por ID: {"1": {"software": [...]}}
-                raw = []
-                for value in data.values():
-                    if isinstance(value, dict) and "software" in value:
-                        raw = value["software"]
-                        break
-            else:
-                raw = []
-
             software = []
-            if isinstance(raw, list):
-                for item in raw:
-                    if not isinstance(item, dict):
-                        continue
-                    software.append({
-                        "name": item.get("name") or item.get("NAME") or "",
-                        "version": item.get("version") or item.get("VERSION") or "",
-                        "publisher": item.get("publisher") or item.get("PUBLISHER") or "",
-                    })
+            for item in self._find_software_rows(data):
+                software.append({
+                    "name": item.get("name") or item.get("NAME") or "",
+                    "version": item.get("version") or item.get("VERSION") or "",
+                    "publisher": item.get("publisher") or item.get("PUBLISHER") or "",
+                })
             return [s for s in software if s["name"]]
 
         except OCSClientException:
