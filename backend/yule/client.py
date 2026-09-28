@@ -238,33 +238,69 @@ class OCSClient:
             raise OCSClientException(f"Failed to parse OCS response: {str(e)}")
 
     @staticmethod
-    def _find_software_rows(data: Any) -> List[Dict[str, Any]]:
-        """Localiza la lista de software dentro de la respuesta de OCS.
+    def _unwrap_computer(data: Any) -> Dict[str, Any]:
+        """Quita la envoltura indexada por ID que envuelve `/computer/{id}`.
 
-        La forma real de `/computer/{id}` es `{"3": {"": [{NAME, VERSION, ...}]}}`:
-        la sección de software llega con la clave literal vacía, así que buscar
-        la clave "software" devolvía lista vacía y el equipo aparecía sin
-        software. Se recorre la respuesta buscando la primera lista de filas que
-        tengan nombre y versión.
+        La API responde `{"3": {"": [...], "software": [...], "networks": [...]}}`,
+        así que las secciones viven un nivel más adentro de la respuesta cruda.
+        """
+        if isinstance(data, dict) and len(data) == 1:
+            inner = next(iter(data.values()))
+            if isinstance(inner, dict):
+                return inner
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _find_software_rows(data: Any) -> List[Dict[str, Any]]:
+        """Localiza las filas de la sección de software de `/computer/{id}`.
+
+        OCS 2.12 expone el software DOS veces en la misma respuesta: bajo la clave
+        literal vacía (con NAME y VERSION ya resueltos) y bajo la clave "software"
+        (solo NAME_ID / VERSION_ID, sin nombres). Se prefiere la clave vacía
+        porque es la que trae los textos.
+
+        Lo importante es devolver las filas de ESA lista y no la unión de todas
+        las listas de la respuesta. `/computer/{id}` trae además networks,
+        printers, slots, ports, sounds, controllers, inputs, monitors, memories,
+        bios, cpus, storages, videos, devices, drives y accountinfo, y muchas de
+        esas filas también llevan clave "name": acumular todas las listas metía
+        35 filas ajenas al inventario (slots, printers, ports) y devolvía 157
+        entradas en vez de 122.
         """
         if isinstance(data, list):
             return [item for item in data if isinstance(item, dict)]
-        if not isinstance(data, dict):
+
+        root = OCSClient._unwrap_computer(data)
+        if not root:
             return []
 
-        candidates: List[Dict[str, Any]] = []
-        for value in data.values():
-            if isinstance(value, list):
-                candidates.extend(item for item in value if isinstance(item, dict))
-            elif isinstance(value, dict):
-                for inner in value.values():
-                    if isinstance(inner, list):
-                        candidates.extend(item for item in inner if isinstance(item, dict))
+        def filas_de(valor: Any) -> List[Dict[str, Any]]:
+            if not isinstance(valor, list):
+                return []
+            return [item for item in valor if isinstance(item, dict)]
 
-        for item in candidates:
-            keys = {str(k).lower() for k in item}
-            if "name" in keys and ("version" in keys or "publisher" in keys):
-                return candidates
+        def parece_software(filas: List[Dict[str, Any]]) -> bool:
+            for item in filas:
+                keys = {str(k).lower() for k in item}
+                if "name" in keys and ("version" in keys or "publisher" in keys):
+                    return True
+            return False
+
+        # 1) Claves que usa OCS para el software, en orden de preferencia.
+        for clave in ("", "software"):
+            filas = filas_de(root.get(clave))
+            if filas and parece_software(filas):
+                return filas
+
+        # 2) Respaldo para otras versiones de OCS: la primera lista que tenga
+        #    nombre y versión. Puede confundirse con printers o slots si
+        #    desapareciera la clave "software"; por eso el camino normal (1) no
+        #    depende de esta heurística.
+        for valor in root.values():
+            filas = filas_de(valor)
+            if filas and parece_software(filas):
+                return filas
+
         return []
 
     def get_software(self, computer_id: str) -> List[Dict[str, Any]]:
