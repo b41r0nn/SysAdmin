@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from yule.client import build_client
 from yule.forms import ConfiguracionYuleForm
@@ -327,8 +328,20 @@ class OCSClientGetComputersTests(TestCase):
         body = '{"1": {"hardware": {"ID": 1, "NAME": "PC-01", "DEVICEID": "PC-01-2026-01-01-00-00-00"}}}'
         self.assertEqual(
             self._client(body).get_computers(),
-            [{"hardware": {"ID": 1, "NAME": "PC-01", "DEVICEID": "PC-01-2026-01-01-00-00-00"}}],
+            [{"id": "1", "hardware": {"ID": 1, "NAME": "PC-01", "DEVICEID": "PC-01-2026-01-01-00-00-00"}}],
         )
+
+    def test_el_id_se_inyecta_desde_la_clave(self):
+        # OCS 2.12 no manda el ID dentro del objeto, solo en la clave. Como
+        # `id_ocs` es unique=True, sin esto todos los equipos colapsan en uno.
+        equipos = self._client('{"7": {"NAME": "PC-07"}, "8": {"NAME": "PC-08"}}').get_computers()
+
+        self.assertEqual([e["id"] for e in equipos], ["7", "8"])
+
+    def test_el_id_existente_no_se_sobrescribe(self):
+        equipos = self._client('{"7": {"id": 99, "NAME": "PC-07"}}').get_computers()
+
+        self.assertEqual(equipos[0]["id"], 99)
 
     def test_software_desde_dict_indexado_por_id(self):
         from yule.client import OCSClient
@@ -341,5 +354,237 @@ class OCSClientGetComputersTests(TestCase):
         self.assertEqual(
             client.get_software("1"),
             [{"name": "Chrome", "version": "120.0", "publisher": ""}],
+        )
+
+
+class ExtractEquipoDataTests(TestCase):
+    """El API de OCS devuelve las columnas de `hardware` en mayúsculas."""
+
+    def test_lee_claves_en_mayusculas(self):
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {
+                "ID": 1,
+                "NAME": "PC-01",
+                "USER": "REDIHOS\\jperez",
+                "HARDWARE": {
+                    "OSNAME": "Windows 11 Pro",
+                    "OSVERSION": "10.0.22631",
+                    "MEMORY": 16384,
+                    "PROCESSORS": {"NAME": "Intel(R) Core(TM) i5-10400"},
+                },
+                "BIOS": {"SN": "ABC123"},
+                "NETWORKS": [{"MACADDR": "AA:BB:CC:DD:EE:FF", "IPADDRESS": "192.168.1.140"}],
+            }
+        )
+
+        self.assertEqual(datos["id_ocs"], "1")
+        self.assertEqual(datos["nombre_host"], "PC-01")
+        self.assertEqual(datos["usuario_dominio"], "REDIHOS\\jperez")
+        self.assertEqual(datos["so_nombre"], "Windows 11 Pro")
+        self.assertEqual(datos["so_version"], "10.0.22631")
+        self.assertEqual(datos["memoria_ram_mb"], 16384)
+        self.assertEqual(datos["procesador"], "Intel(R) Core(TM) i5-10400")
+        self.assertEqual(datos["serial_bios"], "ABC123")
+        self.assertEqual(datos["mac_address"], "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(datos["ip_address"], "192.168.1.140")
+
+    def test_lee_claves_en_minusculas(self):
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {
+                "id": 2,
+                "name": "PC-02",
+                "hardware": {"osname": "Linux", "memory": 8192},
+                "bios": {"sn": "XYZ789"},
+                "networks": [{"macaddr": "11:22:33:44:55:66"}],
+            }
+        )
+
+        self.assertEqual(datos["id_ocs"], "2")
+        self.assertEqual(datos["nombre_host"], "PC-02")
+        self.assertEqual(datos["so_nombre"], "Linux")
+        self.assertEqual(datos["serial_bios"], "XYZ789")
+
+    def test_ultimo_reporte_toma_lastcome_de_ocs(self):
+        # Antes ponía datetime.now(): la UI decía "reportó ahora" para un
+        # equipo que nunca había reportado.
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {"id": 3, "name": "PC-03", "hardware": {"LASTCOME": "2026-09-25 15:48:03"}}
+        )
+
+        self.assertIsNotNone(datos["ultimo_reporte_ocs"])
+        self.assertEqual(datos["ultimo_reporte_ocs"].strftime("%Y-%m-%d %H:%M:%S"), "2026-09-25 15:48:03")
+        self.assertTrue(timezone.is_aware(datos["ultimo_reporte_ocs"]))
+
+    def test_sin_lastcome_queda_null(self):
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data({"id": 4, "name": "PC-04", "hardware": {}})
+
+        self.assertIsNone(datos["ultimo_reporte_ocs"])
+
+    def test_sin_id_se_genera_clave_derivada_unica(self):
+        # id_ocs es unique=True: dos equipos sin id no pueden terminar en el
+        # mismo registro.
+        from yule.sync import _extract_equipo_data
+
+        a = _extract_equipo_data({"NAME": "PC-A", "NETWORKS": [{"MACADDR": "AA:AA:AA:AA:AA:AA"}]})
+        b = _extract_equipo_data({"NAME": "PC-B", "NETWORKS": [{"MACADDR": "BB:BB:BB:BB:BB:BB"}]})
+
+        self.assertTrue(a["id_ocs"])
+        self.assertNotEqual(a["id_ocs"], b["id_ocs"])
+
+    def test_nombre_vacio_no_muestra_unknown(self):
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data({"id": 5, "hardware": {}})
+
+        self.assertEqual(datos["nombre_host"], "(sin nombre)")
+
+    def test_ip_se_toma_de_otra_interfaz_si_la_primera_no_tiene(self):
+        # La primera interfaz suele ser la de management: MAC sí, IP no.
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {
+                "id": 6,
+                "name": "PC-06",
+                "networks": [
+                    {"MACADDR": "00:09:0F:AA:00:01", "IPADDRESS": ""},
+                    {"MACADDR": "A4:BB:6D:11:22:33", "IPADDRESS": "192.168.1.137"},
+                ],
+            }
+        )
+
+        self.assertEqual(datos["mac_address"], "00:09:0F:AA:00:01")
+        self.assertEqual(datos["ip_address"], "192.168.1.137")
+
+    def test_payload_real_ocs_212_se_mapea_completo(self):
+        # Fixture tomado de `/ocsapi/v1/computers?limit=1` de OCS 2.12.1. En esa
+        # forma `bios` es lista, `PROCESSORS` es un entero (MHz) y la primera
+        # interfaz es virtual del firewall: con el parser anterior quedaban
+        # serial, procesador, IP y MAC vacíos o equivocados.
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {
+                "accountinfo": {"ID": 3},
+                "bios": [
+                    {
+                        "HARDWARE_ID": 3,
+                        "SSN": "F35F284",
+                        "MSN": "/F35F284/VNWSV0051K0C5N/",
+                        "SMODEL": "Latitude 3450",
+                    }
+                ],
+                "cpus": [{"TYPE": "13th Gen Intel(R) Core(TM) i5-1335U", "MANUFACTURER": "GenuineIntel"}],
+                "hardware": {
+                    "ID": 3,
+                    "NAME": "W11F35F",
+                    "IPADDR": "192.168.1.137",
+                    "USERID": "Sistemas",
+                    "USERDOMAIN": None,
+                    "WORKGROUP": "redihossas.local",
+                    "LASTCOME": "2026-09-28 20:27:57",
+                    "MEMORY": 16288,
+                    "OSNAME": "Windows 11 Pro",
+                    "OSVERSION": "10.0.26200",
+                    "PROCESSORT": "13th Gen Intel(R) Core(TM) i5-1335U [10 core(s) x86_64]",
+                    "PROCESSORS": 1300,
+                },
+                "networks": [
+                    {
+                        "MACADDR": "00:09:0F:AA:00:01",
+                        "IPADDRESS": "",
+                        "STATUS": "",
+                        "TYPE": "Ethernet",
+                    },
+                    {
+                        "MACADDR": "E8:CF:83:0A:8C:0E",
+                        "IPADDRESS": "192.168.1.137",
+                        "STATUS": "Up",
+                        "TYPE": "Ethernet",
+                    },
+                ],
+                "storages": [{"TYPE": "Disk", "DISKSIZE": 488382}],
+            }
+        )
+
+        self.assertEqual(datos["id_ocs"], "3")
+        self.assertEqual(datos["nombre_host"], "W11F35F")
+        self.assertEqual(datos["usuario_dominio"], "redihossas.local\\Sistemas")
+        self.assertEqual(datos["serial_bios"], "F35F284")
+        self.assertEqual(datos["procesador"], "13th Gen Intel(R) Core(TM) i5-1335U [10 core(s) x86_64]")
+        self.assertEqual(datos["ip_address"], "192.168.1.137")
+        # MAC de la interfaz que tiene la IP real, no la virtual del firewall.
+        self.assertEqual(datos["mac_address"], "E8:CF:83:0A:8C:0E")
+        self.assertEqual(datos["memoria_ram_mb"], 16288)
+        self.assertEqual(datos["almacenamiento_total_gb"], 476.9)
+        self.assertEqual(
+            datos["ultimo_reporte_ocs"].astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "2026-09-28 20:27:57",
+        )
+
+    def test_lastcome_se_interpreta_como_utc(self):
+        # OCS lo escribe con NOW() de la BD (UTC): el access log marcaba
+        # 22:27:57 +0200 y LASTCOME traía 20:27:57. Leerlo como hora local
+        # (America/Bogota) corría el reporte 5 horas.
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {"id": 7, "name": "PC-07", "hardware": {"LASTCOME": "2026-09-28 20:27:57"}}
+        )
+
+        self.assertEqual(datos["ultimo_reporte_ocs"].utcoffset().total_seconds(), 0)
+        self.assertEqual(
+            datos["ultimo_reporte_ocs"].strftime("%Y-%m-%d %H:%M:%S"), "2026-09-28 20:27:57"
+        )
+
+    def test_procesador_usa_cpus_si_no_hay_processort(self):
+        from yule.sync import _extract_equipo_data
+
+        datos = _extract_equipo_data(
+            {
+                "id": 8,
+                "name": "PC-08",
+                "hardware": {"PROCESSORS": 1300},
+                "cpus": [{"TYPE": "AMD Ryzen 5 7530U"}],
+            }
+        )
+
+        self.assertEqual(datos["procesador"], "AMD Ryzen 5 7530U")
+
+    def test_software_se_lee_de_la_seccion_con_clave_vacia(self):
+        # `/computer/{id}` devuelve {"3": {"": [{NAME, VERSION, ...}]}}: la
+        # sección de software llega con la clave literal vacía.
+        from yule.client import OCSClient
+
+        rows = OCSClient._find_software_rows(
+            {
+                "3": {
+                    "": [
+                        {"NAME": "Google Chrome", "VERSION": "140.0", "PUBLISHER": "Google LLC"},
+                        {"NAME": "Notepad++", "VERSION": "8.7", "PUBLISHER": "Don Ho"},
+                    ]
+                }
+            }
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["NAME"], "Google Chrome")
+
+    def test_software_no_confunde_otras_listas_de_la_respuesta(self):
+        # `memories`, `monitors`... también son listas; solo cuentan si traen
+        # nombre y versión.
+        from yule.client import OCSClient
+
+        self.assertEqual(
+            OCSClient._find_software_rows({"3": {"memories": [{"CAPACITY": 16288}]}}),
+            [],
         )
 

@@ -3,9 +3,10 @@ Servicio de sincronización entre OCS e Inventario local.
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .client import build_client, OCSClientException
 from .models import EquipoOCS, SincronizacionLog, ConfiguracionYule
@@ -13,44 +14,224 @@ from .models import EquipoOCS, SincronizacionLog, ConfiguracionYule
 logger = logging.getLogger(__name__)
 
 
+def _get_ci(data: Any, *keys: str, default: Any = "") -> Any:
+    """Busca una clave sin distinguir mayúsculas.
+
+    La API de OCS devuelve los nombres de columna de la tabla `hardware` tal
+    cual están en la BD (mayúsculas: `NAME`, `OSNAME`, `LASTCOME`), mientras que
+    otras instalaciones los devuelven en minúsculas. Leer solo en minúsculas
+    dejaba todos los campos vacíos y el equipo aparecía como "Unknown".
+    """
+    if not isinstance(data, dict):
+        return default
+    for key in keys:
+        value = data.get(key)
+        if value not in (None, ""):
+            return value
+    lowered = {str(k).lower(): v for k, v in data.items()}
+    for key in keys:
+        value = lowered.get(key.lower())
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _section(data: Any, *keys: str) -> Dict[str, Any]:
+    """Devuelve una sección de la respuesta (hardware, bios) como dict plano.
+
+    OCS 2.12 devuelve cada sección de tres formas distintas según la tabla:
+    envuelta en el ID del equipo (`{"1": {...}}`), como lista de filas
+    (`bios: [{"SSN": "..."}]`) o como dict plano. Se normaliza todo a dict.
+    """
+    value = _get_ci(data, *keys, default={})
+    if isinstance(value, list):
+        # Secciones 1-a-N (bios, storages, memories...) o N-a-1 indexada por ID.
+        if value and isinstance(value[0], dict):
+            value = value[0]
+        else:
+            indexed = [v for v in value if isinstance(v, dict)]
+            value = indexed[0] if len(indexed) == 1 else {}
+    if not isinstance(value, dict):
+        return {}
+    if len(value) == 1:
+        inner = next(iter(value.values()))
+        if isinstance(inner, dict):
+            return inner
+    return value
+
+
+def _parse_ocs_datetime(value: Any) -> Optional[datetime]:
+    """Parsea la fecha de último reporte de OCS (`LASTCOME`).
+
+    OCS la escribe con `NOW()` evaluado por el servidor de BD, que corre en UTC,
+    así que llega como hora naive pero en UTC. En el server el access log
+    marcaba `22:27:57 +0200` y `LASTCOME` traía `20:27:57`: el mismo instante.
+    Interpretarlo como hora local (America/Bogota) corría el reporte 5 horas.
+    """
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        parsed = parse_datetime(text)
+        if parsed is None:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                try:
+                    parsed = datetime.strptime(text, fmt)
+                    break
+                except ValueError:
+                    continue
+        if parsed is None:
+            logger.warning(f"No se pudo interpretar la fecha de OCS: {text!r}")
+            return None
+    if timezone.is_naive(parsed):
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _lista(data: Any, *keys: str) -> List[Any]:
+    """Normaliza una sección repetible (networks, storages, cpus) a lista de dicts."""
+    value = _get_ci(data, *keys, default=[])
+    if isinstance(value, dict):
+        return [v for v in value.values() if isinstance(v, dict)]
+    if isinstance(value, list):
+        return [v for v in value if isinstance(v, dict)]
+    return []
+
+
+def _red_principal(hardware: Dict[str, Any], networks: List[Dict]) -> Tuple[str, str]:
+    """Devuelve (mac, ip) de la interfaz física del equipo.
+
+    `hardware.IPADDR` ya trae la IP real del agente, así que se busca la
+    interfaz que la tenga y se usa su MAC. Sin ese cruce se tomaba la primera
+    interfaz: el equipo tenía 48 y la primera es la virtual del firewall
+    (`00:09:0F:AA:00:01`), inservible para cruzar contra el inventario local.
+
+    Orden: 1) la interfaz con la IP de `hardware`, 2) la primera activa
+    (`STATUS` = Up), 3) la primera con MAC no nula. La IP se resuelve por
+    separado porque la interfaz de management suele tener MAC pero no IP.
+    """
+    ip_hardware = _get_ci(hardware, "ipaddr", "ipsrc")
+
+    mac_activa = ""
+    mac_cualquiera = ""
+    for net in networks:
+        net_ip = _get_ci(net, "ipaddress", "ip")
+        net_mac = _get_ci(net, "macaddr", "macaddress")
+        if not net_mac or net_mac == "00:00:00:00:00:00":
+            continue
+        if ip_hardware and net_ip == ip_hardware:
+            return net_mac, net_ip
+        if not mac_cualquiera:
+            mac_cualquiera = net_mac
+        if not mac_activa and _get_ci(net, "status", default="").lower() == "up":
+            mac_activa = net_mac
+
+    mac = mac_activa or mac_cualquiera
+
+    ip = ip_hardware
+    if not ip:
+        for net in networks:
+            net_ip = _get_ci(net, "ipaddress", "ip")
+            if net_ip:
+                ip = net_ip
+                break
+
+    return mac, ip
+
+
+def _procesador(hardware: Dict[str, Any], computer: Dict[str, Any]) -> str:
+    """Nombre del CPU.
+
+    En OCS 2.12 `hardware.PROCESSORS` es la frecuencia en MHz (entero 1300), no
+    una lista de CPUs, por eso salía vacío. El nombre real está en
+    `hardware.PROCESSORT` y, como respaldo, en la primera fila de `cpus`.
+    """
+    processor_name = _get_ci(hardware, "processort", "processorname")
+    if processor_name and not isinstance(processor_name, (int, float)):
+        return str(processor_name)
+
+    for source in (_get_ci(computer, "cpus", default=[]), _get_ci(hardware, "processors", default=[])):
+        # `cpus` es lista de filas; `processors` puede ser dict de campos de un
+        # solo CPU, así que ambas formas se normalizan a filas.
+        if isinstance(source, dict):
+            rows = [source]
+        elif isinstance(source, list):
+            rows = [row for row in source if isinstance(row, dict)]
+        else:
+            continue
+        for row in rows:
+            name = _get_ci(row, "type", "name", "caption", "model")
+            if name and not isinstance(name, (int, float)):
+                return str(name)
+    return ""
+
+
+def _almacenamiento_gb(computer: Dict[str, Any]) -> Optional[float]:
+    """Total de disco en GB a partir de `storages.DISKSIZE` (OCS lo guarda en MB)."""
+    total_mb = 0.0
+    for storage in _lista(computer, "storages"):
+        try:
+            total_mb += float(_get_ci(storage, "disksize", default=0) or 0)
+        except (TypeError, ValueError):
+            continue
+    return round(total_mb / 1024, 1) or None
+
+
 def _extract_equipo_data(ocs_computer: Dict) -> Dict:
-    """Extrae datos relevantes de respuesta OCS"""
-    # OCS puede variar en estructura según versión
-    # Este mapeo es genérico y requiere ajustes según tu OCS
-    
-    hardware = ocs_computer.get("hardware", {})
-    if isinstance(hardware, list):
-        hardware = hardware[0] if hardware else {}
-    
-    bios = ocs_computer.get("bios", {})
-    if isinstance(bios, list):
-        bios = bios[0] if bios else {}
-    
-    networks = ocs_computer.get("networks", [])
-    if not isinstance(networks, list):
-        networks = []
-    
-    # Obtener primer MAC y IP
-    mac_address = ""
-    ip_address = ""
-    if networks:
-        net = networks[0] if isinstance(networks[0], dict) else {}
-        mac_address = net.get("macaddr", "")
-        ip_address = net.get("ipaddress", "")
+    """Extrae datos relevantes de la respuesta de OCS.
+
+    `id_ocs` es `unique=True`: si OCS no enviara identificador, todos los
+    equipos se escribirían sobre el mismo registro. Por eso hay una clave
+    derivada como último recurso.
+    """
+    computer = ocs_computer if isinstance(ocs_computer, dict) else {}
+    hardware = _section(computer, "hardware")
+    bios = _section(computer, "bios")
+
+    networks = _lista(computer, "networks")
+    mac_address, ip_address = _red_principal(hardware, networks)
+
+    try:
+        memory_mb = int(_get_ci(hardware, "memory", default=0) or 0) or None
+    except (TypeError, ValueError):
+        memory_mb = None
+
+    # OCS no manda `user` en la raíz: el usuario del último reporte va en
+    # `hardware.USERID` y el dominio en `hardware.WORKGROUP`.
+    usuario = _get_ci(computer, "user") or _get_ci(hardware, "userid")
+    dominio = _get_ci(hardware, "userdomain", "workgroup")
+
+    # OCS no manda `id` en la raíz: el ID vive en `accountinfo.ID` y
+    # `hardware.ID`. El cliente además lo inyecta desde la clave del dict.
+    id_ocs = str(_get_ci(computer, "id", "deviceid") or _get_ci(hardware, "id", "deviceid") or "")
+    if not id_ocs:
+        id_ocs = f"sin-id:{_get_ci(computer, 'name') or 'desconocido'}:{mac_address}"
+        logger.warning(
+            f"OCS no devolvió ID ni DEVICEID; se genera una clave derivada: {id_ocs}"
+        )
 
     return {
-        "id_ocs": str(ocs_computer.get("id", "")),
-        "nombre_host": ocs_computer.get("name", "Unknown"),
-        "usuario_dominio": ocs_computer.get("user", ""),
-        "so_nombre": hardware.get("osname", ""),
-        "so_version": hardware.get("osversion", ""),
-        "procesador": hardware.get("processors", [{}])[0].get("name", "") if hardware.get("processors") else "",
-        "memoria_ram_mb": int(hardware.get("memory", 0)) if hardware.get("memory") else None,
-        "almacenamiento_total_gb": None,  # OCS no siempre proporciona esto
-        "serial_bios": bios.get("sn", ""),
+        "id_ocs": id_ocs,
+        "nombre_host": _get_ci(computer, "name") or _get_ci(hardware, "name") or "(sin nombre)",
+        "usuario_dominio": f"{dominio}\\{usuario}" if dominio and usuario else (usuario or dominio or ""),
+        "so_nombre": _get_ci(hardware, "osname"),
+        "so_version": _get_ci(hardware, "osversion"),
+        "procesador": _procesador(hardware, computer),
+        "memoria_ram_mb": memory_mb,
+        "almacenamiento_total_gb": _almacenamiento_gb(computer),
+        # OCS 2.12 usa `SSN` como número de serie del sistema.
+        "serial_bios": _get_ci(bios, "ssn", "sn", "msn", "serial"),
         "mac_address": mac_address,
         "ip_address": ip_address,
-        "ultimo_reporte_ocs": datetime.now(timezone.utc),
+        # Fecha real del inventario en OCS, no la hora del sync: antes ponía
+        # `datetime.now()` y la UI mostraba "reportó ahora" para equipos que
+        # nunca habían reportado.
+        "ultimo_reporte_ocs": _parse_ocs_datetime(
+            _get_ci(computer, "lastcome", "lastinventory")
+            or _get_ci(hardware, "lastcome", "lastinventory")
+        ),
     }
 
 
