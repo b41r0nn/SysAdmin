@@ -264,6 +264,33 @@ formas; `get_software()` también acepta el dict indexado para
 La clave de cada equipo (el `ID` de `hardware`) es el `computer_id` que se pasa
 a `computer/{id}` para traer el software.
 
+### Trampa: cada sección llega con la forma de su tabla
+
+Además del dict indexado por ID, **cada sección tiene una forma distinta según la
+tabla de la que viene**. Los nombres de columna son los de la BD, en
+**mayúsculas**. Con un equipo real inventariado:
+
+| Dato | Dónde está realmente | Trampa |
+|---|---|---|
+| Serial del sistema | `bios[0].SSN` | `bios` es una **lista**, no un dict, y la clave es `SSN`, no `SN` |
+| Nombre del CPU | `hardware.PROCESSORT` | `hardware.PROCESSORS` es la **frecuencia en MHz** (entero `1300`), no el nombre |
+| IP del equipo | `hardware.IPADDR` | `networks` trae 48 interfaces en un portátil; la 1.ª es virtual y sin IP |
+| MAC del equipo | `networks[].MACADDR` **de la interfaz que tiene esa IP** | la 1.ª es la virtual del firewall (`00:09:0F:...`), inservible para cruzar contra el inventario local |
+| Usuario | `hardware.USERID` + `hardware.WORKGROUP` | **no hay clave `user` en la raíz**; la UI lo muestra como `dominio\usuario` |
+| Disco total | `storages[].DISKSIZE` | viene en **MB**, hay que dividir entre 1024 |
+| Último reporte | `hardware.LASTCOME` | es **UTC** (lo evalúa `NOW()` de la BD) y llega sin zona horaria |
+| Software | `computer/{id}` → clave **literal vacía `""`** | buscar la clave `"software"` devuelve lista vacía siempre |
+
+La razón de fondo: el JSON es una volcado directo de las tablas, sin un esquema
+único. Por eso `backend/yule/sync.py` tiene `_get_ci()` (no distingue
+mayúsculas), `_section()` (normaliza dict y lista) y `_lista()` (secciones 1-a-N).
+
+Verificado contra un agente real (Dell Latitude 3450, Windows 11 Pro 24H2):
+
+```bash
+docker exec sysadmin_db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -x -c "SELECT id_ocs,nombre_host,usuario_dominio,serial_bios,mac_address,ip_address,procesador,almacenamiento_total_gb,ultimo_reporte_ocs FROM yule_equipoocs;"'
+```
+
 ## Configurar Yule en SysAdmin
 
 En `https://192.168.1.250:6060/yule/configuracion/`:
@@ -313,6 +340,48 @@ venía del dump local queda ilegible (no se puede recuperar: estaba cifrada con
 la clave del entorno de desarrollo). Hay que volver a capturarla.
 
 ## Agente en los equipos cliente
+
+> El procedimiento completo (instalación gráfica y silenciosa, despliegue por GPO,
+> verificación, `ocsinventory.ini`, errores frecuentes y desinstalación) está en
+> **`MANUAL_AGENTE_OCS.md`**, que es el documento que se entrega a Sistemas.
+
+### La URL del agente: `/ocsinventory` y nada más
+
+**Este fue el bug que costó el diagnóstico entero.** OCS tiene tres rutas y no son
+interchangeables:
+
+| Ruta | Para qué | Dónde se configura |
+|---|---|---|
+| `/ocsinventory` | **receptor** de inventarios | **el agente** |
+| `/ocsapi/v1` | API JSON | Yule (`/yule/configuracion/`) |
+| `/ocsreports/` | panel web | el navegador |
+
+Si el agente apunta a `/ocsreports` o a `/ocsapi/v1` no hay error visible: el
+servidor responde y simplemente **nunca llega un inventario**. El panel muestra
+`Total: 0 equipos detectados` y parece un fallo del servidor.
+
+Durante la instalación, en el campo del servidor escribir exactamente:
+
+```
+http://192.168.1.250:8081/ocsinventory
+```
+
+Sin barra final, sin subruta. Para cambiarlo en un equipo ya instalado (PowerShell
+como administrador):
+
+```powershell
+& "C:\Program Files\OCS Inventory Service\OcsInventoryService.exe" /ocsinventory
+```
+
+Comprobar que el agente corrió de verdad (access log del server):
+
+```bash
+docker logs --tail 40 ocsinventory-server 2>&1 | grep "POST /ocsinventory"
+```
+
+Debe aparecer una línea `POST /ocsinventory` con la IP del cliente y el
+`User-Agent` del agente. Si no aparece, el agente no está reportando por mucho que
+el servicio esté "en ejecución".
 
 **El repo del agente es `WindowsAgent`, no `OCSInventory-Agent`** (este último
 da 404):

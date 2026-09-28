@@ -22,7 +22,10 @@
 - **OCS `/computers` devuelve un dict indexado por ID** (`{"1": {...}}`), no una lista. `OCSClient._computers_from_payload()` lo normaliza; sin eso el sync contaba 0 equipos.
 - **Tests en el server**: correr con `docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test --noinput`. Sin esos overrides fallan ~225 tests por el redirect HTTPS a 6060 y por el `EOFError` de borrar la BD de pruebas.
 - **Yule**: configurar en `/yule/configuracion/` con URL `http://192.168.1.250:8081/ocsapi/v1` (termina en `/v1`). La fila en BD tiene prioridad sobre el `.env` (`backend/yule/client.py:241`).
-- **Pendientes operativos**: backup a NAS (falta IP/usuario/ruta) · instalar el agente OCS en un cliente de prueba (ya publicado en `http://192.168.1.250:8081/download/OcsInventoryAgent.exe`) · commitear los cambios del working tree.
+- **Causa raíz del "OCS no registra equipos" (RESUELTO 2026-09-28)**: el agente apuntaba a `/ocsreports` o `/ocsapi/v1`. El receptor es **`/ocsinventory`** (raíz, sin subruta). Con la URL corregida el agente real reporta `200` y Yule ya muestra el inventario completo. Los campos vacíos (serial, procesador, IP, MAC, usuario) eran bugs del parser de Yule, no de OCS. Detalle en la sección 0 de `INFORME_OCS_YULE_2026-09-25.md`.
+- **Formato real de la API OCS 2.12** (importante al tocar el parser): `/computers` devuelve un dict indexado por ID y las secciones llegan con la forma de su tabla — `bios` es **lista** (`SSN` = serial del sistema), `hardware.PROCESSORS` es la frecuencia en MHz mientras el nombre está en `PROCESSORT`, `hardware.IPADDR` trae la IP real y `hardware.USERID`/`WORKGROUP` el usuario. `hardware.LASTCOME` es **UTC** (lo evalúa la BD). El software de `/computer/{id}` viene bajo la **clave vacía `""`**, no bajo `"software"`.
+- **Manual del agente**: `MANUAL_AGENTE_OCS.md` es el procedimiento oficial para instalar y configurar el agente OCS en los equipos cliente (instalación gráfica y silenciosa, verificación, `ocsinventory.ini`, tabla de errores y desinstalación). Es el documento que se entrega a Sistemas para el despliegue masivo.
+- **Pendientes operativos**: `OCS_OPT_LOGLEVEL` volver a `0` (está en `512`) · rotar la contraseña de la BD de OCS (sigue la de fábrica) · backup a NAS (falta IP/usuario/ruta) · commitear los cambios del working tree.
 
 ---
 
