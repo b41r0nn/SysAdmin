@@ -4,13 +4,20 @@
 **Servidor:** 192.168.1.250 · Ubuntu Server 22.04 · Docker Compose
 **Componentes:** `ocsinventory/ocsinventory-docker-image:2.12.1` + SysAdmin/Yule (Django)
 **Destinatario:** Arquitectura
-**Estado:** resuelto y verificado en producción
-**Código:** `918001d` → `a1184dd` · **Docs:** `4a9622d`
+**Estado:** resuelto y verificado en producción (incluye el fix de software
+verificado contra la API en vivo el 2026-09-28)
+**Código:** `918001d` → `a1184dd` → `48e6080` → fix de software · **Docs:** `4a9622d`
 
 > Documento gemelo de gestión: `INFORME_ARQUITECTURA_2026-09-28.md` (visión de
 > negocio y riesgos). Este documento es la referencia técnica: flujo de datos,
 > anatomía de la respuesta de OCS y el antes/después de cada función con el
 > código real. Procedimiento para los equipos cliente: `MANUAL_AGENTE_OCS.md`.
+>
+> **Revisión 2 (2026-09-28).** La §5 fue reescrita tras verificar contra la API
+> en vivo: la primera versión afirmaba que la clave `"software"` no existía y
+> daba por correcta una función que mezclaba 18 secciones distintas. El texto
+> original se conserva resumido y marcado como error, porque el caso es
+> instructivo.
 
 ---
 
@@ -536,25 +543,42 @@ sin pasar por el cliente.
 
 ---
 
-## 5. Fase 4 — el software salía vacío en todos los equipos
+## 5. Fase 4 — el software
 
-### 5.1 El defecto
+Esta sección se corrigió **después** de verificar contra la API en vivo, el
+2026-09-28. La primera versión de este informe afirmaba dos cosas que
+resultaron falsas; se señalan como tales porque el error es instructivo.
 
-`GET /computer/3` devuelve el software bajo la **clave literal vacía**:
+### 5.1 Lo que realmente devuelve `/computer/{id}`
+
+El software aparece **dos veces** en la misma respuesta, con dos formas
+distintas:
 
 ```json
-{ "3": { "": [ { "NAME": "Google Chrome", "VERSION": "140.0", "PUBLISHER": "Google LLC" },
-               { "NAME": "Notepad++",    "VERSION": "8.7",   "PUBLISHER": "Don Ho" } ] } }
+{ "3": {
+    "":         [ { "NAME": "Google Chrome", "VERSION": "153.0", "PUBLISHER": "Google LLC" } ],
+    "software": [ { "NAME_ID": 1, "VERSION_ID": 2, "PUBLISHER_ID": 3, "HARDWARE_ID": 3 } ]
+} }
 ```
 
-El parser buscaba la clave `"software"`, que no existe, y devolvía `[]` **para
-todos los equipos, sin error ni warning**. Nadie lo notó porque el panel de Yule
-se veía normal mientras no hubiera inventario.
+- La clave **literal vacía `""`** trae los nombres y versiones ya resueltos.
+- La clave **`"software"`** trae solo IDs, sin textos.
+
+> **Corrección a la primera versión de este informe.** Se afirmaba que la clave
+> `"software"` "no existe". Es falso: existe, y es la que el parser original
+> buscaba. El problema real es que esa clave trae `NAME_ID`, no `NAME`, así que
+> leerla producía una lista de nombres vacíos. La clave `""` es la que sirve
+> para mostrar software.
+
+### 5.2 El defecto original
+
+El parser de la primera versión buscaba `data["software"]` y, al no encontrar
+nombres, devolvía `[]` para todos los equipos, sin error ni warning:
 
 ```python
-# ANTES: cuatro ramas adivinando la forma, ninguna cubría la clave ""
+# ANTES (código original)
 if isinstance(data, dict) and "software" in data:
-    raw = data["software"]
+    raw = data["software"]          # trae NAME_ID, no NAME -> nombres vacíos
 elif isinstance(data, list) and data and isinstance(data[0], dict) and "software" in data[0]:
     raw = data[0]["software"]
 elif isinstance(data, dict):
@@ -567,63 +591,125 @@ else:
     raw = []
 ```
 
-### 5.2 La corrección
+### 5.3 El error que Almost se cuela en producción
 
-En vez de adivinar la llave, se busca **estructuralmente**: la primera lista de
-filas que tenga nombre y versión.
+Una primera corrección buscó la sección "estructuralmente": recorría la respuesta
+acumulando **todas** las listas y devolvía la unión en cuanto encontraba una fila
+con nombre y versión. Parecía correcta, y los tests pasaban. Era incorrecta.
+
+`/computer/3` devuelve **18 secciones**, y varias tienen clave `name`:
+
+| Sección | Filas | | Sección | Filas |
+|---|---|---|---|---|
+| `""` | 122 | | `inputs` | 5 |
+| `software` | 122 | | `ports` | 5 |
+| `networks` | 48 | | `sounds` | 5 |
+| `printers` | 8 | | `memories` | 2 |
+| `controllers` | 7 | | `monitors` | 2 |
+| `slots` | 7 | | `bios`/`cpus`/`storages`/... | 1 c/u |
+
+Acumular todas daba **340 filas**, y el filtro final por nombre dejaba **157**:
+122 de software más **35 elementos que no son software**:
+
+```
+Intel(R) Iris(R) Xe Graphics          Realtek Audio
+NVMe EG6 KIOXIA 512GB                  USB Audio Device
+Kyocera ECOSYS M3655idn KX (impresora) EPSON LX-350 ESC/P
+Microsoft Print to PDF                AnyDesk Printer
+Ranura de sistema (x7)                None (x5)
+```
+
+**Esto no lo detectó ningún test**, porque el fixture de tests tenía una sola
+sección de software y dos secciones sin `name`. Faltaba el caso real.
+
+### 5.4 La corrección definitiva
+
+Devolver **las filas de la sección de software**, no la unión de todas:
 
 ```python
 @staticmethod
 def _find_software_rows(data: Any) -> List[Dict[str, Any]]:
+    """Localiza las filas de la sección de software de `/computer/{id}`."""
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
-    if not isinstance(data, dict):
+
+    root = OCSClient._unwrap_computer(data)   # quita la envoltura {"3": {...}}
+    if not root:
         return []
 
-    candidates: List[Dict[str, Any]] = []
-    for value in data.values():
-        if isinstance(value, list):
-            candidates.extend(item for item in value if isinstance(item, dict))
-        elif isinstance(value, dict):
-            for inner in value.values():
-                if isinstance(inner, list):
-                    candidates.extend(item for item in inner if isinstance(item, dict))
+    def filas_de(valor: Any) -> List[Dict[str, Any]]:
+        if not isinstance(valor, list):
+            return []
+        return [item for item in valor if isinstance(item, dict)]
 
-    for item in candidates:
-        keys = {str(k).lower() for k in item}
-        if "name" in keys and ("version" in keys or "publisher" in keys):
-            return candidates
+    def parece_software(filas: List[Dict[str, Any]]) -> bool:
+        for item in filas:
+            keys = {str(k).lower() for k in item}
+            if "name" in keys and ("version" in keys or "publisher" in keys):
+                return True
+        return False
+
+    # 1) Claves que usa OCS para el software, en orden de preferencia.
+    for clave in ("", "software"):
+        filas = filas_de(root.get(clave))
+        if filas and parece_software(filas):
+            return filas
+
+    # 2) Respaldo para otras versiones de OCS: la primera lista con nombre y
+    #    versión. El camino normal (1) no depende de esta heurística.
+    for valor in root.values():
+        filas = filas_de(valor)
+        if filas and parece_software(filas):
+            return filas
+
     return []
 ```
 
-El último bucle es la condición de recognizable: `memories`, `monitors`, `ports` y
-el resto de secciones también son listas, pero sus filas no tienen `name` +
-`version`, así que no se confunden. Está cubierto por
-`test_software_no_confunde_otras_listas_de_la_respuesta`.
+El camino principal (1) es **determinista**: prueba la clave `""` y la clave
+`"software"` en orden. La heurística (2) queda solo como respaldo para versiones
+de OCS donde la clave nombreada no exista.
 
-```python
-# get_software() queda así
-software = []
-for item in self._find_software_rows(data):
-    software.append({
-        "name": item.get("name") or item.get("NAME") or "",
-        "version": item.get("version") or item.get("VERSION") or "",
-        "publisher": item.get("publisher") or item.get("PUBLISHER") or "",
-    })
-return [s for s in software if s["name"]]
-```
+**Verificación contra el payload real de `/computer/3`:**
 
-### 5.3 Lo que este bug revela sobre el contrato
+| | Filas devueltas | Con nombre |
+|---|---|---|
+| Código con la unión de listas | 340 | **157** (35 ajenas) |
+| Código corregido | 122 | **122** |
 
-La misma información viene de dos maneras según el endpoint:
+122 coincide con `SELECT COUNT(*) FROM software WHERE HARDWARE_ID=3` en la base
+de datos de OCS, y 118 nombres distintos con `COUNT(DISTINCT NAME_ID)` — los 4
+repetidos son datos propios de OCS (mismo producto en variantes de 32/64 bits),
+no un error del parser.
 
-| Endpoint | Sección `software` |
-|---|---|
-| `/computers` | `[{ "NAME_ID": 42, "VERSION_ID": 7 }]` — solo **IDs** |
-| `/computer/{id}` | `[{ "NAME": "Google Chrome", "VERSION": "140.0" }]` — **resuelto** |
+### 5.5 Dónde se manifiesta el bug en la aplicación
 
-Por eso el software solo se puede leer del endpoint de detalle, y por eso el
-`get_software()` de ese endpoint es el que estaba roto.
+`get_software()` no lo usa el `sync_ocs`, sino el flujo de mantenimiento:
+
+- `mantenimiento/services.py:40` — `snapshot_software_ocs(activo)`
+- `mantenimiento/views.py:311` — al **abrir** "Documentar mantenimiento" precarga
+  el textarea con los nombres
+- `mantenimiento/views.py:288` — al **guardar**, si el textarea quedó vacío,
+  persiste esos nombres en `OrdenMantenimiento.software_snapshot`
+- `mantenimiento/services.py:98` — esos nombres salen en la **hoja de vida PDF**
+
+Con el bug, el formulario se precargaba con 157 líneas incluyendo la impresora
+Kyocera, la tarjeta de sonido y siete "Ranura de sistema", y quedaban guardadas
+en la orden de mantenimiento.
+
+**En producción no hay datos contaminados**: al momento de la corrección había una
+sola orden con software (`["Chrome", "PDF24"]`, escrita a mano) y **ningún activo
+estaba vinculado a un equipo OCS**, así que el auto-snapshot nunca se había
+disparado. El bug era latente, no visible.
+
+### 5.6 Lo que este caso enseña
+
+1. La clave `"software"` **sí existe**; la clave `""` también. Ninguna de las dos
+   suposiciones ("solo existe la vacía" / "solo existe software") era correcta.
+2. Un acumulador de candidatos que devuelve **la unión** en vez de **la lista
+   ganadora** parece correcto y falla en silencio, especialmente cuando muchas
+   secciones comparten el mismo nombre de campo.
+3. Un test con un fixture de dos secciones no representa una respuesta de 18. El
+   fixture tiene que ser una captura real, completa.
 
 ---
 
@@ -790,19 +876,22 @@ fragilidad del camino de escritura.
 
 ### 8.1 En producción
 
+Verificado por SSH directo sobre `192.168.1.250` con clave (`sistemas@`), el
+2026-09-28. `/opt/sysadmin/app` **no es un clon de git** (no tiene `.git`): es
+una copia de archivos, así que el despliegue es `scp`, no `git pull`.
+
 ```bash
 docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test yule
-# Ran 44 tests ... OK
+# Found 46 test(s). Ran 46 tests ... OK
+
+docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test
+# Found 337 test(s). Ran 337 tests ... OK
 
 docker exec sysadmin_django python manage.py sync_ocs --force
 # Sincronización exitosa: 1 detectados, 0 nuevos, 1 actualizados, 0 desaparecidos
 ```
 
-Estado de `yule_equipoocs` tras el despliegue:
-
-```bash
-docker exec sysadmin_db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -x -c "SELECT id_ocs,nombre_host,usuario_dominio,so_nombre,so_version,serial_bios,mac_address,ip_address,procesador,memoria_ram_mb,almacenamiento_total_gb,ultimo_reporte_ocs FROM yule_equipoocs;"'
-```
+Estado de `yule_equipoocs` **después** del despliegue del fix de almacenamiento:
 
 ```
 id_ocs                  | 3
@@ -815,20 +904,44 @@ mac_address             | E8:CF:83:0A:8C:0E
 ip_address              | 192.168.1.137
 procesador              | 13th Gen Intel(R) Core(TM) i5-1335U [10 core(s) x86_64]
 memoria_ram_mb          | 16384
-almacenamiento_total_gb | 476
-ultimo_reporte_ocs      | 2026-09-28 20:27:57+00
+almacenamiento_total_gb | 477          <- antes 476 (redondeo correcto)
+ultimo_reporte_ocs      | 2026-09-28 20:49:44+00
 ```
+
+`get_software(3)` contra la API en vivo, en producción:
+
+| | Filas devueltas | Con nombre |
+|---|---|---|
+| Antes del fix de §5.4 | 340 | **157** (35 ajenas al software) |
+| Después del fix | 122 | **122** |
 
 ### 8.2 Local
 
 | Suite | Resultado |
 |---|---|
-| `manage.py test yule` | 44/44 OK |
-| `manage.py test` (completa) | 335/335 OK |
+| `manage.py test yule` | 46/46 OK |
+| `manage.py test` (completa) | 337/337 OK |
 
 ### 8.3 En OCS
 
-Fila `hardware` ID `3`, con `bios` 1, `networks` 48 y `software` 122.
+Fila `hardware` ID `3`. Conteos reales en la base de datos de OCS:
+
+```sql
+SELECT COUNT(*) FROM software WHERE HARDWARE_ID=3;              -- 122
+SELECT COUNT(DISTINCT NAME_ID) FROM software WHERE HARDWARE_ID=3; -- 118
+```
+
+Las 18 secciones de `/computer/3`: `""` 122, `software` 122, `networks` 48,
+`printers` 8, `controllers` 7, `slots` 7, `inputs` 5, `ports` 5, `sounds` 5,
+`memories` 2, `monitors` 2, y siete secciones de una fila.
+
+### 8.4 Lo que sigue sin resolver
+
+- `W11F35F` **no tiene match** con ningún activo del inventario local
+  (`verificar_equipos_sin_match()` lo reporta; 0 de 24 activos con
+  `equipo_ocs`). El software de OCS no llega a ninguna hoja de vida mientras tanto.
+- Un test intermitente de otra app: 1 de 3 corridas de la suite completa dio
+  `FAILED (failures=1)`. No se identificó cuál.
 
 ---
 
@@ -907,7 +1020,9 @@ esta es la lista a revalidar contra un payload real.
 | Usuario | `hardware.USERID` | no hay clave `user` |
 | Dominio | `hardware.WORKGROUP` | `USERDOMAIN` viene `null` en equipos de dominio |
 | Último reporte | `hardware.LASTCOME` | **UTC**, sin zona |
-| Software | `/computer/{id}` → clave **literal `""`** | en `/computers` solo trae IDs |
+| Software | `/computer/{id}` → clave **literal `""`** (con `NAME`/`VERSION`) | en `/computers` solo trae `NAME_ID` |
+| Software (2.ª copia) | `/computer/{id}` → clave `"software"` | trae `NAME_ID`, **no** `NAME`: no sirve para mostrar |
+| Secciones de `/computer/{id}` | **18 listas**: `""`, `software`, `networks`, `printers`, `controllers`, `slots`, `inputs`, `ports`, `sounds`, `memories`, `monitors`, `accountinfo`, `bios`, `cpus`, `devices`, `drives`, `storages`, `videos` | varias comparten la clave `name`: no se puede acumular todas |
 | Envoltura raíz | dict indexado por ID | no es lista |
 | `limit=0` | **rechazado** por OCS 2.12 (devuelve texto, no JSON) | usar `limit=1000` |
 | Logs del server | `docker logs ocsinventory-server` | `error.log` es symlink a `/proc/self/fd/2` |
@@ -918,17 +1033,23 @@ esta es la lista a revalidar contra un payload real.
 
 | # | Pendiente | Detalle | Prioridad |
 |---|---|---|---|
-| 1 | Desplegar el fix de `_almacenamiento_gb` | Pasa el valor de 476 a 477 (redondeo correcto) | Baja, cosmético |
-| 2 | Confirmar `get_software(3)` contra la API en vivo | Esperado `total: 122` | Media, cierra el último bug |
-| 3 | Alerta de equipos que no reportan | El fallo del agente es silencioso por definición; es lo que más costó esta sesión | **Alta** |
-| 4 | Capturar y versionar el payload completo de OCS como fixture | El fixture del test cubre 8 de 24 secciones; faltan `storages` multiple, `memories`, cuentas | Media |
-| 5 | Validar `_red_principal()` con otro equipo | La precedencia depende del orden de `networks`, que varía por fabricante y drivers | Media |
-| 6 | Considerar `DecimalField` para `almacenamiento_total_gb` | Si algún día se quiere 476.9 y no 477 | Baja |
-| 7 | Automatizar el despliegue al server | Hoy depende de un `scp` manual con contraseña | Media |
-| 8 | Rotar contraseña de BD de OCS | Sigue la de fábrica, que es pública | Alta, seguridad |
+| 1 | Alerta de equipos que no reportan | El fallo del agente es silencioso por definición; es lo que más costó esta sesión | **Alta** |
+| 2 | Vincular el equipo de OCS con el inventario local | `W11F35F` sigue sin match: `verificar_equipos_sin_match()` lo reporta, y 0 de 24 activos tienen `equipo_ocs`. Hasta que no se vincule, el software de OCS no llega a ninguna hoja de vida | **Alta** |
+| 3 | Capturar y versionar el payload completo de OCS como fixture | El fixture actual cubre 8 secciones; el de `/computer/{id}` tiene 18. Falta un fixture completo y real | Media |
+| 4 | Validar `_red_principal()` con otro equipo | La precedencia depende del orden de `networks`, que varía por fabricante y drivers | Media |
+| 5 | Rotar contraseña de BD de OCS | Sigue la de fábrica, que es pública | Alta, seguridad |
+| 6 | Automatizar el despliegue al server | Resuelto con clave SSH, pero el `scp` sigue siendo manual | Media |
+| 7 | Congelar los parches del contenedor en una imagen propia | Se pierden con `--force-recreate` | Media |
+| 8 | Considerar `DecimalField` para `almacenamiento_total_gb` | Si algún día se quiere 476.9 y no 477 | Baja |
 | 9 | `OCS_OPT_LOGLEVEL` de `512` a `0` | Se subió para diagnosticar | Baja |
-| 10 | Congelar los parches del contenedor en una imagen propia | Se pierden con `--force-recreate` | Media |
-| 11 | Investigar un test intermitente de la suite completa | En 3 corridas de 335 tests, una dio `FAILED (failures=1)` y dos `OK`. No es de `yule` (esa app no usa `now()` ni aleatoriedad y dio 44/44 en las 3); es de otra app y no se identificó el nombre. Conviene aislarlo antes de confiar en la suite como puerta de calidad | Media |
+| 10 | Investigar un test intermitente de la suite completa | En 3 corridas de 335 tests, una dio `FAILED (failures=1)` y dos `OK`. No es de `yule` (esa app no usa `now()` ni aleatoriedad y dio 44/44 en las 3); es de otra app y no se identificó el nombre | Media |
+
+### Cerrados durante esta sesión
+
+| # | Pendiente | Resultado |
+|---|---|---|
+| ✔ | Desplegar el fix de `_almacenamiento_gb` | 476 → 477 en producción, `int` correcto |
+| ✔ | Confirmar `get_software(3)` contra la API en vivo | Detectó el bug de las 18 secciones; corregido a 122 |
 
 ---
 
@@ -954,6 +1075,22 @@ esta es la lista a revalidar contra un payload real.
    problema en código verificable.
 
 5. **Cuando un síntoma tiene dos causas probables, hay que medir antes de
-   hipótesis.** Comparar el access log con `LASTCOME` convirtió una conjetura de
-   zona horaria en un hecho, y recién con el hecho se pudo escribir el fix con su
-   justificación en el docstring.
+   formular hipótesis.** Comparar el access log con `LASTCOME` convirtió una
+   conjetura de zona horaria en un hecho, y recién con el hecho se pudo escribir
+   el fix con su justificación en el docstring.
+
+6. **Verificar contra el sistema real es lo que separa un fix de una suposición.**
+   Cuatro correcciones de esta sesión pasaron todos los tests y una estaba mal:
+   `_find_software_rows()` acumulaba las 18 listas de `/computer/{id}` y devolvía
+   157 entradas en vez de 122, metiendo una impresora Kyocera, una tarjeta de
+   sonido y siete "Ranura de sistema" en el inventario de software. El test
+   existía y pasaba, porque el fixture tenía dos secciones en vez de dieciocho.
+   La corrección no salió de leer el código, sino de comparar el resultado contra
+   `SELECT COUNT(*) FROM software` en la base de datos de OCS.
+
+7. **Un acumulador que devuelve la unión en vez de la lista ganadora es un
+   bug silencioso.** La versión anterior de esa función parecía correcta y el
+   filtro por nombres la hacía parecer plausible. Cuando varias secciones
+   comparten nombres de campo —y en OCS eso es la norma—, la única forma segura
+   es iterar sobre las claves conocidas, no buscar "la lista que parezca
+   correcta".
