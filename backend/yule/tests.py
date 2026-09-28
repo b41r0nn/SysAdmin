@@ -492,7 +492,7 @@ class ExtractEquipoDataTests(TestCase):
                     "WORKGROUP": "redihossas.local",
                     "LASTCOME": "2026-09-28 20:27:57",
                     "MEMORY": 16288,
-                    "OSNAME": "Windows 11 Pro",
+                    "OSNAME": "Microsoft Windows 11 Pro",
                     "OSVERSION": "10.0.26200",
                     "PROCESSORT": "13th Gen Intel(R) Core(TM) i5-1335U [10 core(s) x86_64]",
                     "PROCESSORS": 1300,
@@ -524,7 +524,11 @@ class ExtractEquipoDataTests(TestCase):
         # MAC de la interfaz que tiene la IP real, no la virtual del firewall.
         self.assertEqual(datos["mac_address"], "E8:CF:83:0A:8C:0E")
         self.assertEqual(datos["memoria_ram_mb"], 16288)
-        self.assertEqual(datos["almacenamiento_total_gb"], 476.9)
+        # El campo del modelo es PositiveIntegerField: el helper devuelve int.
+        # 488382 MB / 1024 = 476.94 -> 477. Antes devolvía 476.9 y Django lo
+        # truncaba a 476 al guardar.
+        self.assertIsInstance(datos["almacenamiento_total_gb"], int)
+        self.assertEqual(datos["almacenamiento_total_gb"], 477)
         self.assertEqual(
             datos["ultimo_reporte_ocs"].astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             "2026-09-28 20:27:57",
