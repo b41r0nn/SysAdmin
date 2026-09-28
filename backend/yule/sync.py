@@ -168,15 +168,20 @@ def _procesador(hardware: Dict[str, Any], computer: Dict[str, Any]) -> str:
     return ""
 
 
-def _almacenamiento_gb(computer: Dict[str, Any]) -> Optional[float]:
-    """Total de disco en GB a partir de `storages.DISKSIZE` (OCS lo guarda en MB)."""
+def _almacenamiento_gb(computer: Dict[str, Any]) -> Optional[int]:
+    """Total de disco en GB a partir de `storages.DISKSIZE` (OCS lo guarda en MB).
+
+    Devuelve `int` porque el campo del modelo es `PositiveIntegerField`; devolver
+    un float aquí solo funcionaba por el `int()` que Django aplica al guardar
+    (476.9 quedaba truncado a 476 en la BD).
+    """
     total_mb = 0.0
     for storage in _lista(computer, "storages"):
         try:
             total_mb += float(_get_ci(storage, "disksize", default=0) or 0)
         except (TypeError, ValueError):
             continue
-    return round(total_mb / 1024, 1) or None
+    return int(round(total_mb / 1024)) or None
 
 
 def _extract_equipo_data(ocs_computer: Dict) -> Dict:
