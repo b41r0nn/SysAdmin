@@ -592,3 +592,60 @@ class ExtractEquipoDataTests(TestCase):
             [],
         )
 
+    def test_software_solo_toma_la_seccion_software_del_payload_real(self):
+        # Reproduce la forma REAL de `/computer/3` en OCS 2.12: el software
+        # aparece dos veces (clave "" con nombres resueltos y clave "software"
+        # con NAME_ID) y alrededor hay 17 secciones más. Varias de esas
+        # secciones (printers, slots, ports) también traen clave "name", así
+        # que acumular todas las listas las mezclaba en el inventario: se
+        # devolvían 157 entradas en vez de 122.
+        from yule.client import OCSClient
+
+        software_resuelto = [
+            {"NAME": "Google Chrome", "VERSION": "153.0.8010.54", "PUBLISHER": "Google LLC"},
+            {"NAME": "AnyDesk", "VERSION": "ad 9.0.14", "PUBLISHER": "AnyDesk Software GmbH"},
+        ]
+        software_por_id = [
+            {"NAME_ID": 1, "VERSION_ID": 2, "PUBLISHER_ID": 3, "HARDWARE_ID": 3},
+        ]
+        payload = {
+            "3": {
+                "": software_resuelto,
+                "software": software_por_id,
+                "networks": [{"MACADDR": "E8:CF:83:0A:8C:0E", "IPADDRESS": "192.168.1.137"}],
+                "printers": [{"NAME": "Dell Optimizer", "VERSION": "1.0", "DRIVER": "x"}],
+                "slots": [{"NAME": "Ranura de sistema", "TYPE": "PCI"}],
+                "ports": [{"NAME": "USB Root Hub", "TYPE": "USB"}],
+                "sounds": [{"NAME": "Realtek Audio", "VERSION": "6.0.1.1"}],
+                "controllers": [{"NAME": "Kaspersky", "VERSION": "15.1.0.11795"}],
+                "inputs": [{"NAME": "HID Keyboard", "TYPE": "Keyboard"}],
+                "monitors": [{"NAME": "Monitor P2419", "SERIAL": "x"}],
+                "memories": [{"CAPACITY": 16288, "SERIALNUMBER": "x"}],
+                "accountinfo": [{"NAME": "sistemas"}],
+                "bios": [{"SSN": "F35F284", "SMODEL": "Latitude 3450"}],
+                "cpus": [{"TYPE": "13th Gen Intel(R) Core(TM) i5-1335U"}],
+                "storages": [{"TYPE": "Disk", "DISKSIZE": 488382}],
+                "hardware": {"ID": 3, "NAME": "W11F35F"},
+            }
+        }
+
+        filas = OCSClient._find_software_rows(payload)
+
+        # Solo la sección de software, con los nombres ya resueltos.
+        self.assertEqual(len(filas), 2)
+        self.assertEqual([f["NAME"] for f in filas], ["Google Chrome", "AnyDesk"])
+        # Y desde luego nada de las otras 16 secciones.
+        ajenos = {"Dell Optimizer", "Ranura de sistema", "USB Root Hub",
+                   "Realtek Audio", "Kaspersky", "HID Keyboard", "Monitor P2419"}
+        self.assertEqual(ajenos & {f.get("NAME") for f in filas}, set())
+
+    def test_get_software_descarta_filas_sin_nombre(self):
+        # La sección "software" con NAME_ID no trae nombre: si se usara esa,
+        # el inventario quedaría con entradas vacías.
+        from yule.client import OCSClient
+
+        filas = OCSClient._find_software_rows(
+            {"7": {"software": [{"NAME_ID": 1, "VERSION_ID": 2}]}}
+        )
+        self.assertEqual(filas, [])
+
