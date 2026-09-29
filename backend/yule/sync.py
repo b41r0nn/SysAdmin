@@ -384,48 +384,116 @@ def verificar_equipos_sin_match() -> List[EquipoOCS]:
     return EquipoOCS.objects.filter(activo_local__isnull=True).order_by("-ultimo_reporte_ocs")
 
 
-def buscar_posibles_matches(equipo: EquipoOCS, por_serial: bool = True, 
-                           por_mac: bool = True, por_hostname: bool = False) -> List:
+def _normaliza_mac(valor: Any) -> str:
+    """Deja una MAC como 12 dígitos hexadecimales en mayúscula.
+
+    El inventario local guarda las MAC con guiones ("9C-B1-50-8C-29-2X") y OCS
+    las devuelve con dos puntos ("E8:CF:83:0A:8C:0E"). Un `icontains` entre ambos
+    formatos nunca acierta, por eso la comparación se hace sobre la forma
+    normalizada. Se ignoran los separadores porque no siempre están en el mismo
+    sitio: hay captura de pantalla donde el último grupo sale partido.
+    """
+    if not valor:
+        return ""
+    limpio = "".join(c for c in str(valor).upper() if c in "0123456789ABCDEF")
+    return limpio if len(limpio) == 12 else ""
+
+
+def buscar_posibles_matches(equipo: EquipoOCS, por_serial: bool = True,
+                            por_mac: bool = True,
+                            por_hostname: bool = True) -> List[Tuple[Any, List[str]]]:
     """
     Busca posibles coincidencias en inventario local.
-    
+
+    Antes esta función solo miraba el serial con `icontains` y devolvía una lista
+    plana de activos, sin explicar por qué proponía cada uno. Eso producía dos
+    fallos en cadena: la lista salía vacía en los casos que más la necesitan, y
+    cuando salía, el usuario no tenía forma de saber si la sugerencia era una
+    coincidencia real o un simple parecido. Ahora devuelve tuplas
+    ``(activo, motivos)`` ordenadas por fuerza de la coincidencia.
+
     Args:
         equipo: EquipoOCS a buscar
         por_serial: Buscar por serial BIOS
         por_mac: Buscar por MAC address
-        por_hostname: Buscar por hostname (menos confiable)
-        
+        por_hostname: Buscar por hostname
+
     Returns:
-        Lista de activos potencialmente coincidentes
+        Lista de ``(activo, motivos)``. Un activo ya vinculado a otro equipo OCS
+        se excluye: ocupa su lugar y proponerlo solo genera errores.
     """
     from inventario.models import Activo
-    
-    matches = []
-    
-    # Buscar por serial
-    if por_serial and equipo.serial_bios:
-        matches.extend(
-            Activo.objects.filter(serial__icontains=equipo.serial_bios)
-        )
-    
-    # Buscar por MAC
-    if por_mac and equipo.mac_address:
-        matches.extend(
-            Activo.objects.filter(mac_equipo__icontains=equipo.mac_address)
-        )
-    
-    # Búsqueda por hostname (muy imprecisa, opcional)
-    if por_hostname and equipo.nombre_host:
-        matches.extend(
-            Activo.objects.filter(observaciones__icontains=equipo.nombre_host)
-        )
-    
-    # Remover duplicados manteniendo orden
-    seen = set()
-    unique_matches = []
-    for m in matches:
-        if m.id not in seen:
-            seen.add(m.id)
-            unique_matches.append(m)
-    
-    return unique_matches
+
+    # Los identificadores del equipo, normalizados una sola vez
+    host = (equipo.nombre_host or "").strip()
+    serial = (equipo.serial_bios or "").strip()
+    mac = _normaliza_mac(equipo.mac_address)
+
+    # Activos que ya están ocupados por OTRO equipo de OCS. Se resuelve en una
+    # sola consulta porque _anotar se llama por cada candidato.
+    ocupados = set(
+        EquipoOCS.objects.exclude(pk=equipo.pk)
+        .exclude(activo_local__isnull=True)
+        .values_list("activo_local_id", flat=True)
+    )
+
+    # Un mismo activo puede aparecer por varias reglas: se acumula el motivo.
+    motivos_por_id: Dict[int, List[str]] = {}
+    orden: List[int] = []
+
+    def _anotar(activo, motivo: str) -> None:
+        if activo.pk in ocupados:
+            return
+        if activo.pk not in motivos_por_id:
+            motivos_por_id[activo.pk] = []
+            orden.append(activo.pk)
+        if motivo not in motivos_por_id[activo.pk]:
+            motivos_por_id[activo.pk].append(motivo)
+
+    # Serial: coincidencia exacta primero, porque es el identificador fuerte.
+    if por_serial and serial:
+        for activo in Activo.objects.filter(serial__iexact=serial):
+            _anotar(activo, "serial del BIOS idéntico")
+        for activo in Activo.objects.filter(serial__icontains=serial).exclude(serial__iexact=serial):
+            _anotar(activo, "el serial del inventario contiene el del BIOS")
+
+    # MAC: se recuperan candidatos por un fragmento y se compara ya normalizada,
+    # porque el separador local y el de OCS no coinciden. El fragmento tiene que
+    # ser un trozo que exista literalmente en el texto guardado: con "8C0E" no
+    # encuentra nada en "E8-CF-83-0A-8C-0E", porque el guion parte el grupo. Por
+    # eso se usa el último octeto, que sobrevive a cualquier formato. Es un
+    # filtro débil a propósito: la exactitud la pone la comparación normalizada
+    # de abajo, no este icontains.
+    if por_mac and mac:
+        ultimo_octeto = mac[-2:]
+        for activo in Activo.objects.filter(mac_equipo__icontains=ultimo_octeto):
+            if _normaliza_mac(activo.mac_equipo) == mac:
+                _anotar(activo, "misma MAC de red")
+
+    # Hostname: se busca en el campo que lo contiene. Va también en `serial`
+    # porque es un error de captura frecuente (hostname en el campo del service
+    # tag) y es justo el caso que hacía falta resolver.
+    if por_hostname and host:
+        for activo in Activo.objects.filter(nombre_equipo__iexact=host):
+            _anotar(activo, "mismo nombre de equipo")
+        for activo in Activo.objects.filter(nombre_equipo__icontains=host).exclude(nombre_equipo__iexact=host):
+            _anotar(activo, "el nombre de equipo contiene el del OCS")
+        for activo in Activo.objects.filter(serial__iexact=host):
+            _anotar(activo, "el hostname está en el campo serial del activo")
+        for activo in Activo.objects.filter(observaciones__icontains=host):
+            _anotar(activo, "el hostname aparece en las observaciones")
+
+    if not orden:
+        return []
+
+    # Un activo con más de un motivo independiente es la sugerencia más fuerte.
+    candidatos = {a.pk: a for a in Activo.objects.filter(pk__in=orden)}
+
+    def _fuerza(item):
+        _, motivos = item
+        return (-len(motivos), motivos)
+
+    return sorted(
+        ((candidatos[pk], motivos_por_id[pk]) for pk in orden),
+        key=_fuerza,
+    )
