@@ -29,9 +29,17 @@ DATABASES = {
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)  # noqa: F405
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=True, cast=bool)  # noqa: F405
 CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=True, cast=bool)  # noqa: F405
-SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "31536000"))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+
+# HSTS lo envía nginx para todo el tráfico; evitamos duplicarlo en
+# respuestas dinámicas de Django.
+SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+
+# Cooldown para evitar spam en formulario público de tickets.
+SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS = int(
+    os.environ.get("SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS", "60")
+)
 
 _origenes = os.environ.get("TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = (

@@ -37,6 +37,9 @@ SECURE_HSTS_SECONDS = 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = False
 SECURE_HSTS_PRELOAD = False
 
+# Sin cooldown para tickets públicos en desarrollo (no molestar tests).
+SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS = 0
+
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://localhost:8000",

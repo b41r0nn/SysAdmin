@@ -151,6 +151,7 @@ git clone https://github.com/tu-usuario/SysAdmin.git /opt/sysadmin/app
 
 ```bash
 cd /opt/sysadmin/app
+cp .env.example .env
 nano .env
 ```
 
@@ -159,23 +160,33 @@ nano .env
 ```ini
 # Django
 SECRET_KEY=generado_con_secrets.token_urlsafe(50)
+PASSWORDS_ENCRYPTION_KEY=clave_fernet_de_44_caracteres
 DEBUG=False
+DJANGO_SETTINGS_MODULE=sysadmin.settings.production
 ALLOWED_HOSTS=192.168.1.250,localhost,127.0.0.1
 
 # Base de datos
-DB_ENGINE=django.db.backends.postgresql
-DB_NAME=sysadmin_db
-DB_USER=sysadmin_user
-DB_PASSWORD=contraseña_segura_aqui
-DB_HOST=postgres
+POSTGRES_DB=sysadmin_db
+POSTGRES_USER=sysadmin_user
+POSTGRES_PASSWORD=contraseña_segura_aqui
+DB_HOST=db
 DB_PORT=5432
 
+# Seguridad HTTPS (detrás de nginx)
+SECURE_SSL_REDIRECT=True
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+SECURE_HSTS_SECONDS=31536000
+TRUSTED_ORIGINS=https://192.168.1.250:6060
+
 # OCS Configuration (Yule)
-OCS_BASE_URL=https://ocs.tu-empresa.local/ocsapi/v1
-OCS_USER=usuario_ocs
+OCS_BASE_URL=http://192.168.1.250:8081/ocsapi/v1
+OCS_USER=Administrador
 OCS_TOKEN=token_ocs_aqui
-OCS_VERIFY_SSL=True
+OCS_VERIFY_SSL=False
 ```
+
+> **Nota:** `manage.py` y `wsgi.py` cargan `.env` automáticamente en desarrollo con `python-dotenv`. En producción Docker las variables vienen del `env_file` de `docker-compose.yml`.
 
 ### Paso 4: Levantar Contenedores
 
@@ -190,10 +201,10 @@ docker compose ps
 
 Esperado:
 ```
-CONTAINER       STATUS
-sysadmin_postgres_1     Up
-sysadmin_django_1       Up
-sysadmin_nginx_1        Up
+NAME            STATUS
+sysadmin_db     healthy
+sysadmin_django healthy
+sysadmin_nginx  started
 ```
 
 ### Paso 5: Crear SuperAdmin

@@ -2,7 +2,7 @@ import io
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import load_workbook
 
@@ -373,6 +373,38 @@ class ReportePublicoTests(TestCase):
             "descripcion": "PC no arranca.",
         })
         self.assertFalse(Notificacion.objects.filter(usuario=operario).exists())
+
+    @override_settings(SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS=2)
+    def test_cooldown_bloquea_ticket_segundo_intento(self):
+        payload = {
+            "nombre": "Ana",
+            "area": "Logística",
+            "contacto": "",
+            "descripcion": "Primer reporte.",
+        }
+        self.client.post(self.URL, payload)
+        self.assertEqual(Ticket.objects.count(), 1)
+
+        # Mismo client, misma sesión: debe bloquear.
+        resp = self.client.post(self.URL, {
+            "nombre": "Ana",
+            "area": "Logística",
+            "contacto": "",
+            "descripcion": "Segundo reporte inmediato.",
+        })
+        self.assertEqual(Ticket.objects.count(), 1)
+        self.assertContains(resp, "Esperá un momento")
+
+    @override_settings(SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS=0)
+    def test_cooldown_cero_permite_multiples_reportes(self):
+        for i in range(3):
+            self.client.post(self.URL, {
+                "nombre": f"Usuario {i}",
+                "area": "Sistemas",
+                "contacto": "",
+                "descripcion": f"Reporte {i}.",
+            })
+        self.assertEqual(Ticket.objects.count(), 3)
 
 
 # ─── Navegación ─────────────────────────────────────────────────
