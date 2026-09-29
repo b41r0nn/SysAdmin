@@ -15,6 +15,73 @@ logger = logging.getLogger(__name__)
 LOGO_PATH = os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.png")
 
 
+#: OCS devuelve la cadena "Unavailable" cuando el agente no reporta el dato.
+SIN_DATO_OCS = "unavailable"
+
+
+def detalle_snapshot_software_ocs(activo):
+    """Software instalado de un activo desde OCS, con el motivo si no se pudo.
+
+    A diferencia de snapshot_software_ocs(), que solo devuelve la lista y
+    silencia cualquier fallo, esto distingue los tres motivos por los que la
+    lista puede venir vacía. Sin eso la vista no puede explicarle al usuario
+    por qué no ve nada: "no hay nada instalado", "el equipo no está vinculado"
+    y "OCS no responde" son tres cosas muy distintas.
+
+    Returns:
+        dict con:
+            software: lista de dicts {"name", "version", "publisher"}
+            estado:    "ok" | "sin_equipo" | "no_configurado" | "error"
+            detalle:   texto para el usuario cuando estado != "ok"
+    """
+    equipo = activo.equipo_ocs.first() if hasattr(activo, "equipo_ocs") else None
+    if not equipo or not equipo.id_ocs:
+        return {
+            "software": [],
+            "estado": "sin_equipo",
+            "detalle": (
+                "Este activo no está vinculado a ningún equipo de OCS, "
+                "así que no hay inventario de software para él."
+            ),
+        }
+
+    try:
+        client = build_client()
+        if not client.is_configured():
+            return {
+                "software": [],
+                "estado": "no_configurado",
+                "detalle": (
+                    "La conexión con el servidor OCS no está configurada. "
+                    "Cargala en Yule › Configuración OCS."
+                ),
+            }
+        software = client.get_software(str(equipo.id_ocs))
+    except OCSClientException as exc:
+        logger.warning("No se pudo obtener software OCS para %s: %s", activo.serial, exc)
+        return {
+            "software": [],
+            "estado": "error",
+            "detalle": f"El servidor OCS no respondió: {exc}",
+        }
+    except Exception as exc:
+        logger.warning("Error snapshot OCS para %s: %s", activo.serial, exc)
+        return {
+            "software": [],
+            "estado": "error",
+            "detalle": f"Ocurrió un error al consultar OCS: {exc}",
+        }
+
+    # OCS devuelve el software en el orden en que lo reporta el agente, que no
+    # es estable entre sincronizaciones. Ordenar acá evita que la lista "salte"
+    # de una recarga a otra.
+    software = sorted(
+        software or [],
+        key=lambda s: ((s.get("name") or "").strip().lower(), (s.get("version") or "").strip().lower()),
+    )
+    return {"software": software, "estado": "ok", "detalle": ""}
+
+
 def snapshot_software_ocs(activo):
     """Captura el software instalado de un activo desde OCS (best-effort).
 
@@ -24,26 +91,7 @@ def snapshot_software_ocs(activo):
     Returns:
         Lista de dicts {"name", "version", "publisher"} (puede ser []).
     """
-    equipo = (
-        activo.equipo_ocs.first()
-        if hasattr(activo, "equipo_ocs") and activo.equipo_ocs.exists()
-        else None
-    )
-    if not equipo or not equipo.id_ocs:
-        return []
-
-    try:
-        client = build_client()
-        if not client.is_configured():
-            logger.warning("OCS no configurado; snapshot de software vacío.")
-            return []
-        return client.get_software(str(equipo.id_ocs))
-    except OCSClientException as exc:
-        logger.warning("No se pudo obtener software OCS para %s: %s", activo.serial, exc)
-        return []
-    except Exception as exc:
-        logger.warning("Error snapshot OCS para %s: %s", activo.serial, exc)
-        return []
+    return detalle_snapshot_software_ocs(activo)["software"]
 
 
 def _acciones_marcadas(orden):

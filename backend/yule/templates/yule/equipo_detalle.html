@@ -161,13 +161,21 @@
                         <div class="alert alert-success mb-0">
                             <strong><i class="bi bi-check-circle me-2"></i>Vinculado</strong><br>
                             Serial: <a href="/admin/inventario/activo/{{ equipo.activo_local.id }}/change/">{{ equipo.activo_local.serial }}</a>
-                            <form method="post" action="{% url 'yule:desvincular_activo' equipo.pk %}" class="mt-2 mb-0">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-warning"
-                                        onclick="return confirm('¿Desvincular {{ equipo.nombre_host }} de este activo? Volverá a la lista de equipos sin match y su software dejará de aparecer en la hoja de vida.')">
-                                    <i class="bi bi-unlink me-1"></i>Desvincular
-                                </button>
-                            </form>
+                            <div class="d-flex gap-2 mt-2 mb-0 flex-wrap">
+                                <a href="{% url 'inventario:software' equipo.activo_local.id %}" class="btn btn-sm btn-outline-success">
+                                    <i class="bi bi-collection me-1"></i>Software instalado
+                                </a>
+                                <a href="{% url 'inventario:detalle' equipo.activo_local.id %}" class="btn btn-sm btn-outline-success">
+                                    <i class="bi bi-box-seam me-1"></i>Ver activo
+                                </a>
+                                <form method="post" action="{% url 'yule:desvincular_activo' equipo.pk %}" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-warning"
+                                            onclick="return confirm('¿Desvincular {{ equipo.nombre_host }} de este activo? Volverá a la lista de equipos sin match y su software dejará de aparecer en la hoja de vida.')">
+                                        <i class="bi bi-unlink me-1"></i>Desvincular
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     {% else %}
                         <div class="alert alert-warning mb-3">

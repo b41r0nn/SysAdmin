@@ -7,8 +7,10 @@ app_name = "inventario"
 urlpatterns = [
     # ── Activos CRUD ──────────────────────────────────────────────────────────
     path("", views.lista_activos, name="lista"),
+    path("software/", views.software_global, name="software_global"),
     path("nuevo/", views.crear_activo, name="crear"),
     path("<int:pk>/", views.detalle_activo, name="detalle"),
+    path("<int:pk>/software/", views.software_activo, name="software"),
     path("<int:pk>/editar/", views.editar_activo, name="editar"),
     path("<int:pk>/baja/", views.toggle_baja_activo, name="baja"),
 

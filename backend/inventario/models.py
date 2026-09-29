@@ -170,6 +170,51 @@ class Activo(models.Model):
         return timezone.now().date() <= venc
 
 
+class SoftwareInstalado(models.Model):
+    """Historial del software que OCS reportó en un activo.
+
+    Una fila por (activo, nombre, versión). `presente=False` marca que el
+    programa ya no aparece en el reporte, pero la fila se conserva para no
+    perder cuándo se detectó el cambio.
+    """
+
+    activo = models.ForeignKey(
+        Activo,
+        on_delete=models.CASCADE,
+        related_name="software_instalado",
+        verbose_name="Activo",
+    )
+    nombre = models.CharField(max_length=255, db_index=True)
+    version = models.CharField(max_length=255, blank=True, default="")
+    fabricante = models.CharField(max_length=255, blank=True, default="")
+    fecha_instalacion = models.DateTimeField(
+        default=timezone.now, verbose_name="Detectado por primera vez"
+    )
+    fecha_ultima_vista = models.DateTimeField(
+        default=timezone.now, verbose_name="Visto por última vez"
+    )
+    fecha_retiro = models.DateTimeField(
+        null=True, blank=True, verbose_name="Dejó de reportarse"
+    )
+    presente = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre", "version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["activo", "nombre", "version"],
+                name="uniq_software_por_activo_nombre_version",
+            )
+        ]
+        indexes = [models.Index(fields=["nombre", "presente"])]
+        verbose_name = "Software instalado"
+        verbose_name_plural = "Software instalado"
+
+    def __str__(self):
+        v = f" {self.version}" if self.version else ""
+        return f"{self.nombre}{v} en {self.activo.serial}"
+
+
 class Asignacion(models.Model):
     activo = models.ForeignKey(
         Activo, on_delete=models.PROTECT, related_name="asignaciones"
