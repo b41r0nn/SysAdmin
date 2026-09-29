@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -253,6 +255,87 @@ class YuleSyncTests(TestCase):
 
         self.assertEqual(log.estado, "parcial")
         self.assertIn("No se sincronizó", msg)
+
+    @override_settings(OCS_BASE_URL="", OCS_USER="", OCS_TOKEN="")
+    def test_sync_de_equipos_tambien_lee_el_software_de_los_nuevos(self):
+        # Un equipo recién vinculado no tiene software guardado: sin este paso
+        # el activo aparecería vacío hasta que alguien apriete "Leer de OCS".
+        from inventario.models import SoftwareInstalado
+        from inventario.tests import crear_activo
+
+        activo = crear_activo("SN-YULE-SW-1", nombre_equipo="W11SYNC1")
+        equipo = _equipo(id_ocs="77", nombre_host="W11SYNC1")
+        equipo.activo_local = activo
+        equipo.save()
+
+        with patch("yule.sync.build_client") as bc, \
+             patch("mantenimiento.services.build_client") as bsw:
+            bc.return_value.is_configured.return_value = True
+            bc.return_value.get_computers.return_value = [{
+                "id": "77", "name": "W11SYNC1",
+                "hardware": {"SSN": "X1", "OSNAME": "Windows", "LASTCOME": "2026-09-29 10:00:00"},
+            }]
+            bsw.return_value.is_configured.return_value = True
+            bsw.return_value.get_software.return_value = [
+                {"name": "7-Zip", "version": "23.01", "publisher": "Igor Pavlov"},
+            ]
+            log, _ = sincronizar_equipos_ocs(force=True)
+
+        self.assertEqual(log.estado, "exitosa")
+        self.assertTrue(SoftwareInstalado.objects.filter(activo=activo, nombre="7-Zip").exists())
+
+    @override_settings(OCS_BASE_URL="", OCS_USER="", OCS_TOKEN="")
+    def test_sync_de_equipos_no_vuelve_a_leer_el_software_ya_conocido(self):
+        # Con la flota completa, releer todo en cada sync de equipos serían N
+        # requests extra. Ese trabajo lo hace `sincronizar_software` aparte.
+        from inventario.models import SoftwareInstalado
+        from inventario.tests import crear_activo
+
+        activo = crear_activo("SN-YULE-SW-2", nombre_equipo="W11SYNC2")
+        equipo = _equipo(id_ocs="78", nombre_host="W11SYNC2")
+        equipo.activo_local = activo
+        equipo.save()
+        SoftwareInstalado.objects.create(
+            activo=activo, nombre="7-Zip", version="23.01", fabricante="Igor Pavlov"
+        )
+
+        with patch("yule.sync.build_client") as bc, \
+             patch("mantenimiento.services.build_client") as bsw:
+            bc.return_value.is_configured.return_value = True
+            bc.return_value.get_computers.return_value = [{
+                "id": "78", "name": "W11SYNC2",
+                "hardware": {"SSN": "X2", "OSNAME": "Windows", "LASTCOME": "2026-09-29 10:00:00"},
+            }]
+            bsw.return_value.is_configured.return_value = True
+            log, _ = sincronizar_equipos_ocs(force=True)
+
+        self.assertEqual(log.estado, "exitosa")
+        bsw.return_value.get_software.assert_not_called()
+
+    @override_settings(OCS_BASE_URL="", OCS_USER="", OCS_TOKEN="")
+    def test_fallo_de_software_no_rompe_el_sync_de_equipos(self):
+        # El hardware ya quedó guardado. Perder una vuelta de software es
+        # preferible a perder la vinculación de los equipos.
+        from inventario.tests import crear_activo
+
+        activo = crear_activo("SN-YULE-SW-3", nombre_equipo="W11SYNC3")
+        equipo = _equipo(id_ocs="79", nombre_host="W11SYNC3")
+        equipo.activo_local = activo
+        equipo.save()
+
+        with patch("yule.sync.build_client") as bc, \
+             patch("inventario.sync_software.sincronizar_software") as ssw:
+            bc.return_value.is_configured.return_value = True
+            bc.return_value.get_computers.return_value = [{
+                "id": "79", "name": "W11SYNC3",
+                "hardware": {"SSN": "X3", "OSNAME": "Windows", "LASTCOME": "2026-09-29 10:00:00"},
+            }]
+            ssw.side_effect = RuntimeError("OCS cayo")
+            log, msg = sincronizar_equipos_ocs(force=True)
+
+        self.assertEqual(log.estado, "exitosa")
+        self.assertIn("exitosa", msg)
+        self.assertTrue(EquipoOCS.objects.filter(id_ocs="79").exists())
 
 
 class _FakeResponse:

@@ -1,10 +1,9 @@
-"""
-Servicio de sincronización entre OCS e Inventario local.
-"""
+"""Sincroniza los equipos de Yule con OCS."""
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -240,6 +239,41 @@ def _extract_equipo_data(ocs_computer: Dict) -> Dict:
     }
 
 
+def _sincronizar_software_tras_equipos(usuario=None) -> None:
+    """Lee el software de los activos recién vinculados, best-effort.
+
+    Va detrás del sync de equipos y no dentro de su transacción: si OCS se cae
+    a mitad, el inventario de hardware ya quedó guardado y este paso solo
+    agrega filas de software. Perder el software de una vuelta es preferible a
+    perder la vinculación de los equipos.
+
+    Solo corre para los equipos que OCS acaba de reportar. Los que ya estaban
+    conocidos no se vuelven a leer acá: con la flota completa son N requests
+    extra en cada vuelta, que es lo que `sincronizar_software` hace aparte y
+    con su propio horario.
+    """
+    from inventario.sync_software import sincronizar_software
+
+    # Un equipo necesita software si su activo no tiene ninguna fila guardada
+    # todavía. El related_name evita importar el modelo.
+    activos = list(
+        EquipoOCS.objects.exclude(activo_local__isnull=True)
+        .exclude(activo_local__estado="dado_de_baja")
+        .exclude(activo_local__software_instalado__isnull=False)
+        .select_related("activo_local")
+        .distinct()
+    )
+    if not activos:
+        return
+
+    try:
+        resumen = sincronizar_software([e.activo_local for e in activos])
+    except Exception:
+        logger.warning("No se pudo leer el software tras el sync de equipos", exc_info=True)
+        return
+    logger.info("Software tras sync de equipos: %s activos leídos", resumen["leidos"])
+
+
 def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[SincronizacionLog, str]:
     """
     Sincroniza equipos desde OCS con BD local.
@@ -343,12 +377,17 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
         if config:
             config.ultima_sincronizacion = fecha_inicio
             config.save()
-        
+
+        # Los equipos ya quedaron guardados; ahora el software de los que
+        # todavía no tienen nada. Va después de guardar el log para que un fallo
+        # acá no rompa el estado de la sincronización de hardware.
         fecha_fin = timezone.now()
         log.fecha_fin = fecha_fin
         log.duracion_segundos = int((fecha_fin - fecha_inicio).total_seconds())
         log.save()
-        
+
+        _sincronizar_software_tras_equipos(usuario=usuario)
+
         mensaje = (
             f"Sincronización exitosa: "
             f"{len(equipos_ocs)} detectados, "
