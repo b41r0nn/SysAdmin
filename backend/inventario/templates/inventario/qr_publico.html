@@ -23,6 +23,10 @@
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html, body {
+      min-height: 100%;
+    }
+
     body {
       font-family: 'Sora', sans-serif;
       min-height: 100vh;
@@ -31,78 +35,112 @@
       justify-content: center;
       padding: 1.5rem;
       background:
-        radial-gradient(circle at 10% 20%, rgba(1, 86, 166, 0.08) 0%, transparent 25%),
-        radial-gradient(circle at 90% 80%, rgba(241, 128, 32, 0.10) 0%, transparent 25%),
-        linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f1f5f9 100%);
+        radial-gradient(circle at 15% 25%, rgba(1, 86, 166, 0.18) 0%, transparent 35%),
+        radial-gradient(circle at 85% 15%, rgba(241, 128, 32, 0.16) 0%, transparent 32%),
+        radial-gradient(circle at 50% 85%, rgba(1, 86, 166, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 10% 90%, rgba(241, 128, 32, 0.10) 0%, transparent 28%),
+        linear-gradient(135deg, #e8effe 0%, #f0f7ff 30%, #fff7ed 70%, #f1f5f9 100%);
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Formas decorativas de fondo */
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(60px);
+      opacity: 0.35;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    body::before {
+      width: 500px;
+      height: 500px;
+      background: linear-gradient(135deg, #0156A6, #38bdf8);
+      top: -120px;
+      right: -120px;
+    }
+
+    body::after {
+      width: 420px;
+      height: 420px;
+      background: linear-gradient(135deg, #F18020, #fbbf24);
+      bottom: -100px;
+      left: -100px;
     }
 
     .card {
+      position: relative;
+      z-index: 1;
       width: 100%;
-      max-width: 460px;
-      background: var(--sa-card-bg);
-      border-radius: 20px;
+      max-width: 480px;
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: 24px;
       box-shadow:
         0 1px 2px rgba(15, 23, 42, 0.04),
-        0 10px 40px rgba(1, 86, 166, 0.12);
+        0 20px 60px rgba(1, 86, 166, 0.18);
       overflow: hidden;
-      border: 1px solid var(--sa-border);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(8px);
     }
 
     .card-header {
-      background: linear-gradient(135deg, var(--sa-primary-dark) 0%, var(--sa-primary) 100%);
-      padding: 1.5rem 1.75rem;
+      background: #fff;
+      padding: 1.25rem 1.75rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
-      position: relative;
-    }
-
-    .card-header::after {
-      content: "";
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: linear-gradient(90deg, var(--sa-accent), #fbbf24);
+      border-bottom: 1px solid var(--sa-border);
     }
 
     .logo {
-      height: 44px;
+      height: 64px;
       width: auto;
-      filter: brightness(0) invert(1);
+      object-fit: contain;
+      display: block;
     }
 
     .badge {
-      background: rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(4px);
+      background: linear-gradient(135deg, var(--sa-primary), var(--sa-primary-dark));
       color: #fff;
       font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      padding: 0.4rem 0.75rem;
+      padding: 0.5rem 1rem;
       border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 4px 12px rgba(1, 86, 166, 0.25);
       white-space: nowrap;
     }
 
     .card-body {
-      padding: 1.75rem;
+      padding: 2rem 1.75rem;
       display: flex;
-      gap: 1.5rem;
+      gap: 1.75rem;
       align-items: center;
     }
 
-    .qr-wrap {
+    .qr-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
       flex-shrink: 0;
-      width: 150px;
-      height: 150px;
+    }
+
+    .qr-wrap {
+      width: 160px;
+      height: 160px;
       background: #fff;
-      border-radius: 14px;
-      padding: 10px;
-      box-shadow: 0 4px 15px rgba(15, 23, 42, 0.06);
+      border-radius: 18px;
+      padding: 12px;
+      box-shadow:
+        0 4px 6px rgba(15, 23, 42, 0.04),
+        0 10px 25px rgba(1, 86, 166, 0.10);
       border: 1px solid var(--sa-border);
       display: flex;
       align-items: center;
@@ -115,39 +153,60 @@
       object-fit: contain;
     }
 
+    .scan-hint {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--sa-text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .scan-hint::before {
+      content: "◈";
+      color: var(--sa-accent);
+    }
+
     .info {
       flex: 1 1 auto;
       min-width: 0;
     }
 
     .info-row {
-      margin-bottom: 0.9rem;
+      margin-bottom: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px dashed var(--sa-border);
     }
 
-    .info-row:last-child {
+    .info-row:last-of-type {
       margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
     }
 
     .label {
       display: block;
       font-size: 0.65rem;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       color: var(--sa-text-muted);
-      margin-bottom: 0.2rem;
+      margin-bottom: 0.25rem;
     }
 
     .value {
       color: var(--sa-text);
-      font-size: 0.95rem;
-      line-height: 1.3;
+      font-size: 1rem;
+      line-height: 1.35;
+      font-weight: 500;
     }
 
     .serial {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 700;
-      font-size: 1.15rem;
+      font-size: 1.25rem;
       color: var(--sa-primary-dark);
       letter-spacing: -0.02em;
       word-break: break-all;
@@ -157,64 +216,74 @@
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
-      background: var(--sa-primary-light);
+      background: linear-gradient(135deg, var(--sa-primary-light), #fff);
       color: var(--sa-primary-dark);
       font-weight: 700;
-      font-size: 0.9rem;
-      padding: 0.35rem 0.8rem;
-      border-radius: 8px;
-      border: 1px solid rgba(1, 86, 166, 0.12);
+      font-size: 1rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 10px;
+      border: 1px solid rgba(1, 86, 166, 0.15);
     }
 
     .card-footer {
-      background: #f8fafc;
-      border-top: 1px solid var(--sa-border);
-      padding: 1rem 1.75rem;
+      background: linear-gradient(135deg, var(--sa-primary-dark), var(--sa-primary));
+      padding: 1.1rem 1.75rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
+      color: #fff;
     }
 
     .company {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 600;
-      color: var(--sa-text);
     }
 
     .nit {
       font-size: 0.7rem;
-      color: var(--sa-text-muted);
+      opacity: 0.85;
+      margin-top: 0.15rem;
     }
 
     .powered {
       font-size: 0.65rem;
-      color: var(--sa-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.08em;
+      opacity: 0.9;
+      text-align: right;
     }
 
     .powered strong {
-      color: var(--sa-primary);
+      color: #fbbf24;
     }
 
     @media (max-width: 480px) {
       .card-body {
         flex-direction: column;
         text-align: center;
+        padding: 1.75rem 1.25rem;
       }
       .qr-wrap {
-        width: 170px;
-        height: 170px;
+        width: 180px;
+        height: 180px;
       }
       .card-header {
         flex-direction: column;
         text-align: center;
         gap: 0.75rem;
+        padding: 1.25rem;
       }
       .logo {
-        height: 38px;
+        height: 54px;
+      }
+      .card-footer {
+        flex-direction: column;
+        text-align: center;
+      }
+      .powered {
+        text-align: center;
       }
     }
   </style>
@@ -227,8 +296,11 @@
     </div>
 
     <div class="card-body">
-      <div class="qr-wrap">
-        <img src="{{ qr_data_uri }}" alt="Código QR del activo">
+      <div class="qr-column">
+        <div class="qr-wrap">
+          <img src="{{ qr_data_uri }}" alt="Código QR del activo">
+        </div>
+        <span class="scan-hint">Escanea para ver ficha</span>
       </div>
 
       <div class="info">

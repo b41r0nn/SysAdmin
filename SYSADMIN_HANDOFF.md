@@ -184,31 +184,31 @@ Detalle completo en `OCS_INVENTORY_SETUP.md` (reescrito) y `AGENT_RUNBOOK.md`.
 
 ## ESTADO ACTUAL (2026-06-05)
 
-| Etapa | Módulo | Estado |
-|-------|--------|--------|
-| 0 | Fundación Docker+Django+Nginx | ✅ COMPLETA |
-| 1 | accounts — Login/auth/sesión | ✅ COMPLETA |
-| 2 | usuarios — BD personas | ✅ COMPLETA |
-| 3 | inventario — Activos | ✅ COMPLETA · import masiva + plantillas v1.1.0+ · etiquetas QR (Fase 2) · software por activo + vista global (Fase 7B-bis) |
-| 4 | reports — Reportes | ✅ COMPLETA · export configurables Excel/PDF post-v1.1.0 |
-| 5 | mantenimiento — Órdenes | ✅ COMPLETA |
-| 6 | passwords — Vault | ✅ COMPLETA |
-| 7B | yule — Sincronización OCS | ✅ COMPLETA |
-| 8 | documentos — Repositorio documental | ✅ COMPLETA v1.1.0 |
-| Fase 1 | administracion — Roles + permisos + auditoría | ✅ COMPLETA 2026-09-10 |
-| Fase 2 | inventario — Etiquetas QR | ✅ COMPLETA 2026-09-10 |
-| Fase 3 | notificaciones + checklist + criticidad + calendario + reportar | ✅ COMPLETA 2026-09-10 |
-| Fase 4 EXTRA | Tests de cobertura (todas las apps) | ✅ COMPLETA 2026-09-10 · 153 tests |
-| Fase 4 (plan) | Helpdesk / Tickets (app `soporte`) | ✅ COMPLETA 2026-09-10 · 167 tests |
-| Fase 5 | Licencias de software (app `licencias`) | ✅ COMPLETA 2026-09-10 · 186 tests |
-| Fase 6 | Préstamos de equipos (app `prestamos`) | ✅ COMPLETA 2026-09-10 · 202 tests |
-| v1.9.0 | Detector vencimiento de licencias en notificaciones | ✅ COMPLETA 2026-09-10 · `c9f18ac` |
-| v1.9.0 | Gestión de cuentas de usuario `/administracion/cuentas/` | ✅ COMPLETA 2026-09-10 · `36d58bb` |
-| — | Commits del sprint §13 (9) ejecutados | ✅ COMPLETA 2026-09-10 · `1565d08`→`5094cba` |
-| Fase 7 | Seguridad del login (django-axes) + auditoría de fallos | ✅ COMPLETA 2026-09-24 · 313 tests |
-| Fase 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA 2026-09-24 · validado en producción |
-| Fase 7B | Causa raíz "OCS no registra equipos" (URL del agente) | ✅ COMPLETA 2026-09-28 |
-| Fase 7B-bis | Inventario de software por activo + vista global + cron diario | ✅ COMPLETA 2026-09-29 · 404 tests |
+| Etapa         | Módulo                                                          | Estado                                                                                                                     |
+| ------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 0             | Fundación Docker+Django+Nginx                                   | ✅ COMPLETA                                                                                                                 |
+| 1             | accounts — Login/auth/sesión                                    | ✅ COMPLETA                                                                                                                 |
+| 2             | usuarios — BD personas                                          | ✅ COMPLETA                                                                                                                 |
+| 3             | inventario — Activos                                            | ✅ COMPLETA · import masiva + plantillas v1.1.0+ · etiquetas QR (Fase 2) · software por activo + vista global (Fase 7B-bis) |
+| 4             | reports — Reportes                                              | ✅ COMPLETA · export configurables Excel/PDF post-v1.1.0                                                                    |
+| 5             | mantenimiento — Órdenes                                         | ✅ COMPLETA                                                                                                                 |
+| 6             | passwords — Vault                                               | ✅ COMPLETA                                                                                                                 |
+| 7B            | yule — Sincronización OCS                                       | ✅ COMPLETA                                                                                                                 |
+| 8             | documentos — Repositorio documental                             | ✅ COMPLETA v1.1.0                                                                                                          |
+| Fase 1        | administracion — Roles + permisos + auditoría                   | ✅ COMPLETA 2026-09-10                                                                                                      |
+| Fase 2        | inventario — Etiquetas QR                                       | ✅ COMPLETA 2026-09-10                                                                                                      |
+| Fase 3        | notificaciones + checklist + criticidad + calendario + reportar | ✅ COMPLETA 2026-09-10                                                                                                      |
+| Fase 4 EXTRA  | Tests de cobertura (todas las apps)                             | ✅ COMPLETA 2026-09-10 · 153 tests                                                                                          |
+| Fase 4 (plan) | Helpdesk / Tickets (app `soporte`)                              | ✅ COMPLETA 2026-09-10 · 167 tests                                                                                          |
+| Fase 5        | Licencias de software (app `licencias`)                         | ✅ COMPLETA 2026-09-10 · 186 tests                                                                                          |
+| Fase 6        | Préstamos de equipos (app `prestamos`)                          | ✅ COMPLETA 2026-09-10 · 202 tests                                                                                          |
+| v1.9.0        | Detector vencimiento de licencias en notificaciones             | ✅ COMPLETA 2026-09-10 · `c9f18ac`                                                                                          |
+| v1.9.0        | Gestión de cuentas de usuario `/administracion/cuentas/`        | ✅ COMPLETA 2026-09-10 · `36d58bb`                                                                                          |
+| —             | Commits del sprint §13 (9) ejecutados                           | ✅ COMPLETA 2026-09-10 · `1565d08`→`5094cba`                                                                                |
+| Fase 7        | Seguridad del login (django-axes) + auditoría de fallos         | ✅ COMPLETA 2026-09-24 · 313 tests                                                                                          |
+| Fase 7        | HTTPS interno LAN (nginx + cert autofirmado)                    | ✅ COMPLETA 2026-09-24 · validado en producción                                                                             |
+| Fase 7B       | Causa raíz "OCS no registra equipos" (URL del agente)           | ✅ COMPLETA 2026-09-28                                                                                                      |
+| Fase 7B-bis   | Inventario de software por activo + vista global + cron diario  | ✅ COMPLETA 2026-09-29 · 404 tests                                                                                          |
 
 ---
 
@@ -423,15 +423,15 @@ python manage.py sync_ocs --user=admin
 
 #### Estadísticas Yule 7B
 
-| Métrica | Valor |
-|---------|-------|
-| Líneas de código | ~1900 |
-| Modelos Django | 3 |
-| Vistas | 7 |
-| Templates | 5 |
-| Admin classes | 3 |
-| Management commands | 1 |
-| Migrations | 1 |
+| Métrica             | Valor |
+| ------------------- | ----- |
+| Líneas de código    | ~1900 |
+| Modelos Django      | 3     |
+| Vistas              | 7     |
+| Templates           | 5     |
+| Admin classes       | 3     |
+| Management commands | 1     |
+| Migrations          | 1     |
 
 #### Configuración `.env`
 
@@ -1389,16 +1389,16 @@ docker exec -it sysadmin_django python manage.py sync_ocs --force
 
 ## ESTADO ACTUALIZADO
 
-| Etapa | Modulo | Estado |
-|-------|--------|--------|
-| 0 | Fundacion Docker+Django+Nginx | ✅ COMPLETA |
-| 1 | accounts — Login/auth/sesion | ✅ COMPLETA |
-| 2 | usuarios — BD personas | ✅ COMPLETA |
-| 3 | inventario — Activos | ✅ INTEGRADO EN REPO · pendiente deploy en servidor |
-| 4 | reports | 🟡 TABLERO BASE + EXPORTS (PDF/Excel) |
-| 5 | mantenimiento | ⏳ |
-| 6 | passwords | ⏳ |
-| 7 | yule (OCS) | ⏳ |
+| Etapa | Modulo                        | Estado                                             |
+| ----- | ----------------------------- | -------------------------------------------------- |
+| 0     | Fundacion Docker+Django+Nginx | ✅ COMPLETA                                         |
+| 1     | accounts — Login/auth/sesion  | ✅ COMPLETA                                         |
+| 2     | usuarios — BD personas        | ✅ COMPLETA                                         |
+| 3     | inventario — Activos          | ✅ INTEGRADO EN REPO · pendiente deploy en servidor |
+| 4     | reports                       | 🟡 TABLERO BASE + EXPORTS (PDF/Excel)               |
+| 5     | mantenimiento                 | ⏳                                                  |
+| 6     | passwords                     | ⏳                                                  |
+| 7     | yule (OCS)                    | ⏳                                                  |
 
 ## DETALLE ETAPA 4 (reports) — 4A
 
