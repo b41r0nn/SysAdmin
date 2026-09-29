@@ -10,7 +10,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -25,8 +25,13 @@ from .forms import (
     ActivoForm, CatalogoModeloForm, AsignacionForm,
     DevolucionForm, TrasladoForm, SubirActaForm,
 )
-from .models import Activo, Asignacion, CatalogoModelo, Movimiento, ActaAsignacion, TIPOS, ESTADOS
+from .models import (
+    Activo, Asignacion, CatalogoModelo, Movimiento, ActaAsignacion,
+    SoftwareInstalado, TIPOS, ESTADOS,
+)
 from .services import acta_pdf_bytes
+
+from .software_sync import refrescar_activo, software_guardado, ultimo_reporte
 from accounts.permisos import requiere_permiso
 
 
@@ -95,6 +100,116 @@ def detalle_activo(request, pk):
         "actas": actas,
     }
     return render(request, "inventario/detalle.html", ctx)
+
+
+# ── Software instalado (inventario de aplicaciones) ───────────────────────────
+
+@requiere_permiso("inventario", "lectura")
+def software_activo(request, pk):
+    """Listado del software instalado que se conoce de este activo.
+
+    Se lee de la base, no de OCS: la tabla se llena al sincronizar y guarda el
+    histórico, así que la página no depende de que OCS esté respondiendo y se
+    pueden cruzar los datos entre equipos. `?actualizar=1` (o el botón) fuerza
+    una lectura de OCS y escribe solo las diferencias.
+
+    El filtro es sobre la lista ya traída y no sobre SQL a propósito: son ~100
+    filas por equipo, y filtrar en la base obligaría a perder el histórico de
+    lo que dejó de estar instalado.
+    """
+    activo = get_object_or_404(Activo, pk=pk)
+    equipo = activo.equipo_ocs.first() if hasattr(activo, "equipo_ocs") else None
+    resumen = None
+    estado = "ok" if equipo else "sin_equipo"
+    detalle = ""
+
+    if request.GET.get("actualizar"):
+        info = refrescar_activo(activo)
+        estado, detalle, resumen = info["estado"], info["detalle"], info["resumen"]
+        if resumen:
+            cambios = resumen["nuevos"] + resumen["actualizados"] + resumen[
+                "desinstalados"
+            ] + resumen["reinstalados"] + resumen["coexistencia"]
+            if cambios:
+                messages.success(
+                    request, f"Inventario actualizado: {cambios} cambios guardados en la base."
+                )
+            else:
+                messages.info(request, "Inventario actualizado: no hubo cambios en OCS.")
+    elif not equipo:
+        detalle = (
+            "Este activo no está vinculado a ningún equipo de OCS, "
+            "así que no hay inventario de software para él."
+        )
+
+    filas = list(software_guardado(activo))
+    total_guardado = len(filas)
+
+    q = request.GET.get("q", "").strip()
+    if q:
+        ql = q.lower()
+        filas = [
+            f
+            for f in filas
+            if ql in f.nombre.lower()
+            or ql in f.version.lower()
+            or ql in f.fabricante.lower()
+        ]
+
+    ctx = {
+        "activo": activo,
+        "software": filas,
+        "total": len(filas),
+        "total_guardado": total_guardado,
+        "oculto": total_guardado - len(filas),
+        "estado": estado,
+        "detalle": detalle,
+        "filtro_q": q,
+        "resumen": resumen,
+        "ultima_sync": ultimo_reporte(activo),
+    }
+    return render(request, "inventario/software.html", ctx)
+
+
+#: Nombres que OCS reporta para componentes de Windows, actualizaciones y
+#: antivirus. En un equipo real son más de la mitad de las entradas y tapan
+#: los programas que la gente usa de verdad, pero no se ocultan por defecto:
+#: el listado completo es el dato, y esconder entradas "por comodidad" hizo
+#: que otros listados parecieran incompletos sin explicación.
+
+
+# ── Consulta cruzada de software ───────────────────────────────────────────────
+
+@requiere_permiso("inventario", "lectura")
+def software_global(request):
+    """Qué programas hay y en cuántos equipos está cada uno.
+
+    Es la razón de guardar el software en la base: sin histórico, "quién tiene
+    Office" o "en cuál falta el antivirus" no se pueden contestar.
+    """
+    q = request.GET.get("q", "").strip()
+    consulta = SoftwareInstalado.objects.filter(presente=True)
+    if q:
+        consulta = consulta.filter(
+            Q(nombre__icontains=q)
+            | Q(fabricante__icontains=q)
+            | Q(version__icontains=q)
+        )
+
+    # Un programa puede estar en dos versiones en el mismo equipo (runtimes de
+    # 32 y 64 bits), así que se cuenta sobre (nombre, activo) distintos.
+    programas = (
+        consulta.values("nombre")
+        .annotate(equipos=Count("activo", distinct=True))
+        .order_by("-equipos", "nombre")
+    )
+
+    ctx = {
+        "programas": list(programas[:200]),
+        "filtro_q": q,
+        "total_activos": Activo.objects.exclude(estado="dado_de_baja").count(),
+    }
+    return render(request, "inventario/software_global.html", ctx)
 
 
 # ── Crear ──────────────────────────────────────────────────────────────────────

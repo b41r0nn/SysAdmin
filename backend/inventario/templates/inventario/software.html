@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Software instalado — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Software instalado</h1>
+    <p class="page-subtitle">
+      {{ activo.marca }} {{ activo.modelo }}
+      {% if activo.equipo_ocs.first %} · <span class="font-monospace">{{ activo.equipo_ocs.first.nombre_host }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'inventario:software_global' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-diagram-3"></i> Toda la flota
+    </a>
+    <a href="{% url 'inventario:detalle' activo.pk %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Volver al activo
+    </a>
+    <a href="{% url 'mantenimiento:hoja_de_vida' activo.pk %}" class="btn btn-outline-secondary" target="_blank">
+      <i class="bi bi-file-earmark-pdf"></i> Hoja de vida
+    </a>
+  </div>
+</div>
+
+{% if estado == "ok" %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <span class="text-muted small">
+      {% if ultima_sync %}
+        Última lectura de OCS: {{ ultima_sync|timesince }} atrás.
+      {% else %}
+        Todavía no se ha leído el software de este equipo.
+      {% endif %}
+    </span>
+    <a href="?actualizar=1{% if filtro_q %}&amp;q={{ filtro_q|urlencode }}{% endif %}"
+       class="btn btn-primary btn-sm">
+      <i class="bi bi-arrow-clockwise"></i> Leer de OCS
+    </a>
+  </div>
+{% endif %}
+
+{% if estado != "ok" %}
+  <div class="alert alert-warning d-flex gap-3 align-items-start">
+    <i class="bi bi-info-circle-fill fs-4"></i>
+    <div>
+      <h6 class="alert-heading mb-1">
+        {% if estado == "sin_equipo" %}
+          Este activo no tiene inventario de software
+        {% else %}
+          No se pudo obtener el inventario de software
+        {% endif %}
+      </h6>
+      <p class="mb-0">{{ detalle }}</p>
+      {% if estado == "sin_equipo" %}
+        <a href="{% url 'yule:equipos_sin_match' %}" class="alert-link">Ver equipos sin vincular en Yule</a>
+      {% elif estado == "no_configurado" %}
+        <a href="{% url 'yule:configuracion' %}" class="alert-link">Configurar la conexión con OCS</a>
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+
+  <div class="sa-card mb-4 p-3">
+    <form class="row g-2 align-items-end" method="get">
+      <div class="col-12 col-md-6">
+        <label class="form-label">Buscar en el software instalado</label>
+        <div class="search-input-group">
+          <i class="bi bi-search"></i>
+          <input type="text" name="q" id="filtro-software" value="{{ filtro_q }}"
+                 placeholder="Nombre, versión o fabricante...">
+        </div>
+      </div>
+      <div class="col-6 col-md-2">
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-funnel"></i> Filtrar
+        </button>
+      </div>
+      <div class="col-6 col-md-2">
+        <a href="{% url 'inventario:software' activo.pk %}" class="btn btn-outline-secondary w-100">
+          <i class="bi bi-x-lg"></i> Limpiar
+        </a>
+      </div>
+    </form>
+
+    <div class="form-check mt-3 mb-0">
+      <input class="form-check-input" type="checkbox" id="ocultar-sistema">
+      <label class="form-check-label small" for="ocultar-sistema">
+        Ocultar actualizaciones y componentes de Windows
+        <span class="text-muted">(los marcamos como sistema, pero el listado completo siempre está disponible)</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-semibold mb-0">
+      <i class="bi bi-collection me-2 text-primary"></i>
+      <span id="contador">{{ total }}</span>
+      {% if total == 1 %}programa{% else %}programas{% endif %}
+      {% if oculto %}de {{ total|add:oculto }}{% endif %}
+    </h6>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="copiar-listado">
+      <i class="bi bi-clipboard"></i> Copiar listado
+    </button>
+  </div>
+
+  {% if software %}
+    <div class="sa-card">
+      <div class="table-responsive">
+        <table class="table sa-table mb-0" id="tabla-software">
+          <thead>
+            <tr>
+              <th style="width: 38%">Programa</th>
+              <th style="width: 20%">Versión</th>
+              <th style="width: 24%">Fabricante</th>
+              <th style="width: 18%">En el equipo desde</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in software %}
+              <tr data-busqueda="{{ s.nombre|lower }} {{ s.version|lower }} {{ s.fabricante|lower }}">
+                <td class="fw-semibold">{{ s.nombre }}</td>
+                <td>
+                  {% if s.version %}
+                    <span class="font-monospace small">{{ s.version }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="small text-muted">
+                  {% if s.fabricante %}{{ s.fabricante }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="small text-muted">
+                  {{ s.fecha_instalacion|date:"d/m/Y" }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="text-muted small mt-3 mb-0">
+      <i class="bi bi-info-circle"></i>
+      Inventario guardado en el servidor a partir de los reportes del agente OCS.
+      Solo se registran los cambios, así que la fecha es la de la última
+      instalación detectada.
+      {% if oculto %}
+        <br><i class="bi bi-funnel"></i> El buscador de arriba ocultó {{ oculto }} de {{ total_guardado }} programas guardados.
+      {% endif %}
+    </p>
+  {% else %}
+    <div class="sa-card p-5 text-center">
+      <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+      <p class="text-muted mb-0 mt-2">
+        {% if filtro_q %}
+          Ningún programa coincide con «{{ filtro_q }}».
+        {% else %}
+          Todavía no se ha leído el software de este equipo. Usá «Leer de OCS».
+        {% endif %}
+      </p>
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const filas = Array.from(document.querySelectorAll("#tabla-software tbody tr"));
+  const caja = document.getElementById("filtro-software");
+  const contador = document.getElementById("contador");
+  const ocultar = document.getElementById("ocultar-sistema");
+  if (!filas.length) return;
+
+  // El listado son ~100 filas por equipo, así que filtrar en el navegador es
+  // instantáneo y evita volver a pegarle a OCS en cada tecla.
+  const REGLAS_SISTEMA = [
+    "microsoft visual c++", "windows sdk", "windows software development kit",
+    "update for windows", "security update for windows", "hotfix for microsoft",
+    "antimalware service executable", "microsoft defender", "windows defender",
+    "kaspersky security center", "kaspersky update", "kaspersky anti-virus",
+    "ocsp responder", "root certificate",
+  ];
+  const esSistema = (texto) => REGLAS_SISTEMA.some((r) => texto.includes(r));
+
+  function aplicar() {
+    const texto = (caja ? caja.value : "").trim().toLowerCase();
+    const sinSistema = ocultar ? ocultar.checked : false;
+    let visibles = 0;
+    filas.forEach((fila) => {
+      const coincide = !texto || fila.dataset.busqueda.includes(texto);
+      const esSys = esSistema(fila.dataset.busqueda);
+      const visible = coincide && !(sinSistema && esSys);
+      fila.style.display = visible ? "" : "none";
+      if (visible) visibles++;
+    });
+    if (contador) contador.textContent = visibles;
+  }
+
+  if (caja) caja.addEventListener("input", aplicar);
+  if (ocultar) ocultar.addEventListener("change", aplicar);
+
+  const copiar = document.getElementById("copiar-listado");
+  if (copiar) {
+    copiar.addEventListener("click", () => {
+      const texto = filas
+        .filter((f) => f.style.display !== "none")
+        .map((f) => {
+          const c = f.children;
+          return [c[0].innerText, c[1].innerText, c[2].innerText].join("\t");
+        })
+        .join("\n");
+      navigator.clipboard.writeText(texto).then(() => {
+        const previo = copiar.innerHTML;
+        copiar.innerHTML = '<i class="bi bi-check-lg"></i> Copiado';
+        setTimeout(() => { copiar.innerHTML = previo; }, 1500);
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

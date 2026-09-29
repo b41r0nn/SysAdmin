@@ -201,6 +201,9 @@
   <a href="{% url 'mantenimiento:hoja_de_vida' activo.pk %}" class="btn btn-outline-secondary">
     <i class="bi bi-person-lines-fill"></i> Hoja de vida
   </a>
+  <a href="{% url 'inventario:software' activo.pk %}" class="btn btn-outline-secondary">
+    <i class="bi bi-collection"></i> Software instalado
+  </a>
   <form method="post" action="{% url 'inventario:baja' activo.pk %}">
     {% csrf_token %}
     <button class="btn btn-danger" type="submit"> <i class="bi bi-trash"></i> Dar de baja</button>

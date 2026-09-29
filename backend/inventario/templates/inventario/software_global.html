@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Software en toda la flota — SysAdmin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Software en toda la flota</h1>
+    <p class="page-subtitle">
+      Cada programa y en cuántos de los {{ total_activos }} activos está instalado.
+    </p>
+  </div>
+</div>
+
+<div class="sa-card mb-4 p-3">
+  <form class="row g-2 align-items-end" method="get">
+    <div class="col-12 col-md-9">
+      <label class="form-label">Buscar un programa</label>
+      <div class="search-input-group">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" id="filtro-global" value="{{ filtro_q }}"
+               placeholder="Nombre, versión o fabricante...">
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">
+          <i class="bi bi-funnel"></i> Filtrar
+        </button>
+        <a href="{% url 'inventario:software_global' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if programas %}
+  <div class="sa-card">
+    <div class="table-responsive">
+      <table class="table sa-table mb-0" id="tabla-global">
+        <thead>
+          <tr>
+            <th>Programa</th>
+            <th style="width: 20%">Equipos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in programas %}
+            <tr data-nombre="{{ p.nombre|lower }}">
+              <td class="fw-semibold">{{ p.nombre }}</td>
+              <td>
+                {% if p.equipos == total_activos %}
+                  <span class="badge text-bg-success">{{ p.equipos }}</span>
+                  <span class="text-muted small ms-1">en toda la flota</span>
+                {% elif p.equipos == 1 %}
+                  <span class="badge text-bg-secondary">{{ p.equipos }}</span>
+                {% else %}
+                  <span class="badge text-bg-primary">{{ p.equipos }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-muted small mt-3 mb-0">
+    <i class="bi bi-info-circle"></i>
+    Solo cuenta el software que ya fue leído de OCS. Un activo sin lectura
+    figura como si no tuviera el programa: se lee equipo por equipo desde su ficha.
+  </p>
+{% else %}
+  <div class="sa-card p-5 text-center">
+    <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+    <p class="text-muted mb-0 mt-2">
+      {% if filtro_q %}
+        Ningún programa coincide con «{{ filtro_q }}».
+      {% else %}
+        Todavía no hay software guardado. Abrí un activo y usá «Leer de OCS».
+      {% endif %}
+    </p>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const caja = document.getElementById("filtro-global");
+  const filas = Array.from(document.querySelectorAll("#tabla-global tbody tr"));
+  if (!caja || !filas.length) return;
+  // Filado en el navegador: son ~200 filas y evita un viaje al servidor por tecla.
+  caja.addEventListener("input", function () {
+    const texto = caja.value.trim().toLowerCase();
+    filas.forEach((fila) => {
+      fila.style.display = !texto || fila.dataset.nombre.includes(texto) ? "" : "none";
+    });
+  });
+})();
+</script>
+{% endblock %}
