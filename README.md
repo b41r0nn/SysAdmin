@@ -27,7 +27,7 @@
 
 
 
-> **Versión:** 1.10.0 · **Fecha:** 2026-09-24 · **Estado:** Etapas 0-8 + Fases 1-7 (plan completo + seguridad)  
+> **Versión:** 1.11.0 · **Fecha:** 2026-09-29 · **Estado:** Etapas 0-8 + Fases 1-7 (plan completo + seguridad)  
 > Sistema integral de gestión de inventario IT, usuarios, mantenimiento, hoja de vida por activo, sincronización con OCS Inventory NG, repositorio de documentos, roles/permisos, tickets, préstamos, detección de vencimiento de licencias y gestión de cuentas
 
 
@@ -43,6 +43,8 @@
 | 🔧 Mantenimiento               | `mantenimiento`  | ✅ Completa | 5      |
 | 🔑 Contraseñas                 | `passwords`      | ✅ Completa | 6      |
 | 🔄 Yule (OCS)                  | `yule`           | ✅ Completa | 7B     |
+| 💾 Inventario de software por activo | `inventario` | ✅ Completa | 7B-bis |
+| 📦 Vista global de software ("quién tiene qué") | `inventario` | ✅ Completa | 7B-bis |
 | 📁 Documentos                  | `documentos`     | ✅ Completa | 8      |
 | 🛡️ Administración              | `administracion` | ✅ Completa | Fase 1 |
 | 🔳 Etiquetas QR                | `inventario`     | ✅ Completa | Fase 2 |
@@ -55,6 +57,8 @@
 | 🧪 Tests de cobertura          | todas las apps   | ✅ Completa | Fase 4 |
 | 🛡️ Seguridad del login (django-axes) + auditoría de fallos | `accounts` | ✅ Completa | Fase 7 |
 | 🔒 HTTPS interno (nginx + cert autofirmado) | infraestructura | ✅ Completa | Fase 7 |
+
+**Producción** (2026-09-29): 24 activos · 1 vinculado a OCS (W11F35F) · 121 programas inventariados · 404 tests en verde. El resto de la flota se está cargando por partes; el sync de software ya corre solo a diario aunque hoy solo tenga un equipo al que leerle.
 
 ---
 
@@ -280,6 +284,26 @@ docker exec -it sysadmin_django python manage.py sync_ocs --user=admin
 # https://192.168.1.250:6060/yule/historial/
 ```
 
+### Inventario de software (OCS)
+
+```bash
+# Simular sin escribir nada (qué cambiaría)
+docker exec sysadmin_django python manage.py sincronizar_software --dry-run --verbose
+
+# Sincronizar la flota completa
+docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2
+
+# Solo un activo puntual
+docker exec sysadmin_django python manage.py sincronizar_software --activo 24 --verbose
+
+# Ver el log del cron diario
+tail -f /var/log/sysadmin-software-sync.log
+```
+
+El cron corre solo a las **03:07**. Ver `AGENT_RUNBOOK.md`.
+
+Vistas: `/inventario/<pk>/software/` (software del activo) · `/inventario/software/` (qué programas hay y en cuántos activos).
+
 ### Backups
 
 ```bash
@@ -317,8 +341,11 @@ Gestión completa de activos IT con soporte para múltiples tipos de dispositivo
 - ✅ Exportación a Excel
 - ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
 - ✅ **Plantilla Excel** con 39 columnas, 2 ejemplos (Portátil/Celular) y hoja Instrucciones
+- ✅ **Inventario de software por activo desde OCS** (programa, versión, editor, fecha de instalación, y si se sigue viendo o se retiró; se actualiza solo cada día)
 
 **Acceso:** `https://192.168.1.250:6060/inventario/`
+**Software por activo:** `https://192.168.1.250:6060/inventario/<pk>/software/`
+**Todos los equipos, quién tiene qué:** `https://192.168.1.250:6060/inventario/software/`
 
 ---
 
@@ -475,7 +502,9 @@ OCS_VERIFY_SSL=True
 
 2. **HTTPS (Fase 7)**: el acceso ahora es `https://192.168.1.250:6060` (cert autofirmado en `nginx/certs/`); `http://...:6061` redirige a HTTPS. Al desplegar, levantar con `docker compose up -d --build` y confirmar que https carga sin 500 y el redirect funciona.
 
-3. **Tests**: Suite automatizada — ✅ **313/313 OK** (Fases 1-6 + seguridad Fase 7)
+3. **Tests**: Suite automatizada — ✅ **404/404 OK** (Fases 1-7 + inventario de software 7B-bis)
+
+4. **Cron del inventario de software**: corre solo a las **03:07**. En un servidor nuevo hay que instalarlo con `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh`.
 
 ---
 
@@ -541,7 +570,19 @@ BD: PostgreSQL 15 en contenedor
 - ✅ **Headers de seguridad**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin` (verificados en runtime)
 - ✅ **Cookies de sesión**: `HttpOnly`, `SameSite=Lax`, sesión expira al cerrar navegador; tiempo de vida 8 h
 - ✅ **HTTPS interno LAN**: cert autofirmado en `nginx/certs/` (CN=192.168.1.250, 825 días); nginx con server 443 ssl + redirect 301 de HTTP; accesos `https://192.168.1.250:6060` y `http://...:6061` → https
-- ✅ Suite automatizada **313/313 OK** · `manage.py check` 0 issues · `makemigrations --check` sin cambios
+- ✅ Suite automatizada **313/313 OK al cerrar esta fase** (hoy **404/404**) · `manage.py check` 0 issues · `makemigrations --check` sin cambios
+
+### 2026-09-29 — v1.11.0 · Inventario de software por activo + vista global + cron diario
+
+- ✅ **`SoftwareInstalado`**: una fila por (activo, nombre, versión) con editor, fecha de instalación, última vez visto, fecha de retiro y si sigue presente. Lo retirado no se borra. Migración `0009_softwareinstalado`
+- ✅ **Vista por activo** `/inventario/<pk>/software/` y **vista global** `/inventario/software/` (qué programas hay y en cuántos equipos)
+- ✅ **Las vistas leen de la base**, no de OCS. Antes cada visita era un request a OCS; con 24 equipos, 24 requests por página
+- ✅ **Solo se escriben diferencias**: un reporte idéntico da 0 escrituras
+- ✅ **Las bajas solo se cuentan si el reporte llegó de verdad**: un OCS caído o un equipo no vinculado no vacían la base (si no, el lunes "reinstalaría" los 122 programas del fin de semana)
+- ✅ **Cron diario a las 03:07** (`/etc/cron.d/sysadmin-sincronizar-software`), log en `/var/log/sysadmin-software-sync.log`
+- ✅ **`sincronizar_software`**: comando CLI con `--dry-run`, `--verbose`, `--activo`, `--pausa`; errores aislados por equipo
+- ✅ Hook que lee el software de los activos recién vinculados, sin tumbar el sync de hardware si falla
+- ✅ Suite automatizada **404/404 OK**
 
 ### 2026-09-17 — v1.9.1 · Hoja de vida por activo + Reporte PDF de activos con mantenimiento
 

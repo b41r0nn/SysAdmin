@@ -1,9 +1,75 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-25 · v1.10.0 + Fase 7 (seguridad) · 313 tests OK
+> Documento actualizado: 2026-09-29 · v1.11.0 + Fase 7B-bis (inventario de software) · 404 tests OK
 
 ---
 
 ## CHANGELOG DE PRODUCCIÓN
+
+### 2026-09-29 · Inventario de software por activo + cron diario
+
+**Qué cambió.** Cada equipo tiene ahora su propia lista de software con versión,
+editor y fecha de instalación, más una vista global que responde "¿quién tiene
+este programa?". Antes solo se podía consultar OCS equipo por equipo desde la web.
+
+- **Modelo** `inventario.SoftwareInstalado`: una fila por (activo, nombre, versión)
+  con `fecha_instalacion` / `fecha_ultima_vista` / `fecha_retiro` / `presente`. Lo
+  retirado **no se borra**, para conservar cuándo se detectó el cambio.
+  Migración `0009_softwareinstalado`, aplicada con respaldo previo en
+  `/tmp/antes-software.sql`.
+- **Vistas**: `/inventario/<pk>/software/` y `/inventario/software/`.
+- **`aplicar_reporte()`** (`backend/inventario/software_sync.py`) compara por
+  conjuntos y **solo escribe diferencias**: un reporte idéntico da 0 escrituras.
+
+**Las tres decisiones que evitan datos falsos** (lo importante de esta fase):
+
+1. **Las bajas solo se calculan si el reporte llegó de verdad.** Si OCS no
+   responde o el equipo no está vinculado, no se toca una fila. Sin esta regla un
+   equipo apagado el fin de semana aparecería vacío y el lunes el sistema
+   "reinstalaría" sus 122 programas. Un reporte que llega vacío **sí** marca todo
+   como retirado, porque es información real.
+2. **`"Unavailable"` se guarda como vacío.** Es la cadena literal que OCS devuelve
+   cuando el agente no informa el campo. Si se guardara tal cual, cada vuelta
+   crearía una versión nueva y daría de baja la anterior.
+3. **Coexistencia de versiones** (runtimes de 32 y 64 bits) se distingue de un
+   reemplazo mirando si la versión anterior **sigue en el reporte**, no en la
+   base: el retiro se calcula después del alta, así que en la base las dos cosas
+   se ven iguales.
+
+**Las vistas leen de la base, no de OCS.** Antes cada visita a la ficha de
+software golpeaba OCS; con 24 equipos son 24 requests por página abierta. Ahora
+solo la base, y el botón "Leer de OCS" fuerza la lectura.
+
+**Automatización:**
+
+- `python manage.py sincronizar_software` con `--dry-run`, `--verbose`,
+  `--activo PK`, `--pausa SEG`. Los errores van aislados por equipo: un corte de
+  OCS no deja la base a medias.
+- **Cron diario a las 03:07** en `/etc/cron.d/sysadmin-sincronizar-software`,
+  log en `/var/log/sysadmin-software-sync.log`. Instalar con
+  `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh` (hace falta sudo
+  porque `docker exec` corre como root). **Arrancó 2 veces por hora (minutos 20 y
+  50) y se bajó a diario**: con 24 activos no se detectan instalaciones en
+  minutos, y cada vuelta son 24 requests a OCS. El retraso sube de 4h a hasta 24h,
+  que para inventario no importa.
+- **Hook** `_sincronizar_software_tras_equipos()` en `backend/yule/sync.py`:
+  lee el software solo de los activos que aún no tienen nada guardado, y va
+  **después** de guardar el log del sync para que un fallo ahí no tumbe el sync
+  de hardware. Releer la flota entera serían N requests extra en cada vuelta.
+
+**Estado real de los datos:** 24 activos, **1 vinculado a OCS** (W11F35F,
+`EquipoOCS pk=2`) con **121 programas**. OCS devuelve 122 registros y se guardan
+121: `Dell Optimizer 6.3.4.0` viene duplicado. El resto de la flota se está
+cargando por partes.
+
+**Tests:** 404/404, locales y en el server (313 previos + 91 nuevos).
+
+### 2026-09-28 · Causa raíz de "OCS no registra equipos"
+
+El agente OCS apuntaba a `/ocsreports` o a `/ocsapi/v1`. El receptor de
+inventarios es **`/ocsinventory`** (raíz, sin subruta). Con la URL corregida el
+agente real reporta `200` y Yule ya muestra el inventario completo. Los campos
+vacíos que se veían (serial, procesador, IP, MAC, usuario) eran bugs del parser
+de Yule, no de OCS. Detalle en la sección 0 de `INFORME_OCS_YULE_2026-09-25.md`.
 
 ### 2026-09-25 · OCS Inventory NG en producción + fix de MEDIA_ROOT
 
@@ -123,7 +189,7 @@ Detalle completo en `OCS_INVENTORY_SETUP.md` (reescrito) y `AGENT_RUNBOOK.md`.
 | 0 | Fundación Docker+Django+Nginx | ✅ COMPLETA |
 | 1 | accounts — Login/auth/sesión | ✅ COMPLETA |
 | 2 | usuarios — BD personas | ✅ COMPLETA |
-| 3 | inventario — Activos | ✅ COMPLETA · import masiva + plantillas v1.1.0+ · etiquetas QR (Fase 2) |
+| 3 | inventario — Activos | ✅ COMPLETA · import masiva + plantillas v1.1.0+ · etiquetas QR (Fase 2) · software por activo + vista global (Fase 7B-bis) |
 | 4 | reports — Reportes | ✅ COMPLETA · export configurables Excel/PDF post-v1.1.0 |
 | 5 | mantenimiento — Órdenes | ✅ COMPLETA |
 | 6 | passwords — Vault | ✅ COMPLETA |
@@ -140,32 +206,31 @@ Detalle completo en `OCS_INVENTORY_SETUP.md` (reescrito) y `AGENT_RUNBOOK.md`.
 | v1.9.0 | Gestión de cuentas de usuario `/administracion/cuentas/` | ✅ COMPLETA 2026-09-10 · `36d58bb` |
 | — | Commits del sprint §13 (9) ejecutados | ✅ COMPLETA 2026-09-10 · `1565d08`→`5094cba` |
 | Fase 7 | Seguridad del login (django-axes) + auditoría de fallos | ✅ COMPLETA 2026-09-24 · 313 tests |
-| Fase 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA 2026-09-24 · pendiente validar en Docker |
+| Fase 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA 2026-09-24 · validado en producción |
+| Fase 7B | Causa raíz "OCS no registra equipos" (URL del agente) | ✅ COMPLETA 2026-09-28 |
+| Fase 7B-bis | Inventario de software por activo + vista global + cron diario | ✅ COMPLETA 2026-09-29 · 404 tests |
 
 ---
 
 ## 🔴 TAREAS CRÍTICAS PENDIENTES
 
-1. **Deploy v1.1.0 + Fases 1-7 + v1.9.0 en servidor**
-   - Ejecutar `migrate` para aplicar migraciones pendientes de todas las etapas/fases (incluye `licencias/0002` y `notificaciones/0002` de las features de cierre)
-   - Reconstruir imagen Docker (dependencia nueva `qrcode==8.2` y `django-axes==8.3.1`)
-   - `collectstatic --noinput` y reiniciar contenedor Django
-   - Configurar `SECRET_KEY` y `PASSWORDS_ENCRYPTION_KEY` reales en `.env`
-   - Verificar módulo Administración (auditoría + configuración + **Cuentas**), sidebar por rol, etiquetas QR y detector de licencias en la campana de notificaciones
+0. **Vincular los 23 activos que no tienen OCS** — de 24 activos, solo W11F35F está vinculado a un `EquipoOCS` y es el único con software guardado. El cron diario corre bien pero le pregunta a un solo equipo. Es el pendiente que más valor aporta ahora; se resuelve desde Yule › equipos sin match. El usuario sigue cargando la flota por partes.
 
-2. **Validar HTTPS (Fase 7) en el servidor**: el acceso ahora es `https://192.168.1.250:6060` (cert autofirmado `nginx/certs/`); `http://...:6061` debe redirigir 301 a HTTPS. Confirmar con `docker compose up -d --build` que https carga sin 500 (warning del cert autofirmado es esperable en LAN). Recordar renovar el cert (~dic 2028).
+1. ~~**Deploy v1.1.0 + Fases 1-7 + v1.9.0 en servidor**~~ → **RESUELTO 2026-09-24**: los tres contenedores arriba, `sysadmin_db` y `sysadmin_django` healthy, migraciones aplicadas, `SECRET_KEY` y `PASSWORDS_ENCRYPTION_KEY` reales en `.env`, módulos verificados.
+
+2. ~~**Validar HTTPS (Fase 7) en el servidor**~~ → **RESUELTO 2026-09-24**: `https://192.168.1.250:6060` carga sin 500 y `http://...:6061` redirige 301. Recordar renovar el cert (~dic 2028).
 
 3. **Decidir manejo de `admin.py`**: la mayoría de apps registran modelos sin restricciones (borrado/CRUD completo vía /admin/). Solo `administracion` (auditoría) y `yule/SincronizacionLog` son read-only. Decidir `unregister` vs `has_delete_permission`.
 
 4. **Usuarios legados**: cuentas creadas antes de la migración de roles o vía `createsuperuser` pueden tener `rol != superadmin` con `is_staff=True` → aún entran a /admin/. Validador manual.
 
-5. **Tests automatizados activos**: 313/313 tests OK (todas las apps — Fases 1-7). Ejecutar con `manage.py test`.
+5. **Tests automatizados activos**: 404/404 tests OK (todas las apps — Fases 1-7 + 7B-bis). Ejecutar con `manage.py test`. En el server: `docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test --noinput` (sin esos overrides fallan ~225 por el redirect HTTPS).
 
 6. ~~drift de migraciones~~ → **RESUELTO 2026-09-10**: se generaron y aplicaron `yule/0002` (renombres de índices) y `administracion/0002` (choices de `modulo` con módulos nuevos). `makemigrations --check` → *No changes detected*.
 
 7. **BD local dev reconstruida el 2026-09-10**: el `db.sqlite3` previo tenía historial de migraciones inconsistente (sin `accounts_customuser` ni datos de negocio). Se reconstruyó de cero: `migrate` (42 migraciones), superuser `admin` (rol `superadmin`) y singleton `ConfiguracionSistema`. Credencial dev generada localmente, **no versionada** (no registrar en commits ni en `.env.example`).
 
-8. **Cambios de seguridad sin commitear (Fase 7)**: el endurecimiento del login (django-axes, forms, signals, headers, cookies, HTTPS) quedó en el working tree para revisión del arquitecto. Ver detalle en `docs/sesiones/SESION_2026-09-24_RESUMEN.md`.
+8. ~~**Cambios de seguridad sin commitear (Fase 7)**~~ → **RESUELTO**: commit `26d0a6d` y siguientes, ya en `origin/master`. Ver detalle en `docs/sesiones/SESION_2026-09-24_RESUMEN.md`.
 
 ---
 
@@ -443,10 +508,17 @@ SysAdmin/
 ├── .env
 ├── .gitignore
 ├── README.md                        ← DOCUMENTACIÓN CON YULE 7B
+├── AGENTS.md                        ← instrucciones para el agente (leer siempre)
+├── AGENT_RUNBOOK.md                 ← runbook operativo de producción
 ├── SYSADMIN_HANDOFF.md              ← ESTE DOCUMENTO
 ├── CHECKLIST_DEPLOY.md              ← runbook de despliegue en producción
 ├── FASES.md                         ← registro del plan por fases
+├── MANUAL_AGENTE_OCS.md             ← procedimiento de instalación del agente en clientes
+├── OCS_INVENTORY_SETUP.md           ← setup y diagnóstico de OCS
 ├── setup_server.sh
+├── deploy/                          ← artefactos de despliegue en el host
+│   ├── sysadmin-sincronizar-software.cron    ← cron diario 03:07 (se instala en /etc/cron.d/)
+│   └── instalar_cron_software.sh             ← instalador (requiere sudo)
 ├── docs/
 │   └── sesiones/                    ← bitácora histórica de sesiones (resúmenes)
 ├── nginx/
@@ -473,14 +545,24 @@ SysAdmin/
     ├── accounts/                ← ETAPA 0-1 COMPLETA · FASE 7: forms.py (login genérico) + signals.py (auditoría de fallos)
     ├── core/                    ← ETAPA 0 COMPLETA
     ├── usuarios/                ← ETAPA 2 COMPLETA
-    ├── inventario/              ← ETAPA 3 COMPLETA
+    ├── inventario/              ← ETAPA 3 COMPLETA · FASE 7B-bis: software por activo
     ├── reports/                 ← ETAPA 4 COMPLETA
     ├── mantenimiento/           ← ETAPA 5 COMPLETA
     ├── passwords/               ← ETAPA 6 COMPLETA
-    ├── yule/                    ← ETAPA 7B COMPLETA
+    ├── yule/                    ← ETAPA 7B COMPLETA · FASE 7B-bis: hook post-sync
     ├── documentos/              ← ETAPA 8 COMPLETA v1.1.0
     ├── administracion/          ← FASE 1: auditoría + configuración + roles
     └── notificaciones/          ← FASE 3: notificaciones por usuario
+
+    └── inventario/              ← FASE 7B-bis: inventario de software
+        ├── software_sync.py     ← aplicar_reporte(): compara y escribe solo diferencias
+        ├── sync_software.py     ← recorrido de la flota con errores aislados por equipo
+        ├── management/commands/
+        │   └── sincronizar_software.py   ← comando que ejecuta el cron
+        ├── migrations/0009_softwareinstalado.py
+        └── templates/inventario/
+            ├── software.html               ← software de un activo
+            └── software_global.html        ← quién tiene cada programa
 
     └── yule/                    ← ETAPA 7B COMPLETA
         ├── __init__.py
@@ -488,10 +570,10 @@ SysAdmin/
         ├── apps.py
         ├── client.py            ← Cliente OCS con retry logic
         ├── models.py            ← 3 modelos (Equipo, Log, Config)
-        ├── sync.py              ← Lógica de sincronización
+        ├── sync.py              ← Sincronización + _sincronizar_software_tras_equipos()
         ├── views.py             ← 7 vistas
         ├── urls.py              ← 6 rutas
-        ├── tests.py             ← Tests (TODO)
+        ├── tests.py             ← Tests
         ├── migrations/
         │   ├── __init__.py
         │   └── 0001_initial.py  ← Migraciones iniciales

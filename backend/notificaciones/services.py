@@ -248,7 +248,11 @@ def _get_smtp_connection():
 
 
 def _adjunto_acta(objeto_id):
-    acta = ActaAsignacion.objects.get(pk=objeto_id)
+    try:
+        acta = ActaAsignacion.objects.get(pk=objeto_id)
+    except ActaAsignacion.DoesNotExist:
+        logger.warning("Acta %s no existe; no se adjunta PDF", objeto_id)
+        return None
     pdf = acta_pdf_bytes(acta.asignacion)
     nombre = f"acta_{acta.asignacion.activo.serial}_{acta.asignacion.usuario.documento_identidad}.pdf"
     return (nombre, pdf, "application/pdf")
@@ -287,7 +291,9 @@ def procesar_cola_email():
             try:
                 adjuntos = []
                 if correo.adjunto_tipo == "acta" and correo.adjunto_objeto_id:
-                    adjuntos.append(_adjunto_acta(correo.adjunto_objeto_id))
+                    adjunto = _adjunto_acta(correo.adjunto_objeto_id)
+                    if adjunto:
+                        adjuntos.append(adjunto)
                 mensaje = EmailMessage(
                     subject=correo.asunto,
                     body=correo.cuerpo,

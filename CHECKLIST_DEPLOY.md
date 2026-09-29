@@ -74,16 +74,17 @@ Claves que lee `settings/base.py`:
 |---|---|---|
 | `SECRET_KEY` | random por arranque | sesiones, hash, cripto |
 | `PASSWORDS_ENCRYPTION_KEY` | deriva de SECRET_KEY | vault (`passwords/crypto.py`) |
+| `DJANGO_SETTINGS_MODULE` | `sysadmin.settings.local` (manage) / `sysadmin.settings.production` (wsgi) | Django |
 | `DEBUG` | `False` | `README`, templates |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Django |
 | `POSTGRES_DB/USER/PASSWORD` | — | compose + settings |
 | `DB_HOST` | `db` | settings |
 | `DB_PORT` | `5432` | settings |
-| `SECURE_SSL_REDIRECT` | `False` | HTTPS redirect Django |
-| `SESSION_COOKIE_SECURE` | `False` | cookies |
-| `CSRF_COOKIE_SECURE` | `False` | cookies |
-| `SECURE_HSTS_SECONDS` | `31536000` (o `0` si DEBUG) | HSTS |
-| `TRUSTED_ORIGINS` | lista localhost | CSRF |
+| `SECURE_SSL_REDIRECT` | `True` en producción / `False` en local | HTTPS redirect Django |
+| `SESSION_COOKIE_SECURE` | `True` en producción / `False` en local | cookies |
+| `CSRF_COOKIE_SECURE` | `True` en producción / `False` en local | cookies |
+| `SECURE_HSTS_SECONDS` | `31536000` en producción / `0` en local | HSTS |
+| `TRUSTED_ORIGINS` | lista localhost + `https://192.168.1.250:6060` en prod | CSRF |
 | `OCS_BASE_URL` | `''` | yule |
 | `OCS_USER` / `OCS_TOKEN` | `''` | yule |
 | `OCS_VERIFY_SSL` | `True` | yule |
@@ -150,9 +151,26 @@ ls -la backend/media && rm -f backend/media/PRUEBA
 - [ ] Sincronizar manual (`/yule/sincronizar/` o `docker exec sysadmin_django python manage.py sync_ocs`)
       y confirmar que `EquipoOCS` se llena y que el software snapshot llega a las hojas de vida.
 
+### Validación específica del inventario de software (Fase 7B-bis)
+
+- [ ] La migración está aplicada:
+      `docker exec sysadmin_django python manage.py showmigrations inventario` → `0009_softwareinstalado [X]`.
+- [ ] El sync simula sin escribir:
+      `docker exec sysadmin_django python manage.py sincronizar_software --dry-run --verbose` → lista los activos **sin** "cambios".
+- [ ] Sincronizar de verdad y comprobar que solo escribe diferencias:
+      `docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2` → `Total en base: N filas`.
+- [ ] Las dos páginas cargan (200): `/inventario/<pk>/software/` y `/inventario/software/`.
+- [ ] El botón "Leer de OCS" de la ficha funciona (es lo único que golpea OCS).
+- [ ] El cron quedó instalado y el log se escribe:
+      `sudo grep sincronizar /etc/cron.d/sysadmin-sincronizar-software` · `tail -20 /var/log/sysadmin-software-sync.log`.
+      Solo si se acaba de instalar: `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh`.
+- [ ] Para esperar menos a la primera vuelta, correr el comando a mano **exactamente igual que el cron** (con sudo):
+      `sudo docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2`.
+- [ ] Un OCS caído **no** debe vaciar la base: apuntar la configuración a una URL inválida, correr el comando y verificar que el conteo no cambia.
+
 ## 6. Rollback
 
-- El tag `v2.3.0-2026-09-24` (o el tag del commit desplegado) es el punto de restauración git.
+- El tag del commit desplegado (hoy `v2.4.0-2026-09-29`) es el punto de restauración git.
 - Volumen `postgres_data` contiene la BD — respaldar antes de migrar (ver `setup_server.sh` → backup a NAS).
 - Para rollback rápido:
   ```bash

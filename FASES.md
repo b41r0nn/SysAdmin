@@ -17,7 +17,9 @@
 | 5 | Licencias de software (app `licencias`) | ✅ COMPLETA | 2026-09-10 | `licencias` (19) → **186 en total** |
 | 6 | Préstamos de equipos (app `prestamos`) | ✅ COMPLETA | 2026-09-10 | `prestamos` (16) → **202 en total** |
 | 7 | Seguridad del login (django-axes) + auditoría de fallos | ✅ COMPLETA | 2026-09-24 | `accounts` (+11) → **313 en total** |
-| 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA | 2026-09-24 | pendiente validar en Docker |
+| 7 | HTTPS interno LAN (nginx + cert autofirmado) | ✅ COMPLETA | 2026-09-24 | validado en producción |
+| 7B | Causa raíz "OCS no registra equipos" (agente apuntaba a `/ocsreports` en vez de `/ocsinventory`) | ✅ COMPLETA | 2026-09-28 | — |
+| 7B-bis | Inventario de software por activo + vista global + cron diario | ✅ COMPLETA | 2026-09-29 | `inventario` (+91) → **404 en total** |
 
 ---
 
@@ -416,4 +418,52 @@ Endurecer el login siguiendo las 7 tareas indicadas por el arquitecto: rate limi
 
 - **HTTPS pendiente de validar en vivo**: requiere `docker compose up -d --build` en el servidor (Docker no corriendo en local).
 - El login de "reportar falla" abre en pestaña nueva (`accounts/templates/accounts/login.html`, commit `26d0a6d`).
-- Los cambios de seguridad quedan **sin commitear** en el working tree, para revisión del arquitecto.
+- **HTTPS validado en vivo** el 2026-09-24: los tres contenedores arriba, `sysadmin_db` y `sysadmin_django` healthy.
+- Los cambios de seguridad quedaron **sin commitear** en el working tree, para revisión del arquitecto.
+
+---
+
+## 📦 FASE 7B-bis · Inventario de software por activo (OCS) [Completada 2026-09-29]
+
+### Objetivo
+
+Saber qué software hay instalado en cada equipo, y no solo "qué hardware tiene". Antes se podía consultar OCS equipo por equipo desde la web, pero no había forma de preguntar **"¿quién tiene Office?"** ni de enterarse de que algo se desinstaló.
+
+### Alcance
+
+- Modelo `SoftwareInstalado` con una fila por (activo, nombre, versión): programa, versión, editor, fecha de instalación, última vez visto, fecha de retiro y si sigue presente. **Lo retirado no se borra**, para conservar cuándo se detectó el cambio.
+- Vista por activo (`/inventario/<pk>/software/`) y vista global (`/inventario/software/`) con el conteo de cuántos activos tienen cada programa.
+- Lectura bajo demanda (botón "Leer de OCS") y sincronización automática diaria por cron.
+- Historial de altas, bajas y reinstalaciones.
+
+### Archivos clave
+
+- `backend/inventario/models.py` (modelo `SoftwareInstalado`)
+- `backend/inventario/software_sync.py` (comparación y aplicación de diferencias)
+- `backend/inventario/sync_software.py` (recorrido de la flota con errores aislados)
+- `backend/inventario/management/commands/sincronizar_software.py` (comando CLI)
+- `backend/inventario/views.py` + `urls.py` (las dos vistas)
+- `backend/yule/sync.py` (`_sincronizar_software_tras_equipos`, hook tras vincular equipos)
+- `deploy/sysadmin-sincronizar-software.cron` + `deploy/instalar_cron_software.sh`
+
+### Migraciones
+
+- `inventario.0009_softwareinstalado` — aplicada en producción con respaldo previo en `/tmp/antes-software.sql`.
+
+### Dependencias
+
+Ninguna. Reusa el `OCSClient` y `EquipoOCS` que ya existían.
+
+### Tests
+
+- Suite completa: **404/404 tests OK** (313 previos + 91 nuevos), locales y en el server.
+- Cubren: altas, bajas, reinstalaciones, coexistencia de 32/64 bits, `"Unavailable"`, dedup, OCS caído que no toca la base, y el hook del sync de equipos.
+
+### Notas
+
+- **La base es la fuente de las vistas.** Antes cada visita golpeaba OCS; con 24 equiposEso son 24 requests por página abierta. Ahora solo la base, y el botón fuerza la lectura.
+- **Las bajas solo se calculan si el reporte llegó de verdad.** Si OCS no responde o el equipo no está vinculado, no se toca una fila: si no, un equipo apagado el fin de semana aparecería vacío y el lunes "reinstalaría" sus 122 programas. Un reporte vacío **sí** marca todo como retirado, porque es información real.
+- **`"Unavailable"` se guarda como vacío.** OCS devuelve esa cadena literal cuando el agente no informa el campo; guardarla crearía una versión nueva en cada vuelta y daría de baja la anterior.
+- **Coexistencia de versiones** (runtimes de 32 y 64 bits) se distingue de un reemplazo mirando si la versión anterior **sigue en el reporte**, no en la base: el retiro se calcula después del alta, así que en la base las dos cosas se ven iguales.
+- **Cron diario a las 03:07** (`/etc/cron.d/sysadmin-sincronizar-software`). Arrancó 2 veces por hora y se bajó a diario: con 24 activos no se detectan instalaciones en minutos, y cada vuelta son 24 requests a OCS. El retraso sube de 4h a hasta 24h, que para inventario no importa.
+- **Pendiente**: solo 1 de 24 activos tiene equipo OCS vinculado (W11F35F, 121 programas). El resto se vincula desde Yule › equipos sin match; el usuario sigue cargando la flota por partes.

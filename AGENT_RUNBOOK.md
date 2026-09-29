@@ -1,6 +1,6 @@
 # SysAdmin · Runbook operativo de producción
 
-> Estado al **2026-09-25**. Referencia compacta para el arqui/agente.
+> Estado al **2026-09-29**. Referencia compacta para el arqui/agente.
 > El histórico detallado vive en `SYSADMIN_HANDOFF.md`; OCS tiene su propio
 > doc en `OCS_INVENTORY_SETUP.md`.
 
@@ -82,9 +82,12 @@ ls -laR /opt/sysadmin/app/backend/media/documentos/
 
 Volcado `pg_dump -Fc` desde el Postgres de desarrollo → `scp` → `pg_restore
 --clean --if-exists --no-owner --no-privileges` en producción. Conteos
-verificados: **67 `usuarios_usuario`** · **23 `activos`** · **2
+verificados (2026-09-24): **67 `usuarios_usuario`** · **23 `activos`** · **2
 `documentos_documento`** · **1 `passwords_credencial`** · **1 `soporte_ticket`**.
 `manage.py migrate` → "No migrations to apply".
+
+Hoy (2026-09-29) hay **24 `activos`** (se cargó uno más), **1 vinculado a OCS**
+(W11F35F) y **121 filas de software**.
 
 Los 2 PDFs de documentos **no venían en el dump** (un `pg_dump` solo lleva la
 BD, no los archivos), pero **ya están en el server** en
@@ -150,15 +153,41 @@ se activa `USER` no-root en el `Dockerfile`, hay que `sudo chown -R 1000:1000
   fuera parcial. Casi siempre es URL sin `/v1` o contraseña vacía
   (`is_configured()` en `client.py:41`). Diagnóstico y causas en
   `OCS_INVENTORY_SETUP.md`.
-- Sin equipos inventariados todavía: `SELECT COUNT(*) FROM hardware` = 0 y la API
-  devuelve `null`. No es error; falta que un agente OCS reporte.
-  (En esta versión de OCS **no** existe la tabla `ocs_computers`; el inventario
+- Equipos inventariados: hay **1 activo vinculado** (W11F35F, `EquipoOCS pk=2`, `id_ocs=3`) de 24 activos. El resto de la flota se sigue lindo: se vincula desde Yule › equipos sin match.
+- (En esta versión de OCS **no** existe la tabla `ocs_computers`; el inventario
   vive en `hardware`, `bios`, `networks`, `software`, etc.)
-- OCS y SysAdmin comparten host: OCS quedó en `:8081` justamente para no tocar los puertos de Hikvision.
+- **El agente apunta a `/ocsinventory`** (raíz, sin subruta), no a `/ocsreports` ni a `/ocsapi/v1`. Con la URL corregida el agente real reporta `200`. Ese era el bloqueo de "OCS no registra equipos", resuelto 2026-09-28.
+
+## Sync de software por cron (2026-09-29)
+
+Corre en el host, no dentro del contenedor: Django no tiene planificador propio y no se le agregó uno.
+
+| | |
+|---|---|
+| Frecuencia | una vez al día, **03:07** |
+| Definición | `/etc/cron.d/sysadmin-sincronizar-software` (root, 644) |
+| Log | `/var/log/sysadmin-software-sync.log` (legible sin sudo) |
+| Comando | `docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2` |
+| Reinstalar | `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh` |
+| Cambiar horario | editar la última línea y `sudo systemctl reload cron` |
+| Quitar | `sudo rm /etc/cron.d/sysadmin-sincronizar-software` |
+
+Salida de una vuelta sin cambios:
+
+```
+Leyendo 1 activos de OCS...
+  W11F35F          122 programas
+1 activos leídos, 0 con cambios (+0 nuevos, -0 desinstalados, 0 reinstalados) en 0s
+Total en base: 121 filas de software.
+```
+
+- OCS devuelve **122** registros y se guardan **121**: `Dell Optimizer 6.3.4.0` viene duplicado.
+- `0 con cambios` en cada vuelta es lo esperado mientras nadie instala nada. Un número distinto del que se guardó la vez anterior sí es señal de que algo cambió.
+- El `cron` del server es del sistema; el de Hikvision vive aparte, no se pisa.
 
 ## Pendientes
 
-1. **Backup a NAS** — `/opt/sysadmin/backups/backup.sh` existe sin destino/cron configurado. Ya corregida la ruta de media (`/opt/sysadmin/app/backend/media/`) y agregado el `.env` al paquete; falta IP/usuario/ruta del NAS. Ojo: el cron actual del server pertenece al Hikvision, no pisarlo.
-2. **Agente OCS en clientes** — el `.exe` ya está publicado en `http://192.168.1.250:8081/download/OcsInventoryAgent.exe`; falta instalarlo en al menos un equipo de prueba y confirmar que reporta.
-3. **Prueba de Yule** — "Probar conexión" + "Sincronizar ahora" en `/yule/configuracion/` con la URL `http://192.168.1.250:8081/ocsapi/v1`.
-4. **Commitear** los cambios de docs, `docker-compose.yml` y `setup_server.sh` (working tree, sin commitear — regla de AGENTS.md).
+1. **Vincular los 23 activos que no tienen OCS** — el cron diario corre hasta que haya más de un equipo. Es el pendiente que más valor aporta ahora.
+2. **Backup a NAS** — `/opt/sysadmin/backups/backup.sh` existe sin destino/cron configurado. Ya corregida la ruta de media (`/opt/sysadmin/app/backend/media/`) y agregado el `.env` al paquete; falta IP/usuario/ruta del NAS. Ojo: el cron actual del server pertenece al Hikvision, no pisarlo.
+3. **Seguir cargando datos** — el usuario está preparando la flota por partes; 24 activos hoy, el resto cuando termine de probar.
+4. `OCS_OPT_LOGLEVEL` volver a `0` (está en `512`) y rotar la contraseña de la BD de OCS (sigue la de fábrica).

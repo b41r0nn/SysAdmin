@@ -185,6 +185,13 @@ está vacía.
 
 Pendientes reales: ver 0.4.
 
+> **Addendum 2026-09-29.** Lo que este informe dejó pendiente —"el software se
+> consulta a OCS cada vez que alguien abre la página y no queda guardado"— se
+> cerró al día siguiente con `inventario.SoftwareInstalado`, las dos vistas de
+> software y el cron diario a las 03:07. El equipo de prueba `W11F35F` quedó
+> vinculado al activo 24 y es el único con software guardado: de 24 activos,
+> 23 siguen sin `equipo_ocs`. Ver `FASES.md` (FASE 7B-bis).
+
 ---
 
 ## 6. Cambios aplicados (para revisión del arquitecto)

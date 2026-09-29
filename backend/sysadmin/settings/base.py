@@ -190,15 +190,6 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
 # header y con SECURE_SSL_REDIRECT=True entra en redirect loop (nunca "ve" que
 # la petición ya es HTTPS por parte del proxy).
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# nginx termina TLS y reenvía el esquema original. Sin esto, con SECURE_SSL_REDIRECT
-# activo, Django cree que toda petición es HTTP (redirección en bucle)
-# aunque llegue ya por HTTPS desde el proxy.
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# nginx termina TLS y reenvía el esquema original. Sin esto Django cree que toda
-# petición es HTTP y con SECURE_SSL_REDIRECT=True entra en loop de redirect.
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)
 CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
 
