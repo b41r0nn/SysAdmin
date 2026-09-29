@@ -15,6 +15,7 @@ from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 import openpyxl
@@ -566,10 +567,12 @@ def qr_publico(request, pk):
     """Vista pública al escanear un QR: diseño tipo etiqueta con logo."""
     activo = get_object_or_404(Activo, pk=pk)
     config = ConfiguracionSistema.get_config()
+    qr_url = _qr_url_publica(request, activo)
     return render(request, "inventario/qr_publico.html", {
         "activo": activo,
         "config": config,
-        "logo_path": LOGO_PATH,
+        "logo_url": request.build_absolute_uri(static("img/logo_redihos_full.png")),
+        "qr_data_uri": _qr_data_uri(qr_url),
     })
 
 
