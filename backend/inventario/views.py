@@ -563,9 +563,14 @@ def qr_etiquetas_masivas(request):
 
 
 def qr_publico(request, pk):
-    """Vista pública y ligera al escanear un QR: solo marca, modelo y serial."""
+    """Vista pública al escanear un QR: diseño tipo etiqueta con logo."""
     activo = get_object_or_404(Activo, pk=pk)
-    return render(request, "inventario/qr_publico.html", {"activo": activo})
+    config = ConfiguracionSistema.get_config()
+    return render(request, "inventario/qr_publico.html", {
+        "activo": activo,
+        "config": config,
+        "logo_path": LOGO_PATH,
+    })
 
 
 @requiere_permiso("inventario", "lectura")
