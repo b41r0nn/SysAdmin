@@ -1034,7 +1034,7 @@ esta es la lista a revalidar contra un payload real.
 | # | Pendiente | Detalle | Prioridad |
 |---|---|---|---|
 | 1 | Alerta de equipos que no reportan | El fallo del agente es silencioso por definición; es lo que más costó esta sesión | **Alta** |
-| 2 | Vincular el equipo de OCS con el inventario local | `W11F35F` sigue sin match: `verificar_equipos_sin_match()` lo reporta, y 0 de 24 activos tienen `equipo_ocs`. Hasta que no se vincule, el software de OCS no llega a ninguna hoja de vida | **Alta** |
+| 2 | ~~Vincular el equipo de OCS con el inventario local~~ | **RESUELTO 2026-09-29**: `W11F35F` quedó vinculado (`EquipoOCS pk=2`, `id_ocs=3`, activo 24). El software ya llega a su hoja de vida. Quedan **23 activos sin vincular** | ~~Alta~~ → Media |
 | 3 | Capturar y versionar el payload completo de OCS como fixture | El fixture actual cubre 8 secciones; el de `/computer/{id}` tiene 18. Falta un fixture completo y real | Media |
 | 4 | Validar `_red_principal()` con otro equipo | La precedencia depende del orden de `networks`, que varía por fabricante y drivers | Media |
 | 5 | Rotar contraseña de BD de OCS | Sigue la de fábrica, que es pública | Alta, seguridad |
@@ -1050,6 +1050,8 @@ esta es la lista a revalidar contra un payload real.
 |---|---|---|
 | ✔ | Desplegar el fix de `_almacenamiento_gb` | 476 → 477 en producción, `int` correcto |
 | ✔ | Confirmar `get_software(3)` contra la API en vivo | Detectó el bug de las 18 secciones; corregido a 122 |
+| ✔ | Vincular `W11F35F` (2026-09-29) | `EquipoOCS pk=2` · activo 24 · 121 programas inventariados en base |
+| ✔ | Guardar el software en base (2026-09-29) | `inventario.SoftwareInstalado` + vistas por activo y global + cron diario. Era el pendiente de la sección 5 del informe de arquitectura |
 
 ---
 

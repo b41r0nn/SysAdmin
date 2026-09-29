@@ -555,6 +555,49 @@ docker logs --tail 60 ocsinventory-server 2>&1 | grep -iE "fatal|uncaught|error|
 > (siempre vacío). Por eso el error "Web service will be unavailable" se ve al
 > arrancar el contenedor o con `apache2ctl -S`, no en `error.log`.
 
+## Lectura del software de los equipos (SysAdmin, 2026-09-29)
+
+SysAdmin guarda lo que OCS reporta de cada equipo. Esto es distinto de leerlo
+"a mano" desde la consola de OCS, y no reemplaza al agente: el agente es quien
+reporta, SysAdmin solo guarda lo que llegó.
+
+```bash
+# Simular sin escribir nada
+docker exec sysadmin_django python manage.py sincronizar_software --dry-run --verbose
+
+# Sincronizar la flota (esto es lo que hace el cron a las 03:07)
+docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2
+
+# Un activo puntual
+docker exec sysadmin_django python manage.py sincronizar_software --activo 24 --verbose
+
+# Ver el log del cron
+tail -f /var/log/sysadmin-software-sync.log
+```
+
+Páginas: `/inventario/<pk>/software/` (de un equipo) · `/inventario/software/`
+(todos los equipos, con cuántos tienen cada programa).
+
+Solo funciona en activos **vinculados** a un `EquipoOCS` (Yule › equipos sin
+match). Hoy hay 24 activos y 1 vinculado.
+
+**Diferencias con la consola de OCS que confunden:**
+
+| | Consola de OCS | SysAdmin |
+|---|---|---|
+| Cada visita pega a OCS | no importa | no, lee la base |
+| Registra bajas | no | sí, con fecha |
+| Se actualiza solo | no | sí, a diario |
+| Necesita el equipo encendido | sí (el agente acaba de reportar) | no, queda el último estado |
+
+Que el equipo esté apagado **no** significa que el software esté en cero: queda
+el último reporte que envió. Los cambios se detectan cuando el agente reporta
+de nuevo, y el agente reporta cada hora.
+
+Detalle de la lógica (qué se considera baja, por qué `"Unavailable"` no cuenta,
+cómo se distingue un reemplazo de una versión en paralelo) en `FASES.md`,
+sección FASE 7B-bis.
+
 ## Troubleshooting
 
 | Síntoma | Causa | Qué hacer |

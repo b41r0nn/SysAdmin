@@ -1,7 +1,11 @@
 # Guía de Deploy Paso a Paso — SysAdmin
 
 Despliegue en producción sobre el servidor **192.168.1.250** (Ubuntu 22.04.5 LTS).
-Fecha de referencia: 2026-09-24 · Tag: `v2.3.0-2026-09-24`
+Fecha de referencia: 2026-09-29 · Tag: `v2.4.0-2026-09-29`
+
+> **Deploy ya hecho.** El servidor está en producción con `v2.4.0-2026-09-29`.
+> Esta guía sirve para el **siguiente** deploy o para rehacer el servidor. La
+> lista corta de lo que hay que correr está en `CHECKLIST_DEPLOY.md`.
 
 > Requiere: acceso SSH `sistemas@192.168.1.250` con sudo.
 
@@ -25,7 +29,7 @@ Fecha de referencia: 2026-09-24 · Tag: `v2.3.0-2026-09-24`
 # Opción A — git clone (recomendada; trae solo lo versionado, sin .env ni certs)
 sudo git clone https://github.com/b41r0nn/SysAdmin.git /opt/sysadmin/app
 cd /opt/sysadmin/app
-sudo git checkout v2.3.0-2026-09-24
+sudo git checkout v2.4.0-2026-09-29
 
 # Opción B — rsync desde Windows (WSL2): copia el working tree local tal cual
 cd /mnt/c/Users/Sistemas/OneDrive\ -\ REPRESENTACIONES.../Vscode/SysAdmin
@@ -191,6 +195,33 @@ sudo docker logs --tail 20 sysadmin_django                                      
 - [ ] `/yule/api/test-conexion/` → `{"success": true}` (si OCS alcanzable; si no, 401/error controlado).
 - [ ] `docker exec sysadmin_django python -c "import requests; print(requests.get('http://192.168.1.250:8081/ocsapi/v1/computers', timeout=5).status_code)"` → 200/401 (no timeout).
 - [ ] Sync manual: `/yule/sincronizar/` o `docker exec sysadmin_django python manage.py sync_ocs`.
+- [ ] Inventario de software: `sincronizar_software --dry-run --verbose` lista activos sin escribir, y las páginas `/inventario/<pk>/software/` y `/inventario/software/` cargan 200.
+
+---
+
+## 7b. Cron del inventario de software
+
+El cron no está en el repo como servicio: se instala en el host. Hay que
+instalarlo **una vez por servidor**, con sudo (porque `docker exec` corre como
+root).
+
+```bash
+sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh
+sudo grep sincronizar /etc/cron.d/sysadmin-sincronizar-software
+```
+
+Espera `7 3 * * *` (una vez al día a las 03:07). Log en
+`/var/log/sysadmin-software-sync.log`, legible sin sudo.
+
+Para no esperar a la primera vuelta, correr el mismo comando a mano:
+
+```bash
+sudo docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2
+tail -20 /var/log/sysadmin-software-sync.log
+```
+
+Si se edita la frecuencia: cambiar la última línea del `.cron` y
+`sudo systemctl reload cron`.
 
 ---
 

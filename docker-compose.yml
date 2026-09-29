@@ -28,6 +28,8 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=sysadmin.settings.production
     volumes:
       - ./backend:/app
       - static_volume:/app/staticfiles

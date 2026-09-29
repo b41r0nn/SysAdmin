@@ -10,7 +10,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -39,7 +39,7 @@ from accounts.permisos import requiere_permiso
 
 @requiere_permiso("inventario", "lectura")
 def lista_activos(request):
-    qs = Activo.objects.all()
+    qs = Activo.objects.select_related("catalogo")
 
     tipo = request.GET.get("tipo", "")
     estado = request.GET.get("estado", "")
@@ -58,12 +58,12 @@ def lista_activos(request):
         )
 
     from .models import ESTADOS, TIPOS
-    stats = {
-        "total": Activo.objects.count(),
-        "asignados": Activo.objects.filter(estado="asignado").count(),
-        "disponibles": Activo.objects.filter(estado="disponible").count(),
-        "baja": Activo.objects.filter(estado="dado_de_baja").count(),
-    }
+    stats = Activo.objects.aggregate(
+        total=Count("pk"),
+        asignados=Count(Case(When(estado="asignado", then=Value(1)), output_field=IntegerField())),
+        disponibles=Count(Case(When(estado="disponible", then=Value(1)), output_field=IntegerField())),
+        baja=Count(Case(When(estado="dado_de_baja", then=Value(1)), output_field=IntegerField())),
+    )
 
     ctx = {
         "activos": qs,
@@ -85,13 +85,21 @@ def lista_activos(request):
 
 @requiere_permiso("inventario", "lectura")
 def detalle_activo(request, pk):
-    activo = get_object_or_404(Activo, pk=pk)
-    asignacion_activa = activo.asignaciones.filter(activa=True).first()
-    movimientos = activo.movimientos.select_related("usuario_destino").order_by("-fecha", "-fecha_creacion")
+    activo = get_object_or_404(
+        Activo.objects.select_related("catalogo").prefetch_related(
+            "asignaciones__usuario", "asignaciones__acta"
+        ),
+        pk=pk,
+    )
+    asignacion_activa = None
     actas = []
     for a in activo.asignaciones.all():
+        if a.activa and asignacion_activa is None:
+            asignacion_activa = a
         if hasattr(a, "acta"):
             actas.append(a.acta)
+
+    movimientos = activo.movimientos.select_related("usuario_destino").order_by("-fecha", "-fecha_creacion")
 
     ctx = {
         "activo": activo,
@@ -818,6 +826,44 @@ TIPOS_VALIDOS = {v.lower(): k for k, v in TIPOS}
 ESTADOS_VALIDOS = {v.lower(): k for k, v in ESTADOS}
 
 
+def _parse_valor_compra(valor):
+    """Normaliza un valor monetario colombiano a float.
+
+    Soporta:
+    - 1.200.000,50  (punto miles, coma decimal)  -> 1200000.50
+    - 1,200,000.50  (coma miles, punto decimal)  -> 1200000.50
+    - 1200000,50    (sin separador de miles)     -> 1200000.50
+    - 1200000.50    (sin separador de miles)     -> 1200000.50
+    - $ 1.200.000   (con símbolo y espacios)     -> 1200000.0
+    """
+    if valor is None:
+        return None
+    s = str(valor).strip().replace("$", "").replace(" ", "")
+    if not s:
+        return None
+
+    comas = s.count(",")
+    puntos = s.count(".")
+
+    if comas > 0:
+        # Formato colombiano: coma es decimal, puntos son miles.
+        s = s.replace(".", "").replace(",", ".")
+    elif puntos > 1:
+        # Múltiples puntos: separadores de miles.
+        s = s.replace(".", "")
+    elif puntos == 1:
+        # Un solo punto: si la parte decimal tiene 1 o 2 dígitos es decimal,
+        # si tiene 3 o más se asume separador de miles (formato colombiano).
+        entera, decimal = s.split(".")
+        if len(decimal) > 2:
+            s = s.replace(".", "")
+
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 def _normalizar_valor(label, valor):
     """Normaliza un valor según el tipo de campo."""
     if valor is None or str(valor).strip() == "":
@@ -831,12 +877,7 @@ def _normalizar_valor(label, valor):
     if campo in ("garantia_extendida", "en_garantia"):
         return valor.lower() in ("sí", "si", "yes", "true", "1")
     if campo == "valor_compra":
-        try:
-            # quita $, espacios, y separadores de miles (puntos/comas)
-            limpio = valor.replace("$", "").replace(" ", "").replace(",", "").replace(".", "")
-            return float(limpio)
-        except Exception:
-            return None
+        return _parse_valor_compra(valor)
     if campo in ("garantia_fabrica_meses", "anios_garantia_extendida"):
         try:
             return int(valor)

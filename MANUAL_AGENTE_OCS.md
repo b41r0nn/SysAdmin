@@ -3,13 +3,32 @@
 **Servidor OCS:** `http://192.168.1.250:8081`
 **Versión del agente probada:** `OCS-NG_WINDOWS_AGENT_v2.11.0.1` (Windows 11 Pro 24H2)
 **Público:** Sistemas (REDIHOS)
-**Fecha:** 2026-09-28
+**Fecha:** 2026-09-29
 
 Este manual es el procedimiento para dejar un equipo Windows reportando inventario
 a nuestro servidor OCS. Sigue los pasos en orden: el paso 1 es donde estuvo el
 error que nos costó el diagnóstico.
 
 ---
+
+## ¿Y para qué sirve el inventario que reporta?
+
+El agente no guarda nada: reporta a OCS, y SysAdmin guarda lo que OCS recibe. El
+resultado se ve en la ficha del equipo:
+
+- `https://192.168.1.250:6060/inventario/<pk>/software/` → qué programas tiene ese equipo.
+- `https://192.168.1.250:6060/inventario/software/` → qué programas hay en toda la flota
+  y en cuántos equipos está cada uno.
+
+SysAdmin actualiza solo una vez al día (03:07), así que un equipo recién
+instalado no aparece de inmediato: se ve al día siguiente, o antes con el botón
+**"Leer de OCS"** de la ficha.
+
+**Importante:** el equipo tiene que estar encendido y reportar. Si el agente está
+deshabilitado, apagado, o apunta a la URL equivocada, SysAdmin no ve nada nuevo —
+pero tampoco borra lo que ya tenía guardado. Por eso el paso 1 (la URL
+`/ocsinventory`) es el más importante de todos.
+
 
 ## 1. La regla de oro: qué URL lleva el agente
 

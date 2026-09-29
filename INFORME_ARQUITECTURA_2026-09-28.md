@@ -440,6 +440,51 @@ equipo) y que el cruce contra el inventario local encuentra el activo por serial
 
 ---
 
+## 14. Addendum 2026-09-29 · Inventario de software persistente
+
+Este informe cerró el diagnóstico de por qué OCS no reportaba. Al día siguiente
+se atacó el problema que quedó abierto en la sección 5 (**"el software salía
+vacío en todos los equipos"**): el dato llegaba bien, pero no se guardaba.
+
+**Qué se hizo.** El software pasó de "se consulta a OCS cada vez que alguien abre
+la página" a "se guarda en la base y se compara contra el reporte anterior".
+
+- `inventario.SoftwareInstalado`: una fila por (activo, nombre, versión) con
+  fecha de instalación, última vez visto, fecha de retiro y si sigue presente.
+  Migración `0009_softwareinstalado`.
+- Vistas por activo (`/inventario/<pk>/software/`) y global
+  (`/inventario/software/`), **leyendo de la base**.
+- Sincronización automática diaria por cron a las 03:07.
+
+**El cambio de fondo no es el modelo, es la regla de las bajas.** Antes solo había
+lectura bajo demanda. Al guardar diferencias aparecen las bajas, y calcularlas mal
+destruye datos:
+
+- Los faltantes **solo** se cuentan si el reporte llegó de verdad. Si OCS falla o
+  el equipo no está vinculado, no se toca una fila. Sin esto, un equipo apagado el
+  fin de semana aparecería vacío y el lunes se "reinstalarían" sus 122 programas.
+- Un reporte **vacío sí** marca todo como retirado: eso es información real.
+- `"Unavailable"` (lo que OCS devuelve cuando el agente no informa el campo) se
+  guarda como vacío. Si se guardara, cada vuelta crearía una versión nueva.
+- El retiro se calcula **después** del alta, así que en la base un reemplazo y
+  dos versiones en paralelo se ven iguales. La distinción viene de mirar si la
+  versión anterior **sigue en el reporte**, no de la base.
+
+**Verificación:** 404 tests (313 previos + 91 nuevos), locales y en producción.
+Un equipo real (W11F35F) con 121 programas inventariados, verificado contra OCS
+que devuelve 122 por el duplicado de `Dell Optimizer 6.3.4.0`.
+
+**Riesgo que queda abierto:** el cron corre contra **1 de 24 activos**, el único
+vinculado a OCS. Cuando se vinculen los demás, el volumen de requests crece de
+forma lineal y `--pausa 2` va a ser el cuello de botella. Con 24 equipos son
+48 s por vuelta; con 200 serían 7 minutos, y conviene revisar si la pausa sigue
+siendo necesaria o si conviene escalonar la ejecución.
+
+Detalle completo en `FASES.md` (FASE 7B-bis) y en el changelog de
+`SYSADMIN_HANDOFF.md`.
+
+---
+
 ## 14. Anexos — comandos de verificación
 
 Todos reproducibles. El primero es el que habría resuelto el incidente.
