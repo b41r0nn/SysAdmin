@@ -1,5 +1,6 @@
 {% load static %}
 {% load permisos_extras %}
+{% load url_helpers %}
 {% tiene_permiso 'mantenimiento' 'lectura' as puede_mantenimiento %}
 
 {% if activos %}
@@ -112,6 +113,7 @@
       </tbody>
     </table>
   </div>
+  {% include "core/partials/paginacion.html" with hx_target="#tabla-wrapper" %}
 </div>
 {% else %}
 <div class="sa-card p-5 text-center text-muted">

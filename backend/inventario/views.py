@@ -10,6 +10,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -65,8 +66,13 @@ def lista_activos(request):
         baja=Count(Case(When(estado="dado_de_baja", then=Value(1)), output_field=IntegerField())),
     )
 
+    page_number = request.GET.get("page", "1")
+    paginator = Paginator(qs.order_by("marca", "modelo", "serial"), 20)
+    page_obj = paginator.get_page(page_number)
+
     ctx = {
-        "activos": qs,
+        "activos": page_obj.object_list,
+        "page_obj": page_obj,
         "tipos": TIPOS,
         "estados": ESTADOS,
         "filtro_tipo": tipo,
@@ -499,6 +505,15 @@ def _qr_data_uri(url):
     return "data:image/png;base64," + base64.b64encode(_qr_png_bytes(url)).decode("ascii")
 
 
+def _qr_url_publica(request, activo):
+    """Construye la URL pública del QR, respetando QR_BASE_URL si está definida."""
+    path = reverse("inventario:qr_publico", args=[activo.pk])
+    base = settings.QR_BASE_URL.strip() if settings.QR_BASE_URL else ""
+    if base:
+        return f"{base.rstrip('/')}{path}"
+    return request.build_absolute_uri(path)
+
+
 def _etiqueta_context(request, activo):
     config = ConfiguracionSistema.get_config()
     return {
@@ -507,9 +522,7 @@ def _etiqueta_context(request, activo):
         "marca": activo.marca,
         "modelo": activo.modelo,
         "numero_interno": activo.numero_interno,
-        "qr": _qr_data_uri(
-            request.build_absolute_uri(reverse("inventario:detalle", args=[activo.pk]))
-        ),
+        "qr": _qr_data_uri(_qr_url_publica(request, activo)),
         "logo_path": LOGO_PATH,
         "config": config,
     }
@@ -549,12 +562,16 @@ def qr_etiquetas_masivas(request):
     return render(request, "inventario/etiquetas_seleccion.html", {"activos": activos})
 
 
+def qr_publico(request, pk):
+    """Vista pública y ligera al escanear un QR: solo marca, modelo y serial."""
+    activo = get_object_or_404(Activo, pk=pk)
+    return render(request, "inventario/qr_publico.html", {"activo": activo})
+
+
 @requiere_permiso("inventario", "lectura")
 def qr_imagen(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
-    png = _qr_png_bytes(
-        request.build_absolute_uri(reverse("inventario:detalle", args=[activo.pk]))
-    )
+    png = _qr_png_bytes(_qr_url_publica(request, activo))
     response = HttpResponse(png, content_type="image/png")
     response["Cache-Control"] = "public, max-age=86400"
     return response

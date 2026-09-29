@@ -16,6 +16,7 @@ urlpatterns = [
 
     # ── Etiquetas QR ───────────────────────────────────────────────────────────
     path("<int:pk>/qr/", views.qr_imagen, name="qr_imagen"),
+    path("<int:pk>/qr/publico/", views.qr_publico, name="qr_publico"),
     path("<int:pk>/etiqueta/", views.qr_etiqueta_pdf, name="etiqueta"),
     path("etiquetas/", views.qr_etiquetas_masivas, name="etiquetas"),
 

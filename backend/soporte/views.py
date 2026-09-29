@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -148,8 +149,13 @@ def lista_tickets(request):
         "resueltos": qs.filter(estado__in=["resuelto", "cerrado", "escalado"]).count(),
     }
 
+    page_number = request.GET.get("page", "1")
+    paginator = Paginator(qs.order_by("-fecha_creacion"), 20)
+    page_obj = paginator.get_page(page_number)
+
     context = {
-        "tickets": qs,
+        "tickets": page_obj.object_list,
+        "page_obj": page_obj,
         "filtro_estado": estado,
         "filtro_prioridad": prioridad,
         "filtro_q": q,

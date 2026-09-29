@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load url_helpers %}
 
 {% block title %}Soporte — Tickets{% endblock %}
 
@@ -168,6 +169,7 @@
       </tbody>
     </table>
   </div>
+  {% include "core/partials/paginacion.html" %}
 </div>
 {% else %}
 <div class="sa-card p-5 text-center text-muted">
