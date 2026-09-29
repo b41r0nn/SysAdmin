@@ -1,88 +1,166 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ activo.marca }} {{ activo.modelo }}</title>
+  <title>{{ activo.marca }} {{ activo.modelo }} — {{ config.nombre_empresa }}</title>
   <style>
-    * { box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      margin: 0;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background: #f1f5f9;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f3f4f6;
       padding: 1rem;
     }
-    .tarjeta {
-      background: #fff;
-      border-radius: 1rem;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-      padding: 2rem;
-      max-width: 420px;
+
+    .label {
       width: 100%;
-      text-align: center;
+      max-width: 420px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 1.25rem;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
-    .icono {
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 1rem;
-      background: #0156A6;
-      color: #fff;
-      border-radius: 50%;
+
+    .label-header {
       display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0156a6;
+      padding-bottom: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .label-logo {
+      height: 36px;
+      width: auto;
+    }
+
+    .label-brand {
+      text-align: right;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      line-height: 1.35;
+    }
+
+    .label-brand strong {
+      display: block;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+      color: #0f172a;
+      margin-top: 0.15rem;
+    }
+
+    .label-body {
+      display: flex;
+      gap: 1.25rem;
       align-items: center;
       justify-content: center;
-      font-size: 1.75rem;
-      font-weight: 700;
+      margin-bottom: 1rem;
     }
-    .marca-modelo {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 0.25rem;
-      line-height: 1.2;
+
+    .qr {
+      width: 130px;
+      height: 130px;
+      flex-shrink: 0;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 4px;
     }
-    .tipo {
-      color: #6b7280;
+
+    .qr img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .data {
       font-size: 0.95rem;
-      margin-bottom: 1.25rem;
+      line-height: 1.35;
+      flex: 1 1 auto;
+    }
+
+    .field { margin-bottom: 0.75rem; }
+    .field:last-child { margin-bottom: 0; }
+
+    .k {
+      display: block;
+      font-size: 0.7rem;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.07em;
+      color: #64748b;
+      margin-bottom: 0.15rem;
     }
+
     .serial {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 1.25rem;
-      color: #0156A6;
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #0f172a;
       word-break: break-all;
-      background: #f0f7ff;
-      padding: 0.75rem 1rem;
-      border-radius: 0.5rem;
     }
-    .serial-label {
-      font-size: 0.75rem;
-      color: #9ca3af;
-      margin-bottom: 0.35rem;
+
+    .label-footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 0.75rem;
+      text-align: center;
+      font-size: 0.8rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.08em;
+      color: #0156a6;
     }
-    .footer {
-      margin-top: 1.5rem;
-      font-size: 0.8rem;
-      color: #9ca3af;
+
+    .label-footer small {
+      display: block;
+      font-size: 0.65rem;
+      font-weight: 400;
+      color: #64748b;
+      text-transform: none;
+      letter-spacing: 0;
+      margin-top: 0.2rem;
     }
   </style>
 </head>
 <body>
-  <div class="tarjeta">
-    <div class="icono">R</div>
-    <div class="marca-modelo">{{ activo.marca }} {{ activo.modelo }}</div>
-    <div class="tipo">{{ activo.get_tipo_dispositivo_display }}</div>
-    <div class="serial-label">Serial</div>
-    <div class="serial">{{ activo.serial }}</div>
-    <div class="footer">REDIHOS S.A.S · Activo corporativo</div>
+  <div class="label">
+    <div class="label-header">
+      <img class="label-logo" src="{% if logo_path %}file://{{ logo_path }}{% else %}{% static 'img/logo_redihos_mark.png' %}{% endif %}" alt="{{ config.nombre_empresa }}">
+      <div class="label-brand">Activo fijo No.<strong>{{ activo.numero_interno|default:"—" }}</strong></div>
+    </div>
+    <div class="label-body">
+      <div class="qr">
+        <img src="{% url 'inventario:qr_imagen' activo.pk %}" alt="Código QR">
+      </div>
+      <div class="data">
+        <div class="field">
+          <span class="k">Serial</span>
+          <span class="serial">{{ activo.serial }}</span>
+        </div>
+        <div class="field">
+          <span class="k">Equipo</span>
+          {{ activo.marca }} {{ activo.modelo }}
+        </div>
+        <div class="field">
+          <span class="k">Tipo</span>
+          {{ activo.get_tipo_dispositivo_display }}
+        </div>
+      </div>
+    </div>
+    <div class="label-footer">
+      {{ config.nombre_empresa }}
+      {% if config.nit %}<small>NIT {{ config.nit }}</small>{% endif %}
+    </div>
   </div>
 </body>
 </html>
