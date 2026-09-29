@@ -1,9 +1,15 @@
-# Leer el software de los activos vinculados a OCS.
+# Leer el software de los activos vinculados a OCS, una vez al día.
 #
 # La corre el host, no el contenedor: django no tiene planificador propio y no
-# se quiere agregar uno. El agente OCS del equipo cliente reporta cada ~1 hora;
-# con este horario la base local va 4 horas por detrás de lo último que reportó
-# cada equipo, que es lo razonable para inventario.
+# se quiere agregar uno. El agente OCS del equipo cliente reporta cada ~1 hora,
+# así que con una vuelta diaria la base local puede tener hasta 24 horas de
+# retraso sobre lo último que reportó cada equipo. Para inventario alcanza:
+# lo que interesa es qué hay instalado, no el minuto exacto.
+#
+# Se agenda a las 03:07 y no a las 03:00 por dos razones: a la hora en punto
+# medio mundo se disparan los crones juntos, y de madrugada casi todos los
+# equipos están apagados, así que se leería el estado de ayer. A esa hora el
+# reporte que trae el estado real es el de la tarde anterior.
 #
 # Con --pausa 2 los pedidos no salen en ráfaga: 24 requests seguidos contra un
 # servidor interno se leen como un barrido, no como el trabajo de los agentes.
@@ -15,5 +21,5 @@
 # que duren más que el cron.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-20,50 * * * * root docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2 >>/var/log/sysadmin-software-sync.log 2>&1
+7 3 * * * root docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2 >>/var/log/sysadmin-software-sync.log 2>&1
 
