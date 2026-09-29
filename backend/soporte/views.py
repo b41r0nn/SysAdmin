@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -48,6 +49,27 @@ def _notificar_ti_ticket(ticket):
         aviso_usuario(user, titulo, mensaje, link=link, objetokey=f"ticket:{ticket.pk}")
 
 
+def _cooldown_reporte_publico(request):
+    """Devuelve True si el usuario debe esperar antes de enviar otro ticket.
+
+    El límite se guarda en sesión; si no hay sesión, se permite.
+    En desarrollo/tests el cooldown es 0 por defecto.
+    """
+    segundos = getattr(settings, "SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS", 0)
+    if not segundos:
+        return False
+    if not request.session.session_key:
+        return False
+    ultimo = request.session.get("ultimo_ticket_publico")
+    if not ultimo:
+        return False
+    try:
+        ultimo_dt = timezone.datetime.fromisoformat(ultimo)
+    except (TypeError, ValueError):
+        return False
+    return (timezone.now() - ultimo_dt).total_seconds() < segundos
+
+
 def reportar_publico(request):
     """Formulario público (LAN interna, sin login) para reportar una falla."""
     if request.method == "POST":
@@ -57,6 +79,15 @@ def reportar_publico(request):
             return render(request, "soporte/reporte_publico_exito.html", {
                 "ticket": None,
             })
+
+        if _cooldown_reporte_publico(request):
+            form = TicketPublicoForm(request.POST)
+            messages.error(
+                request,
+                "Esperá un momento antes de enviar otro reporte. "
+                "Si es urgente, contactá directamente a Sistemas."
+            )
+            return render(request, "soporte/reporte_publico.html", {"form": form})
 
         form = TicketPublicoForm(request.POST)
         if form.is_valid():
@@ -71,6 +102,7 @@ def reportar_publico(request):
                 numero_serie_etiqueta=form.cleaned_data["numero_serie_etiqueta"],
             )
             _notificar_ti_ticket(ticket)
+            request.session["ultimo_ticket_publico"] = timezone.now().isoformat()
             return render(request, "soporte/reporte_publico_exito.html", {
                 "ticket": ticket,
             })

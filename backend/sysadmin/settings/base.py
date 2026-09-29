@@ -215,6 +215,11 @@ CSRF_TRUSTED_ORIGINS = (
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Cooldown entre tickets públicos (segundos). 0 = sin límite.
+SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS = int(
+    os.environ.get('SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS', '60')
+)
+
 # Logging de seguridad
 LOGGING = {
     'version': 1,
