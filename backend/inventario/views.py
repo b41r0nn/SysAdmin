@@ -563,15 +563,24 @@ def qr_etiquetas_masivas(request):
     return render(request, "inventario/etiquetas_seleccion.html", {"activos": activos})
 
 
+def _static_url_publica(base_url, path):
+    """Construye URL absoluta de un estático respetando QR_BASE_URL si existe."""
+    base = (base_url or "").strip().rstrip("/")
+    if base:
+        return f"{base}{static(path)}"
+    return static(path)
+
+
 def qr_publico(request, pk):
     """Vista pública al escanear un QR: diseño tipo etiqueta con logo."""
     activo = get_object_or_404(Activo, pk=pk)
     config = ConfiguracionSistema.get_config()
+    base = settings.QR_BASE_URL or request.build_absolute_uri("/")
     qr_url = _qr_url_publica(request, activo)
     return render(request, "inventario/qr_publico.html", {
         "activo": activo,
         "config": config,
-        "logo_url": request.build_absolute_uri(static("img/logo_redihos_full.png")),
+        "logo_url": _static_url_publica(base, "img/logo_redihos_full.png"),
         "qr_data_uri": _qr_data_uri(qr_url),
     })
 
