@@ -265,13 +265,15 @@ def _build_report_context(rango_inicio, rango_fin):
 
     garantia_vencidos, garantia_vigentes = _build_garantias()
 
+    activos_total = sum(item["total"] for item in activos_por_estado)
+
     return {
         "rango_inicio": rango_inicio,
         "rango_fin": rango_fin,
         "usuarios_activos": usuarios_activos,
         "usuarios_inactivos": usuarios_inactivos,
         "usuarios_por_area": usuarios_por_area,
-        "activos_total": Activo.objects.count(),
+        "activos_total": activos_total,
         "activos_por_estado": activos_por_estado,
         "activos_por_tipo": activos_por_tipo,
         "movimientos_total": movimientos_qs.count(),

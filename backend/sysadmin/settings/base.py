@@ -29,6 +29,10 @@ if not PASSWORDS_ENCRYPTION_KEY:
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# URL base para los códigos QR. Si no se define, se usa la URL de la petición.
+# Ejemplo: QR_BASE_URL=https://192.168.1.250:6060
+QR_BASE_URL = os.environ.get('QR_BASE_URL', '')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
