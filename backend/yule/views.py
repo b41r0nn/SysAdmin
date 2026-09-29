@@ -8,7 +8,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
 from .client import build_client
-from .forms import ConfiguracionYuleForm
+from .forms import ConfiguracionYuleForm, VincularActivoForm
 from .models import EquipoOCS, SincronizacionLog, ConfiguracionYule
 from .sync import sincronizar_equipos_ocs, verificar_equipos_sin_match, buscar_posibles_matches
 from accounts.permisos import requiere_permiso
@@ -161,28 +161,132 @@ def equipos_lista(request):
 def equipo_detalle(request, pk):
     """Detalle de un equipo OCS"""
     equipo = get_object_or_404(EquipoOCS, pk=pk)
-    
-    # Posibles matches en inventario
-    posibles_matches = buscar_posibles_matches(
-        equipo,
-        por_serial=True,
-        por_mac=True,
-        por_hostname=False,
-    )
-    
+
+    # Candidatos en el inventario, con el motivo de cada coincidencia
+    posibles_matches = buscar_posibles_matches(equipo)
+
     # Información de sincronización
     primera_sync = SincronizacionLog.objects.filter(
         equipos_nuevos__gt=0
     ).order_by("fecha_inicio").first()
-    
+
     context = {
         "equipo": equipo,
         "posibles_matches": posibles_matches,
+        "form_vincular": VincularActivoForm(equipo=equipo),
         "dias_sin_reporte": equipo.dias_sin_reporte,
         "primera_sync": primera_sync,
     }
-    
+
     return render(request, "yule/equipo_detalle.html", context)
+
+
+@requiere_permiso("inventario", "escritura")
+@require_POST
+def vincular_activo(request, pk):
+    """Vincula un equipo de OCS con un activo del inventario local.
+
+    Hasta ahora esto solo se podía hacer editando el equipo a mano en el admin de
+    Django: la pantalla de "sin match" llevaba al alta de activos y el detalle
+    mostraba candidatos que no eran accionables. El resultado era que el equipo
+    quedaba huérfano aunque el activo existiera.
+    """
+    equipo = get_object_or_404(EquipoOCS, pk=pk)
+
+    if equipo.esta_vinculado:
+        messages.error(
+            request,
+            f"{equipo.nombre_host} ya está vinculado a "
+            f"{equipo.activo_local.serial}. Desvincúlalo primero si vas a cambiarlo.",
+        )
+        return redirect("yule:equipo_detalle", pk=equipo.pk)
+
+    form = VincularActivoForm(request.POST, equipo=equipo)
+    if form.is_valid():
+        activo = form.cleaned_data["activo"]
+        equipo.activo_local = activo
+        equipo.save(update_fields=["activo_local"])
+        logger.info(
+            "Equipo OCS %s vinculado al activo %s por %s",
+            equipo.id_ocs, activo.serial, request.user.username,
+        )
+        messages.success(
+            request,
+            f"{equipo.nombre_host} vinculado a {activo.serial}. "
+            f"El software de OCS ya aparece en su hoja de vida.",
+        )
+    else:
+        messages.error(request, " ".join(form.errors.get("__all__", [])) or "No se pudo vincular.")
+
+    return redirect("yule:equipo_detalle", pk=equipo.pk)
+
+
+@requiere_permiso("inventario", "escritura")
+@require_POST
+def desvincular_activo(request, pk):
+    """Quita el vínculo entre un equipo de OCS y su activo."""
+    equipo = get_object_or_404(EquipoOCS, pk=pk)
+
+    if not equipo.esta_vinculado:
+        messages.warning(request, f"{equipo.nombre_host} no estaba vinculado a ningún activo.")
+    else:
+        serial = equipo.activo_local.serial
+        equipo.activo_local = None
+        equipo.save(update_fields=["activo_local"])
+        logger.info(
+            "Equipo OCS %s desvinculado del activo %s por %s",
+            equipo.id_ocs, serial, request.user.username,
+        )
+        messages.warning(
+            request,
+            f"{equipo.nombre_host} quedó desvinculado de {serial}. "
+            f"Vuelve a aparecer en la lista de equipos sin match.",
+        )
+
+    return redirect("yule:equipo_detalle", pk=equipo.pk)
+
+
+@requiere_permiso("inventario", "lectura")
+def api_buscar_activos(request):
+    """Autocompletado de activos para el selector de vinculación.
+
+    Devuelve JSON con los primeros 20 activos que coincidan con `q` en serial,
+    numero interno, nombre de equipo o marca/modelo. Los equipos OCS ya
+    vinculados a otro activo vienen marcados para que el selector los pueda
+    descartar en cliente.
+    """
+    from inventario.models import Activo
+
+    q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return JsonResponse({"resultados": []})
+
+    consulta = (
+        Q(serial__icontains=q)
+        | Q(nombre_equipo__icontains=q)
+        | Q(marca__icontains=q)
+        | Q(modelo__icontains=q)
+    )
+    # numero_interno es un entero: usarlo en la consulta con texto lanza un
+    # ValueError y el buscador devuelve un 500 en vez de "sin resultados".
+    if q.isdigit():
+        consulta |= Q(numero_interno=q)
+
+    activos = Activo.objects.filter(consulta).order_by("numero_interno", "serial")[:20]
+
+    resultados = [
+        {
+            "id": a.pk,
+            "serial": a.serial,
+            "nombre_equipo": a.nombre_equipo,
+            "marca": a.marca,
+            "modelo": a.modelo,
+            "numero_interno": a.numero_interno,
+            "ocupado": a.equipo_ocs.exists(),
+        }
+        for a in activos
+    ]
+    return JsonResponse({"resultados": resultados})
 
 
 @requiere_permiso("inventario", "escritura")
@@ -223,12 +327,19 @@ def historial_sincronizaciones(request):
 def equipos_sin_match(request):
     """Vista especial para equipos sin vincular a activos"""
     equipos = verificar_equipos_sin_match()
-    
+
+    # Candidatos por equipo, para poder ofrecer la vinculación sin salir de la
+    # lista. Se entrega como lista de tuplas porque una plantilla no puede indexar
+    # un dict con una clave variable.
+    matches_por_equipo = [(e, buscar_posibles_matches(e)) for e in equipos]
+
     context = {
         "equipos": equipos,
         "total": equipos.count(),
+        "matches_por_equipo": matches_por_equipo,
+        "form_vincular": VincularActivoForm(),
     }
-    
+
     return render(request, "yule/equipos_sin_match.html", context)
 
 

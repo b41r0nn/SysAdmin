@@ -1,6 +1,47 @@
 from django import forms
 
-from .models import ConfiguracionYule
+from .models import ConfiguracionYule, EquipoOCS
+
+
+class VincularActivoForm(forms.Form):
+    """Elige con qué activo del inventario se vincula un equipo de OCS.
+
+    El selector lleva buscador porque son cientos de activos y el usuario los
+    conoce por serial, no por id: un desplegable en crudo no sirve. Se ofrecen
+    ordenados por numero_interno para que el orden sea estable y predecible.
+    """
+
+    activo = forms.ModelChoiceField(
+        queryset=None,
+        required=True,
+        empty_label="Selecciona un activo…",
+        label="Activo del inventario",
+    )
+
+    def __init__(self, *args, equipo=None, **kwargs):
+        from inventario.models import Activo
+
+        super().__init__(*args, **kwargs)
+        self.equipo = equipo
+        self.fields["activo"].queryset = Activo.objects.all().order_by(
+            "numero_interno", "serial"
+        )
+
+    def clean(self):
+        limpio = super().clean()
+        equipo = self.equipo
+        activo = limpio.get("activo")
+        if equipo and activo:
+            # Un activo con dos equipos OCS obliga a snapshot_software_ocs() a
+            # elegir con `.first()`, y ese software es el que acaba en la hoja de
+            # vida. Mejor negarlo que colgarle el dato del equipo equivocado.
+            otros = activo.equipo_ocs.exclude(pk=equipo.pk)
+            if otros.exists():
+                nombres = ", ".join(str(o) for o in otros[:3])
+                raise forms.ValidationError(
+                    f"El activo {activo.serial} ya está vinculado al equipo {nombres}."
+                )
+        return limpio
 
 
 class ConfiguracionYuleForm(forms.ModelForm):

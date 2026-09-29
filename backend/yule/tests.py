@@ -649,3 +649,242 @@ class ExtractEquipoDataTests(TestCase):
         )
         self.assertEqual(filas, [])
 
+
+def _activo(**kw):
+    from inventario.models import Activo
+
+    defaults = {
+        "serial": f"SN-MATCH-{Activo.objects.count() + 1}",
+        "tipo_dispositivo": "portatil",
+        "marca": "Dell",
+        "modelo": "Latitude 3450",
+    }
+    defaults.update(kw)
+    return Activo.objects.create(**defaults)
+
+
+class YuleMatchingTests(TestCase):
+    """Cobertura de `buscar_posibles_matches`.
+
+    Los tres casos que fallaban en producción venían de la misma raíz: el
+    inventario y OCS no escriben los mismos identificadores en el mismo sitio.
+    """
+
+    def _motivos(self, equipo, activo):
+        from yule.sync import buscar_posibles_matches
+
+        for candidato, motivos in buscar_posibles_matches(equipo):
+            if candidato.pk == activo.pk:
+                return motivos
+        return []
+
+    def test_serial_identico(self):
+        eq = _equipo(serial_bios="F35F284")
+        activo = _activo(serial="F35F284")
+        self.assertIn("serial del BIOS idéntico", self._motivos(eq, activo))
+
+    def test_serial_sin_distinguir_mayusculas(self):
+        eq = _equipo(serial_bios="f35f284")
+        activo = _activo(serial="F35F284")
+        self.assertIn("serial del BIOS idéntico", self._motivos(eq, activo))
+
+    def test_mac_con_guiones_contra_ocs_con_dos_puntos(self):
+        # El inventario guarda guiones y OCS devuelve dos puntos: un icontains
+        # entre los dos formatos nunca coincidía, así que la MAC era un campo
+        # muerto para el matching.
+        eq = _equipo(mac_address="E8:CF:83:0A:8C:0E")
+        activo = _activo(mac_equipo="E8-CF-83-0A-8C-0E")
+        self.assertIn("misma MAC de red", self._motivos(eq, activo))
+
+    def test_mac_no_coincide_si_es_otra(self):
+        eq = _equipo(mac_address="E8:CF:83:0A:8C:0E")
+        activo = _activo(mac_equipo="00:11:22:33:44:55")
+        self.assertEqual(self._motivos(eq, activo), [])
+
+    def test_hostname_contra_nombre_equipo(self):
+        # Antes la búsqueda por hostname miraba `observaciones`, un campo donde
+        # nadie escribe el nombre del equipo: por eso salía vacía.
+        eq = _equipo(nombre_host="W11F35F")
+        activo = _activo(nombre_equipo="W11F35F")
+        self.assertIn("mismo nombre de equipo", self._motivos(eq, activo))
+
+    def test_hostname_guardado_en_el_serial(self):
+        # Caso real del activo 24: el hostname se había capturado en el campo del
+        # service tag en lugar del nombre de equipo.
+        eq = _equipo(nombre_host="W11F35F")
+        activo = _activo(serial="W11F35F", nombre_equipo="")
+        self.assertIn("el hostname está en el campo serial del activo", self._motivos(eq, activo))
+
+    def test_no_propone_activos_ya_ocupados_por_otro_equipo(self):
+        # Un activo con dos equipos OCS hace que snapshot_software_ocs() tenga
+        # que elegir con .first(), así que no debe ofrecerse como candidato.
+        eq = _equipo(nombre_host="W11F35F")
+        otro = _equipo(id_ocs="OTRO-1", nombre_host="otro-host")
+        activo = _activo(nombre_equipo="W11F35F")
+        otro.activo_local = activo
+        otro.save()
+        self.assertEqual(self._motivos(eq, activo), [])
+
+    def test_ordena_el_candidato_con_mas_motivos_primero(self):
+        eq = _equipo(nombre_host="W11F35F", serial_bios="F35F284")
+        debil = _activo(serial="F35F284")
+        fuerte = _activo(serial="F35F2842", nombre_equipo="W11F35F")
+        from yule.sync import buscar_posibles_matches
+
+        orden = [a.pk for a, _ in buscar_posibles_matches(eq)]
+        self.assertEqual(orden[0], fuerte.pk)
+        self.assertIn(debil.pk, orden)
+
+    def test_serial_similar_no_es_el_mismo_activo(self):
+        # F35284 y F95F284 se parecen a F35F284 pero son Latitude 3440: el
+        # parecido no debe convertirse en una propuesta de vinculación.
+        eq = _equipo(serial_bios="F35F284")
+        otro = _activo(serial="F35284", modelo="Latitude 3440")
+        self.assertEqual(self._motivos(eq, otro), [])
+
+    def test_sin_identificadores_no_revienta(self):
+        eq = _equipo(serial_bios="", mac_address="", nombre_host="")
+        from yule.sync import buscar_posibles_matches
+
+        self.assertEqual(buscar_posibles_matches(eq), [])
+
+
+class YuleVinculacionTests(TestCase):
+    """La vinculación tiene que poder hacerse desde la app, no solo en el admin."""
+
+    def setUp(self):
+        self.user = _user("superadmin")
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_vincular_activo_por_post(self):
+        eq = _equipo(nombre_host="W11F35F", serial_bios="F35F284")
+        activo = _activo(serial="F35F284")
+
+        resp = self.client.post(
+            reverse("yule:vincular_activo", args=[eq.pk]), {"activo": activo.pk}
+        )
+
+        self.assertEqual(resp.status_code, 302)
+        eq.refresh_from_db()
+        self.assertEqual(eq.activo_local_id, activo.pk)
+
+    def test_vincular_redirige_al_detalle(self):
+        eq = _equipo()
+        activo = _activo()
+        resp = self.client.post(
+            reverse("yule:vincular_activo", args=[eq.pk]), {"activo": activo.pk}
+        )
+        self.assertEqual(resp.url, reverse("yule:equipo_detalle", args=[eq.pk]))
+
+    def test_no_se_puede_vincular_dos_equipos_al_mismo_activo(self):
+        eq = _equipo(id_ocs="A-1")
+        otro = _equipo(id_ocs="B-2")
+        activo = _activo()
+        otro.activo_local = activo
+        otro.save()
+
+        resp = self.client.post(
+            reverse("yule:vincular_activo", args=[eq.pk]), {"activo": activo.pk}
+        )
+
+        eq.refresh_from_db()
+        self.assertIsNone(eq.activo_local_id)
+        textos = [str(m) for m in resp.wsgi_request._messages]
+        self.assertTrue(any("ya está vinculado" in t for t in textos), textos)
+
+    def test_revincular_requiere_desvincular_primero(self):
+        eq = _equipo(id_ocs="A-1")
+        primero = _activo(serial="SN-UNO")
+        segundo = _activo(serial="SN-DOS")
+        eq.activo_local = primero
+        eq.save()
+
+        self.client.post(
+            reverse("yule:vincular_activo", args=[eq.pk]), {"activo": segundo.pk}
+        )
+
+        eq.refresh_from_db()
+        self.assertEqual(eq.activo_local_id, primero.pk)
+
+    def test_desvincular(self):
+        eq = _equipo()
+        activo = _activo()
+        eq.activo_local = activo
+        eq.save()
+
+        resp = self.client.post(reverse("yule:desvincular_activo", args=[eq.pk]))
+
+        self.assertEqual(resp.status_code, 302)
+        eq.refresh_from_db()
+        self.assertIsNone(eq.activo_local_id)
+
+    def test_vincular_exige_post(self):
+        eq = _equipo()
+        activo = _activo()
+        resp = self.client.get(reverse("yule:vincular_activo", args=[eq.pk]))
+        self.assertEqual(resp.status_code, 405)
+        eq.refresh_from_db()
+        self.assertIsNone(eq.activo_local_id)
+
+    def test_lectura_no_puede_vincular(self):
+        self.client.force_login(_user("lectura"))
+        eq = _equipo()
+        activo = _activo()
+        resp = self.client.post(
+            reverse("yule:vincular_activo", args=[eq.pk]), {"activo": activo.pk}
+        )
+        self.assertEqual(resp.status_code, 302)
+        eq.refresh_from_db()
+        self.assertIsNone(eq.activo_local_id)
+
+    def test_api_buscar_activos(self):
+        _activo(serial="F35F284", marca="Dell", modelo="Latitude 3450")
+        resp = self.client.get(reverse("yule:api_buscar_activos"), {"q": "F35"})
+        self.assertEqual(resp.status_code, 200)
+        datos = resp.json()["resultados"]
+        self.assertEqual(len(datos), 1)
+        self.assertEqual(datos[0]["serial"], "F35F284")
+
+    def test_api_buscar_activos_con_texto_no_devuelve_500(self):
+        # numero_interno es un entero: filtrar por él con texto lanzaba ValueError.
+        _activo(serial="F35F284", marca="Dell")
+        resp = self.client.get(reverse("yule:api_buscar_activos"), {"q": "Dell"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["resultados"])
+
+    def test_api_buscar_activos_exige_dos_caracteres(self):
+        resp = self.client.get(reverse("yule:api_buscar_activos"), {"q": "F"})
+        self.assertEqual(resp.json()["resultados"], [])
+
+    def test_api_buscar_activos_marca_ocupados(self):
+        eq = _equipo()
+        activo = _activo(serial="OCUPADO-1")
+        eq.activo_local = activo
+        eq.save()
+        resp = self.client.get(reverse("yule:api_buscar_activos"), {"q": "OCUPADO"})
+        self.assertTrue(resp.json()["resultados"][0]["ocupado"])
+
+    def test_el_detalle_muestra_el_panel_de_vinculacion(self):
+        eq = _equipo(nombre_host="W11F35F", serial_bios="F35F284")
+        _activo(serial="F35F284")
+        resp = self.client.get(reverse("yule:equipo_detalle", args=[eq.pk]))
+        # reverse() resuelve a la ruta, así que en el HTML aparece "/vincular/".
+        self.assertContains(resp, reverse("yule:vincular_activo", args=[eq.pk]))
+        self.assertContains(resp, "serial del BIOS idéntico")
+
+    def test_el_detalle_no_ofrece_panel_si_ya_esta_vinculado(self):
+        eq = _equipo()
+        activo = _activo()
+        eq.activo_local = activo
+        eq.save()
+        resp = self.client.get(reverse("yule:equipo_detalle", args=[eq.pk]))
+        self.assertNotContains(resp, reverse("yule:vincular_activo", args=[eq.pk]))
+        self.assertContains(resp, reverse("yule:desvincular_activo", args=[eq.pk]))
+
+    def test_la_lista_sin_match_ofrece_la_vinculacion(self):
+        eq = _equipo(nombre_host="W11F35F", serial_bios="F35F284")
+        _activo(serial="F35F284")
+        resp = self.client.get(reverse("yule:equipos_sin_match"))
+        self.assertContains(resp, reverse("yule:vincular_activo", args=[eq.pk]))
+

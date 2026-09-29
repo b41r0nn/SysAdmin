@@ -19,11 +19,11 @@
     <div class="alert alert-warning mb-4">
         <i class="bi bi-exclamation-triangle me-2"></i>
         <strong>{{ total }} equipos</strong> detectados en OCS pero sin vincular a ningún activo en el inventario local.
-        Revisa si necesitan ser añadidos manualmente o si hay un problema de identificación.
+        Vincúlalos aquí: el software que reporta OCS pasa a alimentar la hoja de vida del activo.
     </div>
 
     <div class="row g-4">
-        {% for equipo in equipos %}
+        {% for equipo, matches in matches_por_equipo %}
         <div class="col-12 col-lg-6">
             <div class="card sa-card">
                 <div class="card-header d-flex justify-content-between align-items-start">
@@ -31,11 +31,11 @@
                         <h5 class="mb-0">{{ equipo.nombre_host }}</h5>
                         <small class="text-muted">ID: {{ equipo.id_ocs }}</small>
                     </div>
-                    <a href="{% url 'yule:equipo_detalle' equipo.id %}" class="btn btn-sm btn-outline-primary">
+                    <a href="{% url 'yule:equipo_detalle' equipo.pk %}" class="btn btn-sm btn-outline-primary">
                         Ver detalle
                     </a>
                 </div>
-                <div class="card-body">
+                <div class="card-body pb-0">
                     <dl class="row small mb-0">
                         <dt class="col-sm-5">Tipo</dt>
                         <dd class="col-sm-7">
@@ -97,6 +97,9 @@
                         </dd>
                     </dl>
                 </div>
+                <div class="card-body pt-3">
+                    {% include "yule/_vincular.html" with equipo=equipo posibles_matches=matches mostrar_buscador=False %}
+                </div>
                 <div class="card-footer bg-light">
                     <div class="row g-2">
                         <div class="col-6">
@@ -105,8 +108,8 @@
                             </a>
                         </div>
                         <div class="col-6">
-                            <a href="{% url 'yule:equipo_detalle' equipo.id %}" class="btn btn-sm btn-outline-primary w-100">
-                                <i class="bi bi-arrow-right me-1"></i>Detalles
+                            <a href="{% url 'yule:equipo_detalle' equipo.pk %}" class="btn btn-sm btn-outline-primary w-100">
+                                <i class="bi bi-search me-1"></i>Buscar otro
                             </a>
                         </div>
                     </div>
@@ -126,20 +129,19 @@
                 <div class="card-body">
                     <ol class="mb-0">
                         <li>
-                            <strong>Revisar identidad:</strong> Verifica serial, MAC o hostname del equipo.
-                            ¿Existe en el inventario local con otro serial o identificador?
+                            <strong>Si hay una coincidencia:</strong> pulsas <em>Vincular</em> y listo.
+                            Cada sugerencia dice <em>por qué</em> coincidió (serial del BIOS,
+                            MAC o nombre de equipo), para que revises antes de confirmar.
                         </li>
                         <li>
-                            <strong>Crear activo:</strong> Si el equipo no existe en el inventario, 
-                            crea un nuevo activo usando el botón "Crear activo".
+                            <strong>Si no hay ninguna:</strong> entra al detalle del equipo y usa
+                            <em>Buscar y vincular otro activo</em>, que filtra la lista mientras escribes.
                         </li>
                         <li>
-                            <strong>Vincular manualmente:</strong> Si el equipo existe pero no se detectó automáticamente,
-                            edita el equipo OCS desde el admin (Django) y asigna el activo local.
-                        </li>
-                        <li>
-                            <strong>Mejorar matching:</strong> Contacta al admin para ajustar las reglas de coincidencia
-                            por serial/MAC/hostname.
+                            <strong>Si el equipo no está en el inventario:</strong> créalo con
+                            "Crear activo" y luego vuelve al detalle para vincularlo. Usa el
+                            serial del BIOS que reporta OCS: es el único dato que coincide
+                            sin ambigüedad.
                         </li>
                     </ol>
                 </div>
