@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import RequestFactory, TestCase
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -512,6 +513,161 @@ class RefrescarTests(SoftwareInventarioBase):
             resp = self.client.get(self.url(), {"actualizar": 1})
         self.assertEqual(resp.context["estado"], "no_configurado")
         self.assertEqual(SoftwareInstalado.objects.count(), 0)
+
+
+class SincronizarFlotaTests(SoftwareInventarioBase):
+    """El recorrido de toda la flota: lo que hace el comando del cron."""
+
+    def setUp(self):
+        super().setUp()
+        self.otro = crear_activo("SN-SW-002", nombre_equipo="W11F36F")
+        from yule.models import EquipoOCS
+
+        EquipoOCS.objects.create(
+            id_ocs="4", nombre_host="W11F36F", serial_bios="F36F285",
+            activo_local=self.otro,
+        )
+
+    def _ocs(self, por_id):
+        """Mock de build_client con un software distinto por equipo."""
+        mock = patch("mantenimiento.services.build_client")
+        bc = mock.start()
+        self.addCleanup(mock.stop)
+        bc.return_value.is_configured.return_value = True
+        bc.return_value.get_software.side_effect = lambda cid: list(por_id[cid])
+        return bc
+
+    def test_lee_todos_los_activos_vinculados(self):
+        from inventario.sync_software import sincronizar_software
+
+        self._ocs({
+            "3": [{"name": "Chrome", "version": "1", "publisher": "Google"}],
+            "4": [{"name": "7-Zip", "version": "23.01", "publisher": "Igor"}],
+        })
+        resumen = sincronizar_software()
+
+        self.assertEqual(resumen["leidos"], 2)
+        self.assertEqual(resumen["nuevos"], 2)
+        self.assertEqual(resumen["con_cambios"], 2)
+        self.assertEqual(SoftwareInstalado.objects.count(), 2)
+
+    def test_segunda_vuelta_sin_cambios(self):
+        from inventario.sync_software import sincronizar_software
+
+        self._ocs({
+            "3": [{"name": "Chrome", "version": "1", "publisher": "Google"}],
+            "4": [{"name": "7-Zip", "version": "23.01", "publisher": "Igor"}],
+        })
+        sincronizar_software()
+        resumen = sincronizar_software()
+
+        self.assertEqual(resumen["nuevos"], 0)
+        self.assertEqual(resumen["desinstalados"], 0)
+        self.assertEqual(resumen["con_cambios"], 0)
+        self.assertEqual(SoftwareInstalado.objects.count(), 2)
+
+    def test_un_equipo_caido_no_detiene_el_resto(self):
+        from inventario.sync_software import sincronizar_software
+        from yule.client import OCSClientException
+
+        def por_id(cid):
+            if cid == "3":
+                raise OCSClientException("timeout")
+            return [{"name": "7-Zip", "version": "23.01", "publisher": "Igor"}]
+
+        mock = patch("mantenimiento.services.build_client")
+        bc = mock.start()
+        self.addCleanup(mock.stop)
+        bc.return_value.is_configured.return_value = True
+        bc.return_value.get_software.side_effect = por_id
+
+        # Ya guardado en el equipo caído: debe quedar intacto.
+        SoftwareInstalado.objects.create(
+            activo=self.activo, nombre="Antes", version="1", fabricante="X"
+        )
+        resumen = sincronizar_software()
+
+        self.assertEqual(resumen["fallidos"], 1)
+        self.assertEqual(resumen["leidos"], 2)
+        # El equipo que sí respondió se guardó igual.
+        self.assertTrue(SoftwareInstalado.objects.filter(activo=self.otro, nombre="7-Zip").exists())
+        # Y el caído no se marcó como desinstalado.
+        self.assertTrue(SoftwareInstalado.objects.filter(activo=self.activo, nombre="Antes").exists())
+
+    def test_no_lee_activos_dados_de_baja(self):
+        from inventario.sync_software import activos_con_equipo_ocs
+
+        self.otro.estado = "dado_de_baja"
+        self.otro.save()
+        self.assertNotIn(self.otro, list(activos_con_equipo_ocs()))
+        self.assertIn(self.otro, list(activos_con_equipo_ocs(incluir_dados_de_baja=True)))
+
+    def test_dry_run_no_escribe(self):
+        from inventario.sync_software import sincronizar_software
+
+        self._ocs({"3": [{"name": "Chrome", "version": "1", "publisher": "Google"}], "4": []})
+        resumen = sincronizar_software(dry_run=True)
+
+        self.assertEqual(resumen["leidos"], 2)
+        self.assertEqual(SoftwareInstalado.objects.count(), 0)
+        # Igual sirve para ver qué trae OCS hoy.
+        por_host = {d["host"]: d["programas"] for d in resumen["detalle"]}
+        self.assertEqual(por_host["W11F35F"], 1)
+        self.assertEqual(por_host["W11F36F"], 0)
+
+    def test_el_callback_va_recibiendo_avance(self):
+        from inventario.sync_software import sincronizar_software
+
+        self._ocs({"3": [], "4": []})
+        vistos = []
+        sincronizar_software(on_equipo=lambda detalle: vistos.append(detalle[-1]["host"]))
+        self.assertEqual(vistos, ["W11F35F", "W11F36F"])
+
+
+class ComandoSincronizarSoftwareTests(SoftwareInventarioBase):
+    def test_comando_requiere_ocs_configurado(self):
+        from io import StringIO
+
+        out = StringIO()
+        with patch("inventario.management.commands.sincronizar_software.build_client") as bc:
+            bc.return_value.is_configured.return_value = False
+            with self.assertRaisesMessage(Exception, "no está configurada"):
+                call_command("sincronizar_software", stdout=out)
+
+    def test_comando_advertencia_sin_activos_vinculados(self):
+        from io import StringIO
+
+        self.equipo.activo_local = None
+        self.equipo.save()
+        out = StringIO()
+        with patch("inventario.management.commands.sincronizar_software.build_client") as bc:
+            bc.return_value.is_configured.return_value = True
+            call_command("sincronizar_software", stdout=out)
+        self.assertIn("Ningún activo tiene un equipo OCS", out.getvalue())
+        self.assertEqual(SoftwareInstalado.objects.count(), 0)
+
+    def test_comando_verde_escribe_el_inventario(self):
+        from io import StringIO
+
+        out = StringIO()
+        with patch("inventario.management.commands.sincronizar_software.build_client") as bc, \
+             patch("mantenimiento.services.build_client") as bsw:
+            bc.return_value.is_configured.return_value = True
+            bsw.return_value.is_configured.return_value = True
+            bsw.return_value.get_software.return_value = list(SOFTWARE_FALSO)
+            call_command("sincronizar_software", stdout=out)
+
+        self.assertIn("1 activos leídos", out.getvalue())
+        self.assertIn("5 nuevos", out.getvalue())
+        self.assertEqual(SoftwareInstalado.objects.filter(activo=self.activo).count(), 5)
+
+    def test_comando_activo_inexistente(self):
+        from io import StringIO
+
+        with patch("inventario.management.commands.sincronizar_software.build_client") as bc:
+            bc.return_value.is_configured.return_value = True
+            with self.assertRaisesMessage(Exception, "No existe el activo"):
+                call_command("sincronizar_software", "--activo", "999999", stdout=StringIO())
 
 
 class SoftwareGlobalTests(SoftwareInventarioBase):

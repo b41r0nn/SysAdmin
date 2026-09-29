@@ -1,0 +1,19 @@
+# Leer el software de los activos vinculados a OCS.
+#
+# La corre el host, no el contenedor: django no tiene planificador propio y no
+# se quiere agregar uno. El agente OCS del equipo cliente reporta cada ~1 hora;
+# con este horario la base local va 4 horas por detrás de lo último que reportó
+# cada equipo, que es lo razonable para inventario.
+#
+# Con --pausa 2 los pedidos no salen en ráfaga: 24 requests seguidos contra un
+# servidor interno se leen como un barrido, no como el trabajo de los agentes.
+#
+# Ver el log con: tail -f /var/log/sysadmin-software-sync.log
+#
+# Corre como root porque `docker exec` lo necesita. Por eso el log lo escribe
+# root también: no se le da el archivo al usuario sistemas para no abrir permisos
+# que duren más que el cron.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+20,50 * * * * root docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2 >>/var/log/sysadmin-software-sync.log 2>&1
+
