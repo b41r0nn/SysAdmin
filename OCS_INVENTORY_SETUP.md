@@ -121,6 +121,183 @@ docker exec ocsinventory-db mysql -u"$OCSUSER" -p"$OCSPASS" ocsweb -e "SELECT CO
 # 105-109 = correcto
 ```
 
+## La API y el receptor mueren si la BD no autentica en TCP plano
+
+Resuelto 2026-09-30. Es el fallo que dejó Yule en *"Error conexión"* y los
+agentes sin registrar, con el panel `/ocsreports/` verse **perfecto**. Ojo a ese
+detalle: el panel surviving no significa que la base esté bien.
+
+### Los dos síntomas que delatan el problema
+
+1. `/ocsapi/v1/computers` responde **500 con el cuerpo vacío**.
+2. El `POST /ocsinventory` de los agentes responde **500**.
+
+Y el mensaje de Yule es engañoso: dice *"No se puede conectar a OCS. Verificar
+credenciales"*, pero las credenciales son correctas. Se comprueba fácil — el 500
+sale **igual sin autenticarse**:
+
+```bash
+curl -s -o /dev/null -w 'sin credenciales = %{http_code}\n' \
+  'http://192.168.1.250:8081/ocsapi/v1/computers?limit=1'
+# 500 = el problema es del servidor, no de Yule ni del password
+```
+
+### Causa 1: `caching_sha2_password` no sirve sobre TCP sin SSL
+
+MySQL 8 crea `MYSQL_USER` con el plugin `caching_sha2_password`. Sobre TCP sin
+SSL ese plugin exige un intercambio de clave RSA pública en el primer handshake,
+y el `DBD::mysql` de Perl del contenedor `ocsinventory-server` no lo soporta:
+
+```
+DBI connect('database=ocsweb;host=ocsinventory-db;port=3306','ocsuser',...) failed:
+Authentication plugin 'caching_sha2_password' reported error:
+Authentication requires secure connection.
+  at /usr/local/share/perl/5.34.0/Api/Ocsinventory/Restapi/ApiCommon.pm line 73
+```
+
+El panel web no lo nota porque `mysqli` de PHP **sí** sabe hacer ese intercambio.
+De ahí la falsa sensación de que "solo se rompió la API".
+
+Se comprueba lado a lado:
+
+```bash
+# Perl (lo que usa la API) -> falla
+docker exec ocsinventory-server perl -e 'use DBI; my $p="P".chr(64)."assword1";
+  my $d=DBI->connect("dbi:mysql:database=ocsweb;host=ocsinventory-db;port=3306","ocsuser",$p);
+  print $d ? "PERL_DBI_OK\n" : "PERL_DBI_FAIL: $DBI::errstr\n";'
+
+# PHP (lo que usa el panel) -> bien
+docker exec ocsinventory-server php -r 'mysqli_report(MYSQLI_REPORT_OFF);
+  $c=@mysqli_connect("ocsinventory-db","ocsuser","P@assword1","ocsweb");
+  echo $c ? "PHP_MYSQLI_OK\n" : "PHP_MYSQLI_FAIL\n";'
+```
+
+> El `chr(64)` no es capricho: en Perl `"P@assword1"` dentro de comillas dobles
+> interpola `@assword1` como array y la contraseña se queda en `P`. Es un
+> clásico que da un "Access denied" falso si pruebas a mano.
+
+Arreglo (idempotente, vive en la base, no en el contenedor):
+
+```sql
+ALTER USER 'ocsuser'@'%' IDENTIFIED WITH mysql_native_password BY '<OCS_DB_PASS del compose>';
+FLUSH PRIVILEGES;
+```
+
+`mysql_native_password` existe en MySQL 8.0 pero **no en 8.4+**, donde se
+eliminó. Si se sube de versión, esto hay que rehacer con SSL o con
+`caching_sha2_password` + `mysql_get_server_public_key=1` en el DSN.
+
+### Causa 2: rotar la contraseña NO llega a los `.conf` de Apache
+
+Esta es la que hace el fallo **persistente** y es la razón de que la causa 1
+pareciera estar ya arreglada sin estarlo.
+
+La imagen genera los `.conf` con `sed` desde `$OCS_DB_PASS`:
+
+```bash
+# /docker-entrypoint.d/30-api-server.sh
+if [ ! -f ${API_CONF_FILE} ]; then          # <-- solo si NO existe
+    cp /tmp/conf/ocsinventory-restapi.conf ${API_CONF_FILE}
+    sed -i 's/DATABASE_PASSWD/'"$OCS_DB_PASS"'/g' ${API_CONF_FILE}
+fi
+```
+
+Y `API_CONF_FILE` vive en el volumen nombrado `httpdconfdata`
+(`/etc/apache2/conf-available`). El archivo se creó **una vez** con la
+contraseña de fábrica `ocspass` y desde entonces el `if` lo salta siempre. Por
+eso rotar `OCS_DB_PASS` en el compose **no cambia nada** en la API: el `.env`
+queda correcto y simplemente nadie lo lee.
+
+Afecta a **dos** archivos, y el segundo es la trampa:
+
+| Archivo | Qué governs | Consecuencia si quedó viejo |
+|---|---|---|
+| `zz-ocsinventory-restapi.conf` | `$ENV{OCS_DB_PWD}` → API `/ocsapi/v1` | 500 en Yule |
+| `z-ocsinventory-server.conf` | `PerlSetVar OCS_DB_PWD` → receptor `/ocsinventory` | los agentes no registran |
+
+Que el segundo importaba se notó al leer el log: el `POST /ocsinventory` del
+agente también devolvía 500, no solo la API.
+
+Comprobar si están sincronizados con el compose:
+
+```bash
+docker exec ocsinventory-server grep -h OCS_DB_PWD \
+  /etc/apache2/conf-available/z-ocsinventory-server.conf \
+  /etc/apache2/conf-available/zz-ocsinventory-restapi.conf
+# Ambos deben mostrar la MISMA clave que OCS_DB_PASS en docker-compose.yml
+```
+
+Arreglo, con backup antes:
+
+```bash
+cd /home/sistemas/ocs/OCSInventory-Docker-Image/2.12.1
+cp docker-compose.yml docker-compose.yml.bak-$(date +%Y%m%d-%H%M%S)
+
+docker exec ocsinventory-server sh -c \
+  'cp -a /etc/apache2/conf-available/z-ocsinventory-server.conf{,.bak}
+   cp -a /etc/apache2/conf-available/zz-ocsinventory-restapi.conf{,.bak}'
+
+docker exec ocsinventory-server sed -i "s|<CLAVE_VIEJA>|<OCS_DB_PASS>|g" \
+  /etc/apache2/conf-available/z-ocsinventory-server.conf \
+  /etc/apache2/conf-available/zz-ocsinventory-restapi.conf
+
+docker exec ocsinventory-server apachectl -t && \
+docker exec ocsinventory-server apachectl -k graceful
+```
+
+> `apachectl -k graceful` basta para recoger un `.conf` changed: no hace falta
+> recrear el contenedor, y así no se pierden los parches de Perl.
+
+### Blindaje: que no vuelva a pasar solo
+
+Hay dos piezas y **cubren cosas distintas**. Conviene tener las dos.
+
+**1. `deploy/ocs-db-init/01-ocsuser-native-auth.sh`** — persiste ante
+reconstrucción de la base. Va en `sql/`, que el compose **ya montaba** como
+`./sql/:/docker-entrypoint-initdb.d/`, así que no hay que tocar el compose:
+
+```bash
+cp /opt/sysadmin/app/deploy/ocs-db-init/01-ocsuser-native-auth.sh \
+   /home/sistemas/ocs/OCSInventory-Docker-Image/2.12.1/sql/
+chmod 755 /home/sistemas/ocs/OCSInventory-Docker-Image/2.12.1/sql/01-ocsuser-native-auth.sh
+```
+
+Toma la contraseña de `$MYSQL_PASSWORD` (no la lleva escrita) y deja `ocsuser`
+en `mysql_native_password`.
+
+> **MySQL solo ejecuta `initdb.d` cuando el datadir está vacío**, o sea en el
+> primer arranque tras borrar el volumen `sqldata`. Con el volumen vivo no corre
+> nunca, y está bien: el `ALTER` ya está en la base. Solo es la red de seguridad
+> para un `docker compose down -v`.
+>
+> Si el archivo pierde el bit de ejecución, el entrypoint de MySQL lo hace
+> `source` en vez de ejecutarlo, y un `exit` tumbaría el arranque entero. Por eso
+> el script va en un subshell y avisa en vez de fallar si el plugin ya no existe.
+
+**2. `deploy/ocs_verificar_api.sh`** — red de seguridad contra *drift*. No
+depende del datadir: un `ALTER USER` a mano, una rotación futura o un MySQL 8.4+
+lo detectan y lo reparan sin borrar nada.
+
+```bash
+bash /opt/sysadmin/app/deploy/ocs_verificar_api.sh            # solo diagnostica
+bash /opt/sysadmin/app/deploy/ocs_verificar_api.sh --arreglar # repara y recarga
+```
+
+Es idempotente, lee la contraseña del compose (no la lleva escrita) y acaba con
+las pruebas de humo de API, panel y último POST de agente. Si la API no responde,
+imprime los últimos errores del contenedor.
+
+No se puso en cron a propósito: la API solo la consume el sync diario de las
+03:07, así que un fallo se ve en el log del propio sync. Si algún día se le
+sacan más consumidores, ahí sí conviene agendarlo.
+
+### Pendiente: contraseña de root de MySQL
+
+`MYSQL_ROOT_PASSWORD : rootpass` en el `docker-compose.yml` sigue **sin rotar**.
+No causó este fallo (el `.env` de OCS es otro), pero es una contraseña de root
+débil en el mismo archivo que se acaba de tocar. Rotarla es un `ALTER USER` +
+actualizar el compose.
+
 ## Parche obligatorio: bug de PHP 8 en `html_header.php`
 
 Sin este parche la consola OCS **muestra solo el logo** (página en blanco con
