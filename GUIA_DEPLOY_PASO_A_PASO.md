@@ -13,12 +13,12 @@ Fecha de referencia: 2026-09-29 · Tag: `v2.4.0-2026-09-29`
 
 ## 0. Estado del servidor (verificado)
 
-| Ítem | Estado |
-|---|---|
-| Docker / Compose | ✅ 29.7.2 / v5.4.0 (ya instalado — el setup lo omite) |
-| UFW | ✅ Activo: `22, 3000, 8000` (+ Se agregarán `6060/6061`) |
-| Hikvision Extractor | ✅ Corriendo (`8000`, `80`) — no se toca |
-| `/opt/sysadmin` | ❌ No existe → setup limpio |
+| Ítem                     | Estado                                                                |
+| ------------------------ | --------------------------------------------------------------------- |
+| Docker / Compose         | ✅ 29.7.2 / v5.4.0 (ya instalado — el setup lo omite)                  |
+| UFW                      | ✅ Activo: `22, 3000, 8000` (+ Se agregarán `6060/6061`)               |
+| Hikvision Extractor      | ✅ Corriendo (`8000`, `80`) — no se toca                               |
+| `/opt/sysadmin`          | ❌ No existe → setup limpio                                            |
 | Dirs libres de conflicto | `6060`, `6061` sin uso; red `sysadmin_net`; contenedores `sysadmin_*` |
 
 ---
