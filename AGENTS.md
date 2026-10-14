@@ -6,6 +6,22 @@
   Los cambios se dejan en el working tree y el usuario decide cuándo commitear.
 - **Ser conciso: NO explicar, solo dar qué hacer.** Bloques de comandos listos para copiar/pegar + resultado esperado en una línea. Cero teoría, cero contexto, cero preámbulo. Si algo no está claro, preguntar en una línea.
 
+## Cambios de la auditoría 2026-10-14 (rama `fix/auditoria-2026-10-14`)
+
+- **Documentos**: informe de hallazgos en `docs/informes/AUDITORIA_SYSADMIN_2026-10-14.md`; instrucciones B1–B13 en `docs/informes/PROMPT_CORRECCIONES_AUDITORIA_2026-10-14.md`.
+
+- **B1 — Sesión**: timeout por inactividad real (`SESSION_COOKIE_AGE` configurable por `.env`, default 180 s, + `SESSION_SAVE_EVERY_REQUEST=True`).
+- **B2 — `/media/`**: servido por Django (`core.views.media_protegido`) con prefijos por rol en `MEDIA_PERMISOS`; **todo campo de upload nuevo debe registrarse ahí** (hay un test que lo exige).
+- **B3 — Dependencias**: CVEs parcheadas en `requirements.txt` (Django 4.2.30, gunicorn 22, Pillow 12.3, cryptography 50, requests 2.33, python-dotenv 1.2.2).
+- **B4 — Atomicidad**: movimientos de inventario e importaciones con `transaction.atomic()` + `select_for_update` y reintento en `Activo.save()`.
+- **B5 — IP real**: `core.utils.get_client_ip` (último de `X-Forwarded-For`) para axes/auditoría + `AXES_CLIENT_IP_CALLABLE` + nginx `X-Forwarded-For $remote_addr`.
+- **B6 — Rate limit**: formulario público de soporte con cooldown por IP en Django (caché `FileBasedCache` compartida entre workers en producción, `DJANGO_CACHE_DIR`) + `limit_req` en nginx (autoritativo).
+- **B7 — Vault/backup**: aviso `sysadmin.W001` en `check --deploy` si falta `PASSWORDS_ENCRYPTION_KEY` (no bloquea el arranque: producción puede estar usando la clave derivada de `SECRET_KEY`; definir una clave nueva requiere re-cifrar antes, ver `AGENT_RUNBOOK.md`); `deploy/backup.sh` con el `.env` cifrado aparte.
+- **B8 — Assets vendorizados**: `backend/static/vendor/` (bootstrap, bootstrap-icons, htmx, fullcalendar, fuentes); prohibido CDN externos (test `VendorAssetsTests`).
+- **B9 — nginx**: `nosniff` y cache en estáticos, TLS 1.2+, gzip, HSTS sin `includeSubDomains`.
+- **B10 — gunicorn/contenedor**: `--workers`/`--timeout`/logs configurables (`GUNICORN_WORKERS`, `GUNICORN_TIMEOUT`) + `backend/.dockerignore`.
+- **B11 — Estilo/docs**: `ruff` (E,F,W,B,DJ) obligatorio (`backend/ruff.toml`; `ruff check backend`), imports muertos fuera, `format_html` en vez de `mark_safe`, sin BOM; informes movidos a `docs/informes/`.
+
 ## Estado actual (2026-09-29, producción + OCS + inventario de software)
 
 - **Servidor**: `sistemas@192.168.1.250` (Ubuntu Server 22.04), proyecto en `/opt/sysadmin/app` (Docker Compose).
@@ -28,7 +44,7 @@
 - **Yule**: configurar en `/yule/configuracion/` con URL `http://192.168.1.250:8081/ocsapi/v1` (termina en `/v1`). La fila en BD tiene prioridad sobre el `.env` (`backend/yule/client.py:241`).
 - **Causa raíz del "Yule: Error conexión" + agentes sin registrar (RESUELTO 2026-09-30)**: dos fallas encimadas, ambas de la rotación de contraseña del 29-Sep. (1) MySQL 8 crea `ocsuser` con `caching_sha2_password`, que sobre TCP sin SSL el `DBD::mysql` de Perl no soporta → `DBI connect ... Authentication requires secure connection` → 500. El panel PHP no lo nota porque `mysqli` sí hace el intercambio RSA, así que ** `/ocsreports/` verse bien NO significa que la BD esté bien**. (2) Los `.conf` de Apache se generan con `sed` desde `$OCS_DB_PASS` pero **solo `if [ ! -f ... ]`**, y viven en el volumen `httpdconfdata` → se crearon una vez con `ocspass` y la rotación nunca llegó. Afecta a `zz-ocsinventory-restapi.conf` (API) **y a `z-ocsinventory-server.conf` (receptor `/ocsinventory`, los agentes)**, ese segundo es el que no se ve venir. Arreglo: `ALTER USER 'ocsuser'@'%' IDENTIFIED WITH mysql_native_password BY ...` + `sed` del password en ambos `.conf` + `apachectl -k graceful` (no hace falta recrear el contenedor, así no se pierden los parches de Perl). **El mensaje de Yule "verificar credenciales" es falso: el 500 sale igual sin autenticarse.** Blindaje: `deploy/ocs-db-init/01-ocsuser-native-auth.sh` en `sql/` (persiste ante reconstrucción de la BD; MySQL solo corre `initdb.d` con el datadir vacío) + `deploy/ocs_verificar_api.sh [--arreglar]` (repara *drift* sin borrar el volumen). Detalle en `OCS_INVENTORY_SETUP.md` → *"La API y el receptor mueren si la BD no autentica en TCP plano"*.
 - **Pendiente**: `MYSQL_ROOT_PASSWORD : rootpass` en el compose de OCS sigue sin rotar. No causó el fallo anterior, pero es root débil en un archivo ya tocado.
-- **Causa raíz del "OCS no registra equipos" (RESUELTO 2026-09-28)**: el agente apuntaba a `/ocsreports` o `/ocsapi/v1`. El receptor es **`/ocsinventory`** (raíz, sin subruta). Con la URL corregida el agente real reporta `200` y Yule ya muestra el inventario completo. Los campos vacíos (serial, procesador, IP, MAC, usuario) eran bugs del parser de Yule, no de OCS. Detalle en la sección 0 de `INFORME_OCS_YULE_2026-09-25.md`.
+- **Causa raíz del "OCS no registra equipos" (RESUELTO 2026-09-28)**: el agente apuntaba a `/ocsreports` o `/ocsapi/v1`. El receptor es **`/ocsinventory`** (raíz, sin subruta). Con la URL corregida el agente real reporta `200` y Yule ya muestra el inventario completo. Los campos vacíos (serial, procesador, IP, MAC, usuario) eran bugs del parser de Yule, no de OCS. Detalle en la sección 0 de `docs/informes/INFORME_OCS_YULE_2026-09-25.md`.
 
 ## Inventario de software (2026-09-29)
 

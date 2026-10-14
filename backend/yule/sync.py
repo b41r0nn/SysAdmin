@@ -3,7 +3,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -277,21 +276,21 @@ def _sincronizar_software_tras_equipos(usuario=None) -> None:
 def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[SincronizacionLog, str]:
     """
     Sincroniza equipos desde OCS con BD local.
-    
+
     Args:
         usuario: Usuario que realiza la sincronización
         force: Fuerza sincronización aunque no haya pasado frecuencia
-        
+
     Returns:
         Tupla (SincronizacionLog, mensaje_resumido)
     """
     fecha_inicio = timezone.now()
-    
+
     log = SincronizacionLog(
         realizado_por=usuario,
         estado="exitosa",
     )
-    
+
     try:
         # Verificar frecuencia de sincronización
         config = ConfiguracionYule.objects.filter(activa=True).first()
@@ -305,12 +304,12 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
                     log.mensaje_error = msg
                     log.save()
                     return log, msg
-        
+
         # Obtener equipos de OCS. Si la integración está desactivada o el
         # cliente no está configurado, no corre (degradación graciosa: log
         # parcial, sin error).
         client = build_client()
-        
+
         if not client.is_configured():
             msg = "Integración OCS desactivada o sin configurar. No se sincronizó."
             logger.info(msg)
@@ -320,28 +319,28 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
             log.duracion_segundos = int((log.fecha_fin - fecha_inicio).total_seconds())
             log.save()
             return log, msg
-        
+
         logger.info("Iniciando sincronización con OCS...")
         equipos_ocs = client.get_computers()
-        
+
         if not equipos_ocs:
             logger.warning("OCS retornó lista vacía de equipos")
             equipos_ocs = []
-        
+
         logger.info(f"OCS retornó {len(equipos_ocs)} equipos")
-        
+
         # Marcar todos como no vistos inicialmente
         EquipoOCS.objects.all().update(visto_en_ultima_sync=False)
-        
+
         equipos_nuevos = 0
         equipos_actualizados = 0
-        
+
         # Procesar cada equipo de OCS
         for equipo_data in equipos_ocs:
             try:
                 datos_limpios = _extract_equipo_data(equipo_data)
                 id_ocs = datos_limpios["id_ocs"]
-                
+
                 # Buscar o crear equipo
                 equipo, creado = EquipoOCS.objects.update_or_create(
                     id_ocs=id_ocs,
@@ -350,29 +349,29 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
                         "visto_en_ultima_sync": True,
                     }
                 )
-                
+
                 if creado:
                     equipos_nuevos += 1
                     logger.info(f"Nuevo equipo detectado: {equipo.nombre_host} ({id_ocs})")
                 else:
                     equipos_actualizados += 1
                     logger.debug(f"Equipo actualizado: {equipo.nombre_host}")
-                    
+
             except Exception as e:
                 logger.error(f"Error procesando equipo OCS: {str(e)}", exc_info=True)
                 continue
-        
+
         # Equipos que desaparecieron
         equipos_desaparecidos = EquipoOCS.objects.filter(
             visto_en_ultima_sync=False
         ).count()
-        
+
         # Actualizar log
         log.equipos_detectados = len(equipos_ocs)
         log.equipos_nuevos = equipos_nuevos
         log.equipos_actualizados = equipos_actualizados
         log.equipos_desaparecidos = equipos_desaparecidos
-        
+
         # Actualizar configuración
         if config:
             config.ultima_sincronizacion = fecha_inicio
@@ -395,10 +394,10 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
             f"{equipos_actualizados} actualizados, "
             f"{equipos_desaparecidos} desaparecidos"
         )
-        
+
         logger.info(mensaje)
         return log, mensaje
-        
+
     except OCSClientException as e:
         logger.error(f"Error de conexión OCS: {str(e)}")
         log.estado = "fallo"
@@ -407,7 +406,7 @@ def sincronizar_equipos_ocs(usuario=None, force: bool = False) -> Tuple[Sincroni
         log.duracion_segundos = int((log.fecha_fin - fecha_inicio).total_seconds())
         log.save()
         return log, f"Fallo en sincronización: {str(e)}"
-        
+
     except Exception as e:
         logger.error(f"Error inesperado en sincronización: {str(e)}", exc_info=True)
         log.estado = "fallo"

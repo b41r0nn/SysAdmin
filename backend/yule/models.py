@@ -76,23 +76,23 @@ class EquipoOCS(models.Model):
     # IDs de OCS
     id_ocs = models.CharField(max_length=50, unique=True, db_index=True)
     tipo_dispositivo = models.CharField(max_length=50, choices=TIPOS_DISPOSITIVO_OCS, default="computadora")
-    
+
     # Información del sistema
     nombre_host = models.CharField(max_length=255, db_index=True)
     usuario_dominio = models.CharField(max_length=255, blank=True)
     so_nombre = models.CharField(max_length=255, blank=True)
     so_version = models.CharField(max_length=255, blank=True)
-    
+
     # Hardware
     procesador = models.CharField(max_length=255, blank=True)
     memoria_ram_mb = models.PositiveIntegerField(null=True, blank=True)
     almacenamiento_total_gb = models.PositiveIntegerField(null=True, blank=True)
-    
+
     # Identificadores
     serial_bios = models.CharField(max_length=255, blank=True)
     mac_address = models.CharField(max_length=50, blank=True, db_index=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
-    
+
     # Inventario local
     activo_local = models.ForeignKey(
         "inventario.Activo",
@@ -101,14 +101,14 @@ class EquipoOCS(models.Model):
         blank=True,
         related_name="equipo_ocs",
     )
-    
+
     # Información de sincronización
     ultimo_reporte_ocs = models.DateTimeField(null=True, blank=True)
     visto_en_ultima_sync = models.BooleanField(default=True)
-    
+
     # Notas
     observaciones = models.TextField(blank=True)
-    
+
     # Timestamps
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
@@ -146,11 +146,11 @@ class SincronizacionLog(models.Model):
     equipos_nuevos = models.PositiveIntegerField(default=0)
     equipos_actualizados = models.PositiveIntegerField(default=0)
     equipos_desaparecidos = models.PositiveIntegerField(default=0)
-    
+
     # Errores
     mensaje_error = models.TextField(blank=True)
     detalles_json = models.JSONField(default=dict, blank=True)
-    
+
     # Realizado por
     realizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -159,10 +159,10 @@ class SincronizacionLog(models.Model):
         blank=True,
         related_name="sincronizaciones_yule",
     )
-    
+
     # Duracion
     duracion_segundos = models.PositiveIntegerField(null=True, blank=True)
-    
+
     # Timestamps
     fecha_inicio = models.DateTimeField(auto_now_add=True)
     fecha_fin = models.DateTimeField(null=True, blank=True)

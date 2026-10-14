@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponse
@@ -14,6 +15,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from accounts.permisos import requiere_permiso
+from core.utils import get_client_ip
 from mantenimiento.models import OrdenMantenimiento
 from notificaciones.services import aviso_usuario, encolar_email
 from reports.views import (
@@ -50,25 +52,45 @@ def _notificar_ti_ticket(ticket):
         aviso_usuario(user, titulo, mensaje, link=link, objetokey=f"ticket:{ticket.pk}")
 
 
-def _cooldown_reporte_publico(request):
-    """Devuelve True si el usuario debe esperar antes de enviar otro ticket.
+def _cooldown_segundos():
+    return getattr(settings, "SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS", 0)
 
-    El límite se guarda en sesión; si no hay sesión, se permite.
-    En desarrollo/tests el cooldown es 0 por defecto.
+
+def _clave_cooldown_ip(request):
+    ip = get_client_ip(request) or "desconocida"
+    return f"soporte:reporte_publico:{ip}"
+
+
+def _cooldown_reporte_publico(request):
+    """True si la IP (o la sesión) debe esperar antes de enviar otro ticket.
+
+    El límite principal es por IP en caché, así un cliente sin cookies
+    (curl/script) tampoco lo evade. nginx aplica además `limit_req` como tope
+    autoritativo. En desarrollo/tests el cooldown es 0 por defecto.
     """
-    segundos = getattr(settings, "SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS", 0)
+    segundos = _cooldown_segundos()
     if not segundos:
         return False
-    if not request.session.session_key:
-        return False
-    ultimo = request.session.get("ultimo_ticket_publico")
-    if not ultimo:
-        return False
-    try:
-        ultimo_dt = timezone.datetime.fromisoformat(ultimo)
-    except (TypeError, ValueError):
-        return False
-    return (timezone.now() - ultimo_dt).total_seconds() < segundos
+    if cache.get(_clave_cooldown_ip(request)) is not None:
+        return True
+    if request.session.session_key:
+        ultimo = request.session.get("ultimo_ticket_publico")
+        if ultimo:
+            try:
+                ultimo_dt = timezone.datetime.fromisoformat(ultimo)
+            except (TypeError, ValueError):
+                return False
+            if (timezone.now() - ultimo_dt).total_seconds() < segundos:
+                return True
+    return False
+
+
+def _marcar_cooldown_reporte_publico(request):
+    segundos = _cooldown_segundos()
+    if not segundos:
+        return
+    cache.set(_clave_cooldown_ip(request), True, timeout=segundos)
+    request.session["ultimo_ticket_publico"] = timezone.now().isoformat()
 
 
 def reportar_publico(request):
@@ -103,7 +125,7 @@ def reportar_publico(request):
                 numero_serie_etiqueta=form.cleaned_data["numero_serie_etiqueta"],
             )
             _notificar_ti_ticket(ticket)
-            request.session["ultimo_ticket_publico"] = timezone.now().isoformat()
+            _marcar_cooldown_reporte_publico(request)
             return render(request, "soporte/reporte_publico_exito.html", {
                 "ticket": ticket,
             })
@@ -417,7 +439,7 @@ def tickets_excel(request):
         "Prioridad", "Estado", "Asignado a", "Creado",
     ]
     start_row = _apply_redihos_header(ws, headers, "Tickets de Soporte")
-    for idx, t in enumerate(qs.order_by("-fecha_creacion"), start=start_row):
+    for _idx, t in enumerate(qs.order_by("-fecha_creacion"), start=start_row):
         row = [
             t.pk,
             t.asunto,

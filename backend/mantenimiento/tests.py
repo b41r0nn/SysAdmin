@@ -464,13 +464,13 @@ class CalendarioTests(TestCase):
 
     def test_eventos_incluyen_ordenes_y_planes(self):
         orden = _orden(self.activo, tipo="correctivo", estado="abierta")
-        plan = _plan(tipo="preventivo", proxima_ejecucion=HOY + timedelta(days=5))
+        _plan(tipo="preventivo", proxima_ejecucion=HOY + timedelta(days=5))
         resp = self.client.get(reverse("mantenimiento:calendario_eventos"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         titulos = [e["title"] for e in data]
         self.assertTrue(any(f"Orden #{orden.id}" in t for t in titulos))
-        self.assertTrue(any(f"Plan Preventivo" in t for t in titulos))
+        self.assertTrue(any("Plan Preventivo" in t for t in titulos))
 
 
 # ─── Fase 4: Snapshot software + fotos + hoja de vida ─────────────

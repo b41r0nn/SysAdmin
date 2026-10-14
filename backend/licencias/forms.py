@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import LicenciaSoftware, TIPOS_LICENCIA
+from .models import LicenciaSoftware
 
 
 class LicenciaForm(forms.ModelForm):

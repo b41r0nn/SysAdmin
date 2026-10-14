@@ -388,7 +388,7 @@ Endurecer el login siguiendo las 7 tareas indicadas por el arquitecto: rate limi
 3. **Auditoría de fallos**: signals `user_login_failed` (`login_fallido`) y `user_locked_out` de axes (`cuenta_bloqueada`) → `RegistroAuditoria`, módulo `auth`, usuario+IP.
 4. **Password validators**: `AUTH_PASSWORD_VALIDATORS` (min 10 + simitud + comunes + numéricos).
 5. **Headers**: `SECURE_CONTENT_TYPE_NOSNIFF`, `X_FRAME_OPTIONS=DENY`, `SECURE_REFERRER_POLICY=same-origin`.
-6. **Cookies**: `HttpOnly`, `SameSite=Lax`, `SESSION_COOKIE_AGE=28800` (8 h), `SESSION_EXPIRE_AT_BROWSER_CLOSE=True`.
+6. **Cookies**: `HttpOnly`, `SameSite=Lax`, timeout por inactividad configurable con `SESSION_COOKIE_AGE` (default 180 s) + `SESSION_SAVE_EVERY_REQUEST=True`, `SESSION_EXPIRE_AT_BROWSER_CLOSE=True`.
 7. **HTTPS interno**: cert autofirmado `nginx/certs/` (CN=192.168.1.250, 825 días); nginx 443 ssl + redirect 301 desde 80; docker-compose `6060:443` + `6061:80` y volumen de certs; CSRF trusted origins https.
 
 ### Archivos clave

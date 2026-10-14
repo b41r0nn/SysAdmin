@@ -1,11 +1,9 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import requests
 from django.conf import settings
-from django.utils import timezone
 
 from .models import ConfiguracionYule
 
@@ -62,16 +60,16 @@ class OCSClient:
     ) -> requests.Response:
         """
         Realiza request a OCS con reintentos y manejo de errores.
-        
+
         Args:
             path: Path del endpoint relativo a base_url
             params: Query parameters
             method: HTTP method (get, post, etc)
             data: Body data para POST/PUT
-            
+
         Returns:
             requests.Response
-            
+
         Raises:
             OCSConnectionError: Si no se puede conectar
             OCSAuthError: Si hay error de autenticación
@@ -235,7 +233,7 @@ class OCSClient:
         except OCSClientException:
             raise
         except Exception as e:
-            raise OCSClientException(f"Failed to parse OCS response: {str(e)}")
+            raise OCSClientException(f"Failed to parse OCS response: {str(e)}") from e
 
     @staticmethod
     def _unwrap_computer(data: Any) -> Dict[str, Any]:
@@ -331,7 +329,7 @@ class OCSClient:
         except OCSClientException:
             raise
         except Exception as e:
-            raise OCSClientException(f"Failed to parse software OCS: {str(e)}")
+            raise OCSClientException(f"Failed to parse software OCS: {str(e)}") from e
 
     def test_connection(self) -> bool:
         """Verifica la conexión con OCS"""

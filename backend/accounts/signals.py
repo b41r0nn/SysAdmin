@@ -1,17 +1,9 @@
-﻿from axes.signals import user_locked_out
+from axes.signals import user_locked_out
 from django.contrib.auth import signals as auth_signals
 from django.dispatch import receiver
 
 from administracion.services import registrar_auditoria
-
-
-def _request_ip(request):
-    if not request or not request.META:
-        return None
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
+from core.utils import get_client_ip
 
 
 @receiver(auth_signals.user_login_failed)
@@ -22,7 +14,7 @@ def _auditoria_login_fallido(sender, credentials, request, **kwargs):
         modulo="auth",
         accion="login_fallido",
         detalle=f"Intento de inicio de sesión fallido para el usuario '{username}'.",
-        ip=_request_ip(request),
+        ip=get_client_ip(request),
     )
 
 

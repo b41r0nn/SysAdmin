@@ -19,7 +19,7 @@ El `.env` NO se versiona. Copiar `.env.example` (o el `.env` de desarrollo) y aj
 ```ini
 # ── Obligatorios ───────────────────────────────────────────────
 SECRET_KEY=generar:  python -c "import secrets; print(secrets.token_urlsafe(50))"
-PASSWORDS_ENCRYPTION_KEY=generar:  python -c "import secrets; print(secrets.token_urlsafe(50))"
+PASSWORDS_ENCRYPTION_KEY=generar:  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 DEBUG=False
 ALLOWED_HOSTS=192.168.1.250,localhost,127.0.0.1
 
