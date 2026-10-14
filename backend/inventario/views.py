@@ -1,16 +1,18 @@
 from datetime import date, datetime
-from decimal import Decimal
 import base64
 import io
 import os
 
 import qrcode
 
+import logging
+
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
+from django.db import IntegrityError, transaction
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,6 +20,7 @@ from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
+
 import openpyxl
 
 from administracion.models import ConfiguracionSistema
@@ -35,6 +38,8 @@ from .services import acta_pdf_bytes
 
 from .software_sync import refrescar_activo, software_guardado, ultimo_reporte
 from accounts.permisos import requiere_permiso
+
+logger = logging.getLogger(__name__)
 
 
 # ── Lista ──────────────────────────────────────────────────────────────────────
@@ -291,44 +296,49 @@ def asignar_activo(request, pk):
     if activo.estado != "disponible":
         messages.error(request, "Solo se pueden asignar activos disponibles.")
         return redirect("inventario:detalle", pk=activo.pk)
-        
+
     if request.method == "POST":
         form = AsignacionForm(request.POST)
         if form.is_valid():
-            asignacion = form.save(commit=False)
-            asignacion.activo = activo
-            asignacion.fecha_asignacion = timezone.now().date()
-            asignacion.save()
-            
-            Movimiento.objects.create(
-                activo=activo,
-                tipo="asignacion",
-                fecha=timezone.now().date(),
-                descripcion=f"Asignado a {asignacion.usuario.nombre_completo}. {asignacion.observaciones or ''}",
-                realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
-                usuario_destino=asignacion.usuario
-            )
-            
-            acta = ActaAsignacion.objects.create(asignacion=asignacion)
-            encolar_email(
-                asignacion.usuario.correo,
-                f"Acta de asignación #{acta.pk} · {activo.serial}",
-                f"Hola {asignacion.usuario.nombre_completo},\n"
-                f"te asignamos el activo {activo.marca} {activo.modelo} "
-                f"(serial {activo.serial}).\n"
-                f"Adjuntamos el acta para que la firmes y la reenvíes a Sistemas.",
-                adjunto_tipo="acta",
-                adjunto_objeto_id=acta.pk,
-            )
-            
-            activo.estado = "asignado"
-            activo.save()
-            
+            with transaction.atomic():
+                activo = Activo.objects.select_for_update().get(pk=pk)
+                if activo.estado != "disponible":
+                    messages.error(request, "Solo se pueden asignar activos disponibles.")
+                    return redirect("inventario:detalle", pk=activo.pk)
+                asignacion = form.save(commit=False)
+                asignacion.activo = activo
+                asignacion.fecha_asignacion = timezone.now().date()
+                asignacion.save()
+
+                Movimiento.objects.create(
+                    activo=activo,
+                    tipo="asignacion",
+                    fecha=timezone.now().date(),
+                    descripcion=f"Asignado a {asignacion.usuario.nombre_completo}. {asignacion.observaciones or ''}",
+                    realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
+                    usuario_destino=asignacion.usuario
+                )
+
+                acta = ActaAsignacion.objects.create(asignacion=asignacion)
+                encolar_email(
+                    asignacion.usuario.correo,
+                    f"Acta de asignación #{acta.pk} · {activo.serial}",
+                    f"Hola {asignacion.usuario.nombre_completo},\n"
+                    f"te asignamos el activo {activo.marca} {activo.modelo} "
+                    f"(serial {activo.serial}).\n"
+                    f"Adjuntamos el acta para que la firmes y la reenvíes a Sistemas.",
+                    adjunto_tipo="acta",
+                    adjunto_objeto_id=acta.pk,
+                )
+
+                activo.estado = "asignado"
+                activo.save(update_fields=["estado", "fecha_actualizacion"])
+
             messages.success(request, f"Activo asignado a {asignacion.usuario.nombre_completo}.")
             return redirect("inventario:detalle", pk=activo.pk)
     else:
         form = AsignacionForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form, "titulo": "Asignar Activo", "activo": activo, "accion": "Asignar"
     })
@@ -356,38 +366,43 @@ def editar_asignacion(request, asignacion_pk):
 def devolver_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion = activo.asignaciones.filter(activa=True).first()
-    
+
     if not asignacion:
         messages.error(request, "El activo no tiene una asignación activa.")
         return redirect("inventario:detalle", pk=activo.pk)
-        
+
     if request.method == "POST":
         form = DevolucionForm(request.POST)
         if form.is_valid():
             observaciones = form.cleaned_data["observaciones"]
-            
-            asignacion.activa = False
-            asignacion.fecha_devolucion = timezone.now().date()
-            if observaciones:
-                asignacion.observaciones = (asignacion.observaciones or "") + f"\n[Devolución]: {observaciones}"
-            asignacion.save()
-            
-            Movimiento.objects.create(
-                activo=activo,
-                tipo="devolucion",
-                fecha=timezone.now().date(),
-                descripcion=f"Devuelto por {asignacion.usuario.nombre_completo}. {observaciones}",
-                realizado_por=request.user.username if request.user.is_authenticated else "Sistema"
-            )
-            
-            activo.estado = "disponible"
-            activo.save()
-            
+            with transaction.atomic():
+                activo = Activo.objects.select_for_update().get(pk=pk)
+                asignacion = activo.asignaciones.filter(activa=True).first()
+                if not asignacion:
+                    messages.error(request, "El activo no tiene una asignación activa.")
+                    return redirect("inventario:detalle", pk=activo.pk)
+                asignacion.activa = False
+                asignacion.fecha_devolucion = timezone.now().date()
+                if observaciones:
+                    asignacion.observaciones = (asignacion.observaciones or "") + f"\n[Devolución]: {observaciones}"
+                asignacion.save()
+
+                Movimiento.objects.create(
+                    activo=activo,
+                    tipo="devolucion",
+                    fecha=timezone.now().date(),
+                    descripcion=f"Devuelto por {asignacion.usuario.nombre_completo}. {observaciones}",
+                    realizado_por=request.user.username if request.user.is_authenticated else "Sistema"
+                )
+
+                activo.estado = "disponible"
+                activo.save(update_fields=["estado", "fecha_actualizacion"])
+
             messages.success(request, "Activo devuelto correctamente.")
             return redirect("inventario:detalle", pk=activo.pk)
     else:
         form = DevolucionForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form, "titulo": "Devolver Activo", "activo": activo, "accion": "Devolver"
     })
@@ -396,65 +411,78 @@ def devolver_activo(request, pk):
 def trasladar_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion_actual = activo.asignaciones.filter(activa=True).first()
-    
+
     if not asignacion_actual:
         messages.error(request, "El activo no está asignado actualmente.")
         return redirect("inventario:detalle", pk=activo.pk)
-        
+
     if request.method == "POST":
         form = TrasladoForm(request.POST)
         if form.is_valid():
             usuario_destino = form.cleaned_data["usuario_destino"]
             observaciones = form.cleaned_data["observaciones"]
-            
+
             if usuario_destino == asignacion_actual.usuario:
                 messages.error(request, "El usuario destino debe ser diferente al actual.")
                 return render(request, "inventario/asignacion_form.html", {
                     "form": form, "titulo": "Trasladar Activo", "activo": activo, "accion": "Trasladar"
                 })
-            
-            # 1. Cerrar asignación actual
-            asignacion_actual.activa = False
-            asignacion_actual.fecha_devolucion = timezone.now().date()
-            if observaciones:
-                asignacion_actual.observaciones = (asignacion_actual.observaciones or "") + f"\n[Traslado a {usuario_destino.nombre_completo}]: {observaciones}"
-            asignacion_actual.save()
-            
-            # 2. Crear nueva asignación
-            nueva_asignacion = Asignacion.objects.create(
-                activo=activo,
-                usuario=usuario_destino,
-                fecha_asignacion=timezone.now().date(),
-                observaciones=f"Trasladado desde {asignacion_actual.usuario.nombre_completo}. {observaciones}"
-            )
-            
-            # 3. Registrar movimiento
-            Movimiento.objects.create(
-                activo=activo,
-                tipo="traslado",
-                fecha=timezone.now().date(),
-                descripcion=f"Trasladado de {asignacion_actual.usuario.nombre_completo} a {usuario_destino.nombre_completo}. {observaciones}",
-                realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
-                usuario_destino=usuario_destino
-            )
-            
-            acta = ActaAsignacion.objects.create(asignacion=nueva_asignacion)
-            encolar_email(
-                usuario_destino.correo,
-                f"Acta de asignación #{acta.pk} · {activo.serial}",
-                f"Hola {usuario_destino.nombre_completo},\n"
-                f"te fue trasladado el activo {activo.marca} {activo.modelo} "
-                f"(serial {activo.serial}).\n"
-                f"Adjuntamos el acta para que la firmes y la reenvíes a Sistemas.",
-                adjunto_tipo="acta",
-                adjunto_objeto_id=acta.pk,
-            )
-            
+
+            with transaction.atomic():
+                activo = Activo.objects.select_for_update().get(pk=pk)
+                asignacion_actual = activo.asignaciones.filter(activa=True).first()
+                if not asignacion_actual:
+                    messages.error(request, "El activo no está asignado actualmente.")
+                    return redirect("inventario:detalle", pk=activo.pk)
+                if usuario_destino == asignacion_actual.usuario:
+                    messages.error(request, "El usuario destino debe ser diferente al actual.")
+                    return render(request, "inventario/asignacion_form.html", {
+                        "form": form, "titulo": "Trasladar Activo", "activo": activo, "accion": "Trasladar"
+                    })
+                # 1. Cerrar asignación actual
+                asignacion_actual.activa = False
+                asignacion_actual.fecha_devolucion = timezone.now().date()
+                if observaciones:
+                    asignacion_actual.observaciones = (asignacion_actual.observaciones or "") + f"\n[Traslado a {usuario_destino.nombre_completo}]: {observaciones}"
+                asignacion_actual.save()
+
+                # 2. Crear nueva asignación
+                nueva_asignacion = Asignacion.objects.create(
+                    activo=activo,
+                    usuario=usuario_destino,
+                    fecha_asignacion=timezone.now().date(),
+                    observaciones=f"Trasladado desde {asignacion_actual.usuario.nombre_completo}. {observaciones}"
+                )
+
+                # 3. Registrar movimiento
+                Movimiento.objects.create(
+                    activo=activo,
+                    tipo="traslado",
+                    fecha=timezone.now().date(),
+                    descripcion=f"Trasladado de {asignacion_actual.usuario.nombre_completo} a {usuario_destino.nombre_completo}. {observaciones}",
+                    realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
+                    usuario_destino=usuario_destino
+                )
+
+                acta = ActaAsignacion.objects.create(asignacion=nueva_asignacion)
+                encolar_email(
+                    usuario_destino.correo,
+                    f"Acta de asignación #{acta.pk} · {activo.serial}",
+                    f"Hola {usuario_destino.nombre_completo},\n"
+                    f"te fue trasladado el activo {activo.marca} {activo.modelo} "
+                    f"(serial {activo.serial}).\n"
+                    f"Adjuntamos el acta para que la firmes y la reenvíes a Sistemas.",
+                    adjunto_tipo="acta",
+                    adjunto_objeto_id=acta.pk,
+                )
+                activo.estado = "asignado"
+                activo.save(update_fields=["estado", "fecha_actualizacion"])
+
             messages.success(request, f"Activo trasladado a {usuario_destino.nombre_completo}.")
             return redirect("inventario:detalle", pk=activo.pk)
     else:
         form = TrasladoForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form, "titulo": "Trasladar Activo", "activo": activo, "accion": "Trasladar"
     })
@@ -597,11 +625,11 @@ def qr_imagen(request, pk):
 def subir_acta_firmada(request, asignacion_pk):
     asignacion = get_object_or_404(Asignacion, pk=asignacion_pk)
     acta = getattr(asignacion, "acta", None)
-    
+
     if not acta:
         messages.error(request, "No existe registro de acta para esta asignación.")
         return redirect("inventario:detalle", pk=asignacion.activo.pk)
-        
+
     if request.method == "POST":
         form = SubirActaForm(request.POST, request.FILES)
         if form.is_valid():
@@ -611,7 +639,7 @@ def subir_acta_firmada(request, asignacion_pk):
             return redirect("inventario:detalle", pk=asignacion.activo.pk)
     else:
         form = SubirActaForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form,
         "titulo": "Subir Acta Firmada",
@@ -915,7 +943,7 @@ def _normalizar_valor(label, valor):
     if campo in ("garantia_fabrica_meses", "anios_garantia_extendida"):
         try:
             return int(valor)
-        except Exception:
+        except (ValueError, TypeError):
             return None
     if campo == "fecha_compra":
         # intenta varios formatos
@@ -923,13 +951,13 @@ def _normalizar_valor(label, valor):
             try:
                 dt = datetime.strptime(valor, fmt).date()
                 return dt.isoformat()  # string ISO para guardar en sesión (JSON)
-            except Exception:
-                pass
+            except ValueError:
+                continue
         return None
     if campo == "pulgadas":
         try:
             return float(valor.replace(",", "."))
-        except Exception:
+        except (ValueError, TypeError):
             return None
     return valor
 
@@ -1008,6 +1036,7 @@ def importar_activos(request):
         try:
             filas, advertencias = _parsear_excel_activos(archivo)
         except Exception:
+            logger.exception("No se pudo leer el archivo .xlsx de activos")
             messages.error(request, "No se pudo leer el archivo. ¿Es un .xlsx válido?")
             return redirect("inventario:importar")
 
@@ -1059,16 +1088,18 @@ def confirmar_importar_activos(request):
         if isinstance(fc, str):
             try:
                 datos["fecha_compra"] = date.fromisoformat(fc)
-            except Exception:
+            except ValueError:
                 datos.pop("fecha_compra", None)
         # Doble verificación contra duplicados
         if Activo.objects.filter(serial=datos.get("serial")).exists():
             duplicados += 1
             continue
         try:
-            Activo.objects.create(**datos)
+            with transaction.atomic():
+                Activo.objects.create(**datos)
             creados += 1
-        except Exception:
+        except (IntegrityError, ValidationError, ValueError, TypeError) as exc:
+            logger.warning("Importación: fila con error (%s): %s", datos.get("serial"), exc)
             errores += 1
 
     messages.success(

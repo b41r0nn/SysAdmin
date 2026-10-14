@@ -1,0 +1,16 @@
+# Configuración del backup diario de SysAdmin.
+# Copiar a /opt/sysadmin/backups/backup.conf (junto a backup.sh) y ajustar.
+# Las variables de entorno tienen prioridad sobre este archivo.
+
+# ── Destino NAS (si NAS_IP queda vacío, el backup queda solo local) ────────────
+NAS_IP=""
+NAS_PATH="/backups/sysadmin"
+NAS_USER="backup_user"
+
+# ── Retención local (días); el NAS conserva el historial completo ──────────────
+RETENCION_DIAS_LOCAL="7"
+
+# ── Clave para cifrar el respaldo del .env (la del vault) ──────────────────────
+# Sin ella, el .env NO se respalda. Guárdala en un gestor de secretos; si la
+# pones aquí, este archivo queda con la clave (protegido por permisos root).
+# BACKUP_ENV_PASSPHRASE=""

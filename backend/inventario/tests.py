@@ -228,24 +228,6 @@ class SoftwareInventarioBase(TestCase):
     def url(self):
         return reverse("inventario:software", args=[self.activo.pk])
 
-
-class SoftwareInventarioBase(TestCase):
-    def setUp(self):
-        from yule.models import EquipoOCS
-
-        self.usuario = crear_usuario("superadmin")
-        self.client.force_login(self.usuario)
-        self.activo = crear_activo("SN-SW-001", nombre_equipo="W11F35F")
-        self.equipo = EquipoOCS.objects.create(
-            id_ocs="3",
-            nombre_host="W11F35F",
-            serial_bios="F35F284",
-            activo_local=self.activo,
-        )
-
-    def url(self):
-        return reverse("inventario:software", args=[self.activo.pk])
-
     def sembrar(self, software=SOFTWARE_FALSO):
         """Deja el activo con el software guardado, sin pasar por OCS."""
         from inventario.software_sync import aplicar_reporte
