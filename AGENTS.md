@@ -13,7 +13,7 @@
 - **B3 — Dependencias**: CVEs parcheadas en `requirements.txt` (Django 4.2.30, gunicorn 22, Pillow 12.3, cryptography 49, requests 2.33, python-dotenv 1.2.2).
 - **B4 — Atomicidad**: movimientos de inventario e importaciones con `transaction.atomic()` + `select_for_update` y reintento en `Activo.save()`.
 - **B5 — IP real**: `core.utils.get_client_ip` (último de `X-Forwarded-For`) para axes/auditoría + `AXES_CLIENT_IP_CALLABLE` + nginx `X-Forwarded-For $remote_addr`.
-- **B6 — Rate limit**: formulario público de soporte con cooldown por IP en Django + `limit_req` en nginx (autoritativo).
+- **B6 — Rate limit**: formulario público de soporte con cooldown por IP en Django (caché `FileBasedCache` compartida entre workers en producción, `DJANGO_CACHE_DIR`) + `limit_req` en nginx (autoritativo).
 - **B7 — Vault/backup**: aviso `sysadmin.W001` en `check --deploy` si falta `PASSWORDS_ENCRYPTION_KEY` (no bloquea el arranque: producción puede estar usando la clave derivada de `SECRET_KEY`; definir una clave nueva requiere re-cifrar antes, ver `AGENT_RUNBOOK.md`); `deploy/backup.sh` con el `.env` cifrado aparte.
 - **B8 — Assets vendorizados**: `backend/static/vendor/` (bootstrap, bootstrap-icons, htmx, fullcalendar, fuentes); prohibido CDN externos (test `VendorAssetsTests`).
 - **B9 — nginx**: `nosniff` y cache en estáticos, TLS 1.2+, gzip, HSTS sin `includeSubDomains`.
