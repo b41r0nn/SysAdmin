@@ -132,15 +132,30 @@ fi
 # Script de backup diario (fuente canónica en el repo: deploy/backup.sh).
 # setup_server.sh se ejecuta desde el repo, así que el script ya está presente.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-install -m 750 "${SCRIPT_DIR}/deploy/backup.sh" /opt/sysadmin/backups/backup.sh
 
-# Agregar al cron (2:00 AM todos los días), sin duplicar la línea existente.
-CRON_LINE="0 2 * * * /opt/sysadmin/backups/backup.sh >> /opt/sysadmin/backups/backup.log 2>&1"
-( crontab -l 2>/dev/null | grep -vF "/opt/sysadmin/backups/backup.sh" || true; echo "${CRON_LINE}" ) | crontab -
+if [ -f "${SCRIPT_DIR}/deploy/backup.sh" ]; then
+    install -m 750 "${SCRIPT_DIR}/deploy/backup.sh" /opt/sysadmin/backups/backup.sh
 
-echo "✅ Backup instalado en /opt/sysadmin/backups/backup.sh"
-echo "   ⚠️  Configura NAS_IP/NAS_USER/NAS_PATH y BACKUP_ENV_PASSPHRASE."
-echo "   ⚠️  Prueba un restore antes de confiar en el backup (AGENT_RUNBOOK.md)."
+    # Configuración editable del backup: crear desde el ejemplo SOLO si falta
+    # (no sobrescribir la de un servidor ya configurado).
+    if [ ! -f /opt/sysadmin/backups/backup.conf ] && \
+       [ -f "${SCRIPT_DIR}/deploy/backup.conf.example" ]; then
+        install -m 640 "${SCRIPT_DIR}/deploy/backup.conf.example" \
+            /opt/sysadmin/backups/backup.conf
+        echo "✅ Config de backup creada: /opt/sysadmin/backups/backup.conf"
+    fi
+
+    # Agregar al cron (2:00 AM todos los días), sin duplicar la línea existente.
+    CRON_LINE="0 2 * * * /opt/sysadmin/backups/backup.sh >> /opt/sysadmin/backups/backup.log 2>&1"
+    ( crontab -l 2>/dev/null | grep -vF "/opt/sysadmin/backups/backup.sh" || true; echo "${CRON_LINE}" ) | crontab -
+
+    echo "✅ Backup instalado en /opt/sysadmin/backups/backup.sh"
+    echo "   ⚠️  Edita /opt/sysadmin/backups/backup.conf (NAS_IP/NAS_USER/NAS_PATH y"
+    echo "       BACKUP_ENV_PASSPHRASE)."
+    echo "   ⚠️  Prueba un restore antes de confiar en el backup (AGENT_RUNBOOK.md)."
+else
+    echo "   ⚠️  No se encontró deploy/backup.sh; se omite la instalación del backup."
+fi
 
 # ─── Resumen final ────────────────────────────────────────────────────────────
 echo ""
@@ -151,7 +166,7 @@ echo "║  Próximos pasos:                                     ║"
 echo "║  1. Copia el proyecto SysAdmin a /opt/sysadmin/app   ║"
 echo "║  2. Edita el archivo .env con tus credenciales       ║"
 echo "║     (ver CHECKLIST_DEPLOY.md)                        ║"
-echo "║  3. Edita backup.sh con la IP y usuario de tu NAS    ║"
+echo "║  3. Edita /opt/sysadmin/backups/backup.conf (NAS)    ║"
 echo "║  4. Ejecuta: docker compose up -d --build            ║"
 echo "║  5. Ejecuta: docker exec sysadmin_django             ║"
 echo "║             python manage.py createsuperuser         ║"
