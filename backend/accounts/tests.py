@@ -141,10 +141,12 @@ class LoginSeguridadTests(TestCase):
         AccessFailureLog.objects.all().delete()
         self.usuario = crear_usuario("tecnico", username="seg_login")
 
-    def _intentar_login(self, username="seg_login", password="password-incorrecta"):
+    def _intentar_login(self, username="seg_login", password="password-incorrecta", ip=None):
+        extra = {"HTTP_X_FORWARDED_FOR": ip} if ip else {}
         return self.client.post(
             self.LOGIN_URL_PATH,
             {"username": username, "password": password},
+            **extra,
         )
 
     def test_mensaje_error_generico_usuario_inexistente(self):
@@ -195,6 +197,31 @@ class LoginSeguridadTests(TestCase):
         self.assertGreaterEqual(fallidos.count(), 5)
         self.assertGreaterEqual(bloqueos.count(), 1)
         self.assertEqual(bloqueos.first().modulo, "auth")
+
+    def test_axes_usa_ip_de_forwarded_for(self):
+        from axes.models import AccessAttempt
+
+        self._intentar_login(ip="10.0.0.5")
+        intento = AccessAttempt.objects.get(username="seg_login")
+        self.assertEqual(intento.ip_address, "10.0.0.5")
+
+    def test_bloqueo_es_por_usuario_e_ip(self):
+        for _ in range(5):
+            self._intentar_login(ip="10.0.0.5")
+        # La combinación (usuario, 10.0.0.5) está bloqueada, pero otra IP no.
+        resp_otro = self.client.post(
+            self.LOGIN_URL_PATH,
+            {"username": "seg_login", "password": "testpass123"},
+            HTTP_X_FORWARDED_FOR="10.0.0.6",
+        )
+        self.assertRedirects(resp_otro, reverse("core:dashboard"))
+
+    def test_auditoria_login_fallido_guarda_ip_real(self):
+        from administracion.models import RegistroAuditoria
+
+        self._intentar_login(ip="9.9.9.9, 10.0.0.5")
+        registro = RegistroAuditoria.objects.filter(accion="login_fallido").first()
+        self.assertEqual(registro.ip, "10.0.0.5")
 
     def test_login_exitoso_resetea_contador(self):
         from axes.models import AccessAttempt

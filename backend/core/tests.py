@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from django.apps import apps
 from django.conf import settings
@@ -8,6 +9,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.permisos import PERMISOS_POR_ROL
+from core.utils import get_client_ip
 from core.views import MEDIA_PERMISOS
 
 CustomUser = get_user_model()
@@ -19,6 +21,28 @@ def _user(rol, username=None):
         password="x",
         rol=rol,
     )
+
+
+class ClientIPTests(TestCase):
+    def test_toma_ultimo_valor_de_forwarded_for(self):
+        request = SimpleNamespace(META={"HTTP_X_FORWARDED_FOR": "9.9.9.9, 10.0.0.5"})
+        self.assertEqual(get_client_ip(request), "10.0.0.5")
+
+    def test_sin_forwarded_usa_remote_addr(self):
+        request = SimpleNamespace(META={"REMOTE_ADDR": "192.168.1.10"})
+        self.assertEqual(get_client_ip(request), "192.168.1.10")
+
+    def test_forwarded_vacio_cae_a_remote_addr(self):
+        request = SimpleNamespace(
+            META={"HTTP_X_FORWARDED_FOR": "", "REMOTE_ADDR": "192.168.1.10"}
+        )
+        self.assertEqual(get_client_ip(request), "192.168.1.10")
+
+    def test_request_none(self):
+        self.assertIsNone(get_client_ip(None))
+
+    def test_request_sin_meta(self):
+        self.assertIsNone(get_client_ip(SimpleNamespace()))
 
 
 class DashboardTests(TestCase):
