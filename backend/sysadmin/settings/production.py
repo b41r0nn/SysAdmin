@@ -41,6 +41,9 @@ SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS = int(
     os.environ.get("SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS", "60")
 )
 
+# En producción nginx sirve /media/ a través de X-Accel-Redirect (vista media_protegido).
+MEDIA_ACCEL_REDIRECT = True
+
 _origenes = os.environ.get("TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = (
     [o.strip() for o in _origenes.split(",") if o.strip()]
