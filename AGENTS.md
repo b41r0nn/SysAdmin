@@ -8,6 +8,8 @@
 
 ## Cambios de la auditoría 2026-10-14 (rama `fix/auditoria-2026-10-14`)
 
+- **Documentos**: informe de hallazgos en `docs/informes/AUDITORIA_SYSADMIN_2026-10-14.md`; instrucciones B1–B13 en `docs/informes/PROMPT_CORRECCIONES_AUDITORIA_2026-10-14.md`.
+
 - **B1 — Sesión**: timeout por inactividad real (`SESSION_COOKIE_AGE` configurable por `.env`, default 180 s, + `SESSION_SAVE_EVERY_REQUEST=True`).
 - **B2 — `/media/`**: servido por Django (`core.views.media_protegido`) con prefijos por rol en `MEDIA_PERMISOS`; **todo campo de upload nuevo debe registrarse ahí** (hay un test que lo exige).
 - **B3 — Dependencias**: CVEs parcheadas en `requirements.txt` (Django 4.2.30, gunicorn 22, Pillow 12.3, cryptography 49, requests 2.33, python-dotenv 1.2.2).
