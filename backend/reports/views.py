@@ -4,14 +4,13 @@ import os
 import re
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Prefetch, Q
 from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils import timezone
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
@@ -561,7 +560,7 @@ def inventario_pdf(request):
         for c in campos:
             raw = CAMPOS_INVENTARIO[c][1](activo, asignacion)
             if c == "estado":
-                valor = mark_safe(f'<span class="badge {activo.estado}">{raw}</span>')
+                valor = format_html('<span class="badge {}">{}</span>', activo.estado, raw)
                 vacio = False
             elif c == "valor_compra" and raw is not None:
                 valor = f"${raw:,.0f} COP"
@@ -734,7 +733,7 @@ def inventario_excel(request):
     if filtrar_por_tipo:
         activos = activos.filter(tipo_dispositivo__in=tipos_solicitados)
 
-    for row_idx, activo in enumerate(activos, start=start_row):
+    for _row_idx, activo in enumerate(activos, start=start_row):
         asignacion = activo.asignaciones_activas[0] if activo.asignaciones_activas else None
         row = [CAMPOS_INVENTARIO[c][1](activo, asignacion) for c in campos]
         ws.append(row)

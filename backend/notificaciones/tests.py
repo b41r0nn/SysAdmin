@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -81,7 +81,7 @@ class NotificacionModelTests(TestCase):
     def test_ordering_por_fecha_desc(self):
         u = _user("tecnico")
         old = Notificacion.objects.create(usuario=u, tipo="aviso", titulo="Old")
-        new = Notificacion.objects.create(usuario=u, tipo="aviso", titulo="New")
+        Notificacion.objects.create(usuario=u, tipo="aviso", titulo="New")
         Notificacion.objects.filter(pk=old.pk).update(
             fecha_creacion=timezone.now() - timedelta(days=5)
         )
@@ -326,7 +326,7 @@ class GenerarNotificacionesTests(TestCase):
         )
 
     def test_superadmin_recibe_todas_las_notificaciones(self):
-        u = _user("superadmin")
+        _user("superadmin")
         _activo("SN-S1", fecha_compra=HOY - timedelta(days=400), garantia_fabrica_meses=12)
         genera = _user("superadmin")
         generar_notificaciones(genera)

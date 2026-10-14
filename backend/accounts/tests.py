@@ -1,5 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.test import override_settings
 from django.template import Context, Template
 from django.test import TestCase
 from django.urls import reverse

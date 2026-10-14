@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from yule.client import build_client
 from yule.forms import ConfiguracionYuleForm
-from yule.models import ConfiguracionYule, EquipoOCS, SincronizacionLog
+from yule.models import ConfiguracionYule, EquipoOCS
 from yule.sync import sincronizar_equipos_ocs
 
 CustomUser = get_user_model()
@@ -904,7 +904,7 @@ class YuleVinculacionTests(TestCase):
 
     def test_vincular_exige_post(self):
         eq = _equipo()
-        activo = _activo()
+        _activo()
         resp = self.client.get(reverse("yule:vincular_activo", args=[eq.pk]))
         self.assertEqual(resp.status_code, 405)
         eq.refresh_from_db()

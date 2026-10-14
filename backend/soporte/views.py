@@ -439,7 +439,7 @@ def tickets_excel(request):
         "Prioridad", "Estado", "Asignado a", "Creado",
     ]
     start_row = _apply_redihos_header(ws, headers, "Tickets de Soporte")
-    for idx, t in enumerate(qs.order_by("-fecha_creacion"), start=start_row):
+    for _idx, t in enumerate(qs.order_by("-fecha_creacion"), start=start_row):
         row = [
             t.pk,
             t.asunto,
