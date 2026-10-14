@@ -171,6 +171,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ACCEL_REDIRECT = False
 
 OCS_BASE_URL = os.environ.get('OCS_BASE_URL', '').rstrip('/')
 OCS_USER = os.environ.get('OCS_USER', '')
