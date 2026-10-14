@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from accounts.permisos import PERMISOS_POR_ROL, requiere_permiso
+from accounts.permisos import requiere_permiso
 from administracion.models import ConfiguracionSistema
 from inventario.models import Activo
 from notificaciones.services import aviso_usuario, encolar_email
@@ -34,7 +34,6 @@ from .models import (
     ESTADOS_PLAN,
     ESTADOS_ORDEN,
     PRIORIDADES,
-    CRITICIDADES,
 )
 from .constants import PARTES_POR_TIPO
 from .services import hoja_de_vida_pdf_bytes, reporte_activos_pdf_bytes, snapshot_software_ocs
