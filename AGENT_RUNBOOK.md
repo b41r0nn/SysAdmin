@@ -131,6 +131,21 @@ se activa `USER` no-root en el `Dockerfile`, hay que `sudo chown -R 1000:1000
   Si `PASSWORDS_ENCRYPTION_KEY` estuviera vacía, `build_fernet()` deriva la clave
   de `SECRET_KEY` (`crypto.py:13`) y con gunicorn multi-worker cada worker
   tendría una distinta → el vault se descifra de forma intermitente.
+- **Rotar `PASSWORDS_ENCRYPTION_KEY`** (la clave del vault) no es cambiar el
+  valor sin más: hay que re-cifrar los secretos existentes con la clave nueva.
+  Procedimiento: (1) guardar la clave actual; (2) descifrar con la vieja y
+  re-cifrar con la nueva los secretos del vault (`passwords`), la contraseña de
+  Yule (`yule_configuracionyule.password_cifrada`) y las claves SMTP/OCS de
+  `administracion`; (3) actualizar `.env` y reiniciar `sysadmin_django`; (4)
+  verificar el acceso a una credencial del vault. Con
+  `PASSWORDS_ENCRYPTION_KEY` definida, rotar `SECRET_KEY` **ya no** rompe el
+  vault. `production.py` ahora **exige** la clave (`ImproperlyConfigured` si
+  falta) y `core.checks` emite el warning `sysadmin.W001` en el resto de entornos.
+- **Backup**: el script (`deploy/backup.sh`, instalado en
+  `/opt/sysadmin/backups/backup.sh`) separa el `.env` —que contiene la clave del
+  vault— del dump+media y lo cifra con `BACKUP_ENV_PASSPHRASE`. Sin esa passphrase
+  **no** se respalda el `.env`: guárdala en un gestor de secretos, porque sin ella
+  el vault es irrecuperable. Probar un restore periódicamente.
 - `SECRET_KEY` **sí** está fijado en el `.env` de producción (67 chars). Si
   faltara, `base.py:15` genera una clave aleatoria en cada arranque: se pierden
   las sesiones en cada restart.
@@ -188,6 +203,6 @@ Total en base: 121 filas de software.
 ## Pendientes
 
 1. **Vincular los 23 activos que no tienen OCS** — el cron diario corre hasta que haya más de un equipo. Es el pendiente que más valor aporta ahora.
-2. **Backup a NAS** — `/opt/sysadmin/backups/backup.sh` existe sin destino/cron configurado. Ya corregida la ruta de media (`/opt/sysadmin/app/backend/media/`) y agregado el `.env` al paquete; falta IP/usuario/ruta del NAS. Ojo: el cron actual del server pertenece al Hikvision, no pisarlo.
+2. **Backup a NAS** — `deploy/backup.sh` (instalado en `/opt/sysadmin/backups/backup.sh`) ya es robusto: `set -euo pipefail`, sin `--delete` (el NAS conserva historial), `.env` separado y cifrado. Falta definir `NAS_IP`/`NAS_USER`/`NAS_PATH` y `BACKUP_ENV_PASSPHRASE`, y **probar un restore**. Ojo: el cron actual del server pertenece al Hikvision, no pisarlo.
 3. **Seguir cargando datos** — el usuario está preparando la flota por partes; 24 activos hoy, el resto cuando termine de probar.
 4. `OCS_OPT_LOGLEVEL` volver a `0` (está en `512`) y rotar la contraseña de la BD de OCS (sigue la de fábrica).

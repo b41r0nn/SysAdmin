@@ -45,6 +45,21 @@ class ClientIPTests(TestCase):
         self.assertIsNone(get_client_ip(SimpleNamespace()))
 
 
+class VaultKeyCheckTests(TestCase):
+    def _run(self):
+        from core.checks import check_passwords_encryption_key
+
+        return check_passwords_encryption_key(None)
+
+    @override_settings(PASSWORDS_ENCRYPTION_KEY="")
+    def test_w001_si_falta_clave(self):
+        self.assertEqual([e.id for e in self._run()], ["sysadmin.W001"])
+
+    @override_settings(PASSWORDS_ENCRYPTION_KEY="clave-fernet-de-prueba")
+    def test_sin_warning_con_clave(self):
+        self.assertEqual(self._run(), [])
+
+
 class DashboardTests(TestCase):
     def setUp(self):
         self.user = _user("superadmin")
