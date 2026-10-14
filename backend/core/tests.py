@@ -84,6 +84,17 @@ class DashboardTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+def _cerrar_archivo(resp):
+    """Libera el handle del archivo de un FileResponse antes de borrar tmpdir.
+
+    Consumir streaming_content deja que el wrapper del test client cierre el
+    archivo con close_old_connections desconectado. resp.close() directo
+    dispara request_finished y, con PostgreSQL, cierra la conexión de BD en
+    mitad del TestCase.
+    """
+    b"".join(resp.streaming_content)
+
+
 class MediaProtegidoTests(TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -138,7 +149,7 @@ class MediaProtegidoTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp["Content-Type"], "image/png")
         self.assertTrue(resp["Content-Disposition"].startswith("inline"))
-        resp.close()  # libera el handle del archivo antes de borrar tmpdir
+        _cerrar_archivo(resp)
 
     def test_usuario_sin_permiso_obtiene_404(self):
         # Todos los roles reales tienen al menos lectura en los prefijos registrados.
@@ -182,7 +193,7 @@ class MediaProtegidoTests(TestCase):
             resp = client.get(self._url("documentos/2026/10/malicioso.html"))
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp["Content-Disposition"].startswith("attachment"))
-        resp.close()
+        _cerrar_archivo(resp)
 
     def test_x_accel_redirect_en_produccion(self):
         client = Client()
@@ -200,7 +211,7 @@ class MediaProtegidoTests(TestCase):
         with self._override_media():
             resp = client.get(self._url("documentos/2026/10/malicioso.html"))
         self.assertEqual(resp.status_code, 200)
-        resp.close()
+        _cerrar_archivo(resp)
 
     def test_todos_los_upload_to_estan_registrados(self):
         """Si se añade un nuevo FileField/ImageField sin registrar su prefijo,
