@@ -5,7 +5,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('./jetbrains-mono-latin-400.woff2') format('woff2');
+  src: url('./jetbrains-mono-400-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -13,7 +13,7 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('./jetbrains-mono-latin-600.woff2') format('woff2');
+  src: url('./jetbrains-mono-600-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -21,7 +21,7 @@
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url('./sora-latin-300.woff2') format('woff2');
+  src: url('./sora-300-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -29,7 +29,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('./sora-latin-400.woff2') format('woff2');
+  src: url('./sora-400-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -37,7 +37,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('./sora-latin-500.woff2') format('woff2');
+  src: url('./sora-500-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -45,7 +45,7 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('./sora-latin-600.woff2') format('woff2');
+  src: url('./sora-600-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -53,5 +53,5 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('./sora-latin-700.woff2') format('woff2');
+  src: url('./sora-700-latin.woff2') format('woff2');
 }
