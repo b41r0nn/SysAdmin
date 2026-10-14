@@ -41,6 +41,17 @@ SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS = int(
     os.environ.get("SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS", "60")
 )
 
+# Caché compartida entre los workers de gunicorn: el cooldown por IP de soporte
+# debe ser visible desde todos los procesos, pero el backend por defecto
+# (LocMemCache) es por proceso. FileBasedCache usa el mismo directorio del
+# contenedor para todos los workers.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": os.environ.get("DJANGO_CACHE_DIR", "/tmp/sysadmin_django_cache"),
+    }
+}
+
 # En producción nginx sirve /media/ a través de X-Accel-Redirect (vista media_protegido).
 MEDIA_ACCEL_REDIRECT = True
 
