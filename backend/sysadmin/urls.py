@@ -1,10 +1,11 @@
 from django.contrib import admin
 from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
+
+from core.views import media_protegido
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('media/<path:ruta>', media_protegido, name='media'),
     path('', include('core.urls')),
     path('accounts/', include('accounts.urls')),
     path('usuarios/', include('usuarios.urls', namespace='usuarios')),
@@ -20,6 +21,3 @@ urlpatterns = [
     path('licencias/', include('licencias.urls', namespace='licencias')),
     path('prestamos/', include('prestamos.urls', namespace='prestamos')),
 ]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

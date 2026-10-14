@@ -1,16 +1,15 @@
 from django.contrib import admin, messages
 from django.utils.html import format_html
-from django.utils import timezone
 
 from .models import EquipoOCS, SincronizacionLog, ConfiguracionYule
-from .sync import sincronizar_equipos_ocs, buscar_posibles_matches
+from .sync import sincronizar_equipos_ocs
 
 
 @admin.action(description="Sincronizar con OCS")
 def action_sincronizar_ahora(modeladmin, request, queryset):
     """Acción para sincronizar OCS desde admin"""
     log, mensaje = sincronizar_equipos_ocs(usuario=request.user, force=True)
-    
+
     if log.fue_exitosa:
         messages.success(request, mensaje)
     else:
@@ -36,17 +35,17 @@ class ConfiguracionYuleAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
     )
-    
+
     def url_resumen(self, obj):
         return obj.url or "—"
     url_resumen.short_description = "URL"
-    
+
     def ultima_sincronizacion_display(self, obj):
         if obj.ultima_sincronizacion:
             return obj.ultima_sincronizacion.strftime("%Y-%m-%d %H:%M:%S")
         return "Nunca"
     ultima_sincronizacion_display.short_description = "Última sincronización"
-    
+
     def save_model(self, request, obj, form, change):
         if not change:
             obj.creada_por = request.user
@@ -98,7 +97,7 @@ class EquipoOCSAdmin(admin.ModelAdmin):
         "dias_sin_reporte",
         "esta_vinculado",
     )
-    
+
     fieldsets = (
         ("Identificación OCS", {
             "fields": ("id_ocs", "nombre_host", "tipo_dispositivo", "usuario_dominio"),
@@ -123,7 +122,7 @@ class EquipoOCSAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
     )
-    
+
     def estado_link(self, obj):
         if obj.visto_en_ultima_sync:
             return format_html(
@@ -134,13 +133,13 @@ class EquipoOCSAdmin(admin.ModelAdmin):
                 '<span style="color: red; font-weight: bold;">✗ No visto</span>'
             )
     estado_link.short_description = "Estado"
-    
+
     def mac_address_truncado(self, obj):
         if obj.mac_address:
             return obj.mac_address[:17]
         return "—"
     mac_address_truncado.short_description = "MAC"
-    
+
     def dias_sin_reporte_display(self, obj):
         dias = obj.dias_sin_reporte
         if dias is None:
@@ -152,7 +151,7 @@ class EquipoOCSAdmin(admin.ModelAdmin):
         else:
             return format_html(f'<span style="color: red;">{dias}d</span>')
     dias_sin_reporte_display.short_description = "Días sin reporte"
-    
+
     def activo_local_link(self, obj):
         if obj.activo_local:
             url = f"/admin/inventario/activo/{obj.activo_local.id}/change/"
@@ -184,7 +183,7 @@ class SincronizacionLogAdmin(admin.ModelAdmin):
         "detalles_json",
     )
     search_fields = ("mensaje_error", "realizado_por__username")
-    
+
     fieldsets = (
         ("Resultado", {
             "fields": ("estado", "mensaje_error"),
@@ -210,11 +209,11 @@ class SincronizacionLogAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
     )
-    
+
     def fecha_inicio_display(self, obj):
         return obj.fecha_inicio.strftime("%Y-%m-%d %H:%M:%S")
     fecha_inicio_display.short_description = "Fecha/Hora"
-    
+
     def estado_badge(self, obj):
         colores = {
             "exitosa": "green",
@@ -228,7 +227,7 @@ class SincronizacionLogAdmin(admin.ModelAdmin):
             obj.get_estado_display()
         )
     estado_badge.short_description = "Estado"
-    
+
     def equipos_nuevos_badge(self, obj):
         if obj.equipos_nuevos > 0:
             return format_html(
@@ -237,19 +236,19 @@ class SincronizacionLogAdmin(admin.ModelAdmin):
             )
         return "0"
     equipos_nuevos_badge.short_description = "Nuevos"
-    
+
     def duracion_display(self, obj):
         if obj.duracion_segundos:
             return f"{obj.duracion_segundos}s"
         return "—"
     duracion_display.short_description = "Duración"
-    
+
     def has_add_permission(self, request):
         return False
-    
+
     def has_change_permission(self, request, obj=None):
         return False
-    
+
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
 

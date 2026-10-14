@@ -75,7 +75,7 @@ cd /opt/sysadmin/app
 
 # Generar las dos claves cripto (guardar copia en tu gestor de passwords!)
 echo "SECRET_KEY:           $(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')"
-echo "PASSWORDS_ENCRYPTION: $(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')"
+echo "PASSWORDS_ENCRYPTION: $(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
 
 # password de postgres:
 echo "POSTGRES_PASSWORD:    $(openssl rand -hex 24)"
@@ -111,8 +111,10 @@ OCS_TOKEN=<token_ocs>
 OCS_VERIFY_SSL=False
 ```
 
-> **⚠️ CRÍTICO:** si faltan `SECRET_KEY`/`PASSWORDS_ENCRYPTION_KEY`, el vault de passwords
-> se vuelve ilegible (clave random por arranque). Definirlas ANTES del primer `up`.
+> **⚠️ Claves cripto:** falta `SECRET_KEY` → producción **no arranca**; falta
+> `PASSWORDS_ENCRYPTION_KEY` → se deriva de `SECRET_KEY` (aviso `W001`, no bloquea);
+> rotar `SECRET_KEY` sin clave propia deja **ilegible** el vault; poner una clave
+> nueva con datos ya cifrados requiere **re-cifrar** antes.
 
 ```bash
 sudo chmod 600 /opt/sysadmin/app/.env

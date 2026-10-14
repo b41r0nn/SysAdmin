@@ -1,7 +1,7 @@
 import calendar
 from datetime import date
 
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models import Max
 from django.utils import timezone
 
@@ -144,9 +144,17 @@ class Activo(models.Model):
         return f"[{self.get_tipo_dispositivo_display()}] {self.marca} {self.modelo} — {self.serial}"
 
     def save(self, *args, **kwargs):
-        if self.numero_interno is None:
+        if self.numero_interno is not None:
+            return super().save(*args, **kwargs)
+        for intento in range(5):
             self.numero_interno = _siguiente_numero_interno()
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                self.numero_interno = None
+                if intento == 4:
+                    raise
 
     # ── Properties ───────────────────────────────────────────────────────────
     @property

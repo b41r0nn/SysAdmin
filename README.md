@@ -579,7 +579,7 @@ BD: PostgreSQL 15 en contenedor
 - ✅ **Auditoría de intentos fallidos**: signals en `accounts/signals.py` registran `login_fallido` y `cuenta_bloqueada` (usuario + IP) en `RegistroAuditoria` (módulo `auth`)
 - ✅ **Password validators**: min 10 caracteres + similitud con atributos + comunes + numéricos
 - ✅ **Headers de seguridad**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin` (verificados en runtime)
-- ✅ **Cookies de sesión**: `HttpOnly`, `SameSite=Lax`, sesión expira al cerrar navegador; tiempo de vida 8 h
+- ✅ **Cookies de sesión**: `HttpOnly`, `SameSite=Lax`, sesión expira al cerrar navegador; timeout por inactividad configurable con `SESSION_COOKIE_AGE` (default 180 s) + `SESSION_SAVE_EVERY_REQUEST=True`
 - ✅ **HTTPS interno LAN**: cert autofirmado en `nginx/certs/` (CN=192.168.1.250, 825 días); nginx con server 443 ssl + redirect 301 de HTTP; accesos `https://192.168.1.250:6060` y `http://...:6061` → https
 - ✅ Suite automatizada **313/313 OK al cerrar esta fase** (hoy **404/404**) · `manage.py check` 0 issues · `makemigrations --check` sin cambios
 

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.ruff_cache/
+.coverage
+db.sqlite3
+*.sqlite3
+media/
+staticfiles/
+.git
+.env
+*.md
