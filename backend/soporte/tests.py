@@ -2,6 +2,7 @@ import io
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import load_workbook
@@ -286,6 +287,7 @@ class ReportePublicoTests(TestCase):
     URL = "/soporte/reportar-publico/"
 
     def setUp(self):
+        cache.clear()
         self.admin = _user("admin")
         self.tecnico = _user("tecnico")
 
@@ -405,6 +407,28 @@ class ReportePublicoTests(TestCase):
                 "descripcion": f"Reporte {i}.",
             })
         self.assertEqual(Ticket.objects.count(), 3)
+
+    @override_settings(SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS=60)
+    def test_cooldown_por_ip_bloquea_cliente_sin_cookies(self):
+        payload = {
+            "nombre": "Ana",
+            "area": "Logística",
+            "contacto": "",
+            "descripcion": "Primer reporte.",
+        }
+        self.client.post(self.URL, payload)
+        self.assertEqual(Ticket.objects.count(), 1)
+
+        # Cliente nuevo, SIN cookies de sesión: debe bloquearse por IP.
+        otro = Client()
+        resp = otro.post(self.URL, {
+            "nombre": "Ana",
+            "area": "Logística",
+            "contacto": "",
+            "descripcion": "Segundo reporte sin cookies.",
+        })
+        self.assertEqual(Ticket.objects.count(), 1)
+        self.assertContains(resp, "Esperá un momento")
 
 
 # ─── Navegación ─────────────────────────────────────────────────
