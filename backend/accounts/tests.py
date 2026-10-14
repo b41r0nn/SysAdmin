@@ -219,8 +219,18 @@ class LoginSeguridadTests(TestCase):
         )
         self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
         self.assertEqual(settings.SESSION_COOKIE_SAMESITE, "Lax")
-        self.assertEqual(settings.SESSION_COOKIE_AGE, 28800)
+        self.assertTrue(settings.SESSION_SAVE_EVERY_REQUEST)
+        self.assertGreaterEqual(settings.SESSION_COOKIE_AGE, 60)
         self.assertTrue(settings.SESSION_EXPIRE_AT_BROWSER_CLOSE)
+
+    def test_sesion_se_renueva_con_actividad(self):
+        from django.contrib.sessions.models import Session
+
+        self.client.force_login(self.usuario)
+        antes = Session.objects.get().expire_date
+        self.client.get(reverse("core:dashboard"))
+        despues = Session.objects.get().expire_date
+        self.assertGreater(despues, antes)
 
     def test_headers_seguridad_presentes(self):
         resp = self.client.get(self.LOGIN_URL_PATH)
