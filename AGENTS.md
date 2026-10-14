@@ -12,7 +12,7 @@
 
 - **B1 — Sesión**: timeout por inactividad real (`SESSION_COOKIE_AGE` configurable por `.env`, default 180 s, + `SESSION_SAVE_EVERY_REQUEST=True`).
 - **B2 — `/media/`**: servido por Django (`core.views.media_protegido`) con prefijos por rol en `MEDIA_PERMISOS`; **todo campo de upload nuevo debe registrarse ahí** (hay un test que lo exige).
-- **B3 — Dependencias**: CVEs parcheadas en `requirements.txt` (Django 4.2.30, gunicorn 22, Pillow 12.3, cryptography 49, requests 2.33, python-dotenv 1.2.2).
+- **B3 — Dependencias**: CVEs parcheadas en `requirements.txt` (Django 4.2.30, gunicorn 22, Pillow 12.3, cryptography 50, requests 2.33, python-dotenv 1.2.2).
 - **B4 — Atomicidad**: movimientos de inventario e importaciones con `transaction.atomic()` + `select_for_update` y reintento en `Activo.save()`.
 - **B5 — IP real**: `core.utils.get_client_ip` (último de `X-Forwarded-For`) para axes/auditoría + `AXES_CLIENT_IP_CALLABLE` + nginx `X-Forwarded-For $remote_addr`.
 - **B6 — Rate limit**: formulario público de soporte con cooldown por IP en Django (caché `FileBasedCache` compartida entre workers en producción, `DJANGO_CACHE_DIR`) + `limit_req` en nginx (autoritativo).
