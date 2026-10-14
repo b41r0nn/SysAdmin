@@ -440,4 +440,4 @@ administrador). El más usado es `/server=`, que además **sobrescribe** el
 - Releases del agente: https://github.com/OCSInventory-NG/WindowsAgent/releases
 - Documentación del servidor OCS: http://192.168.1.250:8081/ocsreports/
 - Contexto del servidor y del receptor: `OCS_INVENTORY_SETUP.md`
-- Informe del incidente de inventario: `INFORME_OCS_YULE_2026-09-25.md`
+- Informe del incidente de inventario: `docs/informes/INFORME_OCS_YULE_2026-09-25.md`
