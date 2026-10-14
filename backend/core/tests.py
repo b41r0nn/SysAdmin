@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.staticfiles import finders
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -214,3 +215,49 @@ class MediaProtegidoTests(TestCase):
                     f"{model.__name__}.{field.name} -> upload_to='{upload_to}' no está "
                     f"cubierto por MEDIA_PERMISOS (prefijo calculado: '{prefijo}')",
                 )
+
+
+class VendorAssetsTests(TestCase):
+    """Los assets front (bootstrap, htmx, fullcalendar, fonts) se sirven
+    localmente desde static/vendor; ninguna plantilla debe apuntar a un CDN."""
+
+    HOSTS_CDN = ("cdn.jsdelivr.net", "unpkg.com", "fonts.googleapis.com", "fonts.gstatic.com")
+
+    PLANTILLAS = (
+        "templates/base.html",
+        "inventario/templates/inventario/qr_publico.html",
+        "soporte/templates/soporte/reporte_publico.html",
+        "soporte/templates/soporte/reporte_publico_exito.html",
+        "mantenimiento/templates/mantenimiento/calendario.html",
+    )
+
+    VENDOR = (
+        "vendor/bootstrap/bootstrap.min.css",
+        "vendor/bootstrap/bootstrap.bundle.min.js",
+        "vendor/bootstrap-icons/bootstrap-icons.min.css",
+        "vendor/bootstrap-icons/fonts/bootstrap-icons.woff2",
+        "vendor/htmx/htmx.min.js",
+        "vendor/fullcalendar/index.global.min.js",
+        "vendor/fonts/fonts.css",
+    )
+
+    def test_plantillas_sin_cdn(self):
+        base = Path(settings.BASE_DIR)
+        for rel in self.PLANTILLAS:
+            contenido = (base / rel).read_text(encoding="utf-8")
+            for host in self.HOSTS_CDN:
+                self.assertNotIn(host, contenido, f"{rel} todavía referencia {host}")
+
+    def test_assets_vendor_disponibles(self):
+        for rel in self.VENDOR:
+            self.assertIsNotNone(finders.find(rel), f"falta el asset vendor/{rel}")
+
+    def test_base_renderiza_assets_locales(self):
+        client = Client()
+        client.force_login(_user("admin", username="vendor_admin"))
+        resp = client.get(reverse("core:dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn("/static/vendor/bootstrap/bootstrap.min.css", html)
+        self.assertIn("/static/vendor/htmx/htmx.min.js", html)
+        self.assertNotIn("cdn.jsdelivr.net", html)
