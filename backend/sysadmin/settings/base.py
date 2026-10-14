@@ -154,6 +154,7 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1  # hora
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_RESET_ON_SUCCESS = True
+AXES_CLIENT_IP_CALLABLE = "core.utils.get_client_ip"
 
 # Mensajes genéricos: no revelar si el usuario existe o no
 AXES_IP_COOLOFF_MESSAGE = "Demasiados intentos fallidos. Intente de nuevo más tarde."
