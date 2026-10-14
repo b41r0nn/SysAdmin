@@ -1,18 +1,19 @@
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
+import logging
+
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 import openpyxl
 
 from .models import Usuario
 from .forms import UsuarioForm
 from accounts.permisos import requiere_permiso
 
-# ── Importación masiva desde Excel ───────────────────────────────────────────
-# Nombres de columna aceptados del archivo (case-insensitive). Cada entrada:
-# columna_excel -> (campo_modelo, transformador(valor_crudo))
-import openpyxl
+logger = logging.getLogger(__name__)
 
 CAMPOS_IMPORTACION = {
     "nombre completo": ("nombre_completo", "_reordenar_nombre"),
@@ -166,9 +167,11 @@ def confirmar_importar_usuarios(request):
             duplicados += 1
             continue
         try:
-            Usuario.objects.create(**datos)
+            with transaction.atomic():
+                Usuario.objects.create(**datos)
             creados += 1
-        except Exception:
+        except (IntegrityError, ValidationError, ValueError, TypeError) as exc:
+            logger.warning("Importación: fila con error (%s): %s", datos.get("documento_identidad"), exc)
             errores += 1
 
     messages.success(
