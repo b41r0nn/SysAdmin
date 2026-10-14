@@ -943,7 +943,7 @@ def _normalizar_valor(label, valor):
     if campo in ("garantia_fabrica_meses", "anios_garantia_extendida"):
         try:
             return int(valor)
-        except Exception:
+        except (ValueError, TypeError):
             return None
     if campo == "fecha_compra":
         # intenta varios formatos
@@ -951,13 +951,13 @@ def _normalizar_valor(label, valor):
             try:
                 dt = datetime.strptime(valor, fmt).date()
                 return dt.isoformat()  # string ISO para guardar en sesión (JSON)
-            except Exception:
-                pass
+            except ValueError:
+                continue
         return None
     if campo == "pulgadas":
         try:
             return float(valor.replace(",", "."))
-        except Exception:
+        except (ValueError, TypeError):
             return None
     return valor
 
@@ -1036,6 +1036,7 @@ def importar_activos(request):
         try:
             filas, advertencias = _parsear_excel_activos(archivo)
         except Exception:
+            logger.exception("No se pudo leer el archivo .xlsx de activos")
             messages.error(request, "No se pudo leer el archivo. ¿Es un .xlsx válido?")
             return redirect("inventario:importar")
 

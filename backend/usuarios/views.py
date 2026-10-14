@@ -115,6 +115,7 @@ def importar_usuarios(request):
         try:
             filas, advertencias = _parsear_excel_usuarios(archivo)
         except Exception:
+            logger.exception("No se pudo leer el archivo .xlsx de usuarios")
             messages.error(request, "No se pudo leer el archivo. ¿Es un .xlsx válido?")
             return redirect("usuarios:importar")
 
