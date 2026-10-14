@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import ConfiguracionYule, EquipoOCS
+from .models import ConfiguracionYule
 
 
 class VincularActivoForm(forms.Form):

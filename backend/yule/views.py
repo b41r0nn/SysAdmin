@@ -30,15 +30,15 @@ def index(request):
     """Vista principal de Yule - Status de configuración"""
     client = build_client()
     config = ConfiguracionYule.objects.filter(activa=True).order_by("id").first()
-    
+
     # Estadísticas
     total_equipos = EquipoOCS.objects.count()
     equipos_vinculados = EquipoOCS.objects.filter(activo_local__isnull=False).count()
     equipos_sin_match = EquipoOCS.objects.filter(activo_local__isnull=True).count()
-    
+
     # Últimas sincronizaciones
     ultimas_syncs = SincronizacionLog.objects.all()[:5]
-    
+
     # Test de conexión (solo si la integración está activa y configurada)
     conexion_ok = False
     error_conexion = ""
@@ -46,7 +46,7 @@ def index(request):
         conexion_ok = client.test_connection()
         if not conexion_ok:
             error_conexion = "No se puede conectar a OCS. Verificar credenciales."
-    
+
     # Datos de conexión: prioridad BD, fallback settings (despliegue actual)
     if config and config.url and config.usuario:
         ocs_base_url = config.url
@@ -56,9 +56,9 @@ def index(request):
         ocs_base_url = settings.OCS_BASE_URL
         ocs_user = settings.OCS_USER
         ocs_token = _mask_token(settings.OCS_TOKEN)
-    
+
     integracion_activa = config.integracion_activa if config else bool(ocs_base_url and ocs_user)
-    
+
     context = {
         "ocs_base_url": ocs_base_url,
         "ocs_user": ocs_user,
@@ -81,7 +81,7 @@ def index(request):
 def configuracion(request):
     """Editar la configuración OCS (url/usuario/contraseña/activa/sync)."""
     config = ConfiguracionYule.objects.filter(activa=True).order_by("id").first()
-    
+
     if request.method == "POST":
         if config is None:
             config = ConfiguracionYule(nombre="Configuración OCS", activa=True)
@@ -95,7 +95,7 @@ def configuracion(request):
             return redirect("yule:index")
     else:
         form = ConfiguracionYuleForm(instance=config)
-    
+
     return render(request, "yule/configuracion_form.html", {
         "form": form,
         "config": config,
@@ -107,7 +107,7 @@ def configuracion(request):
 def equipos_lista(request):
     """Lista de todos los equipos OCS sincronizados"""
     equipos = EquipoOCS.objects.all()
-    
+
     # Filtros
     filtro = request.GET.get("filtro", "todos")
     if filtro == "vinculados":
@@ -116,7 +116,7 @@ def equipos_lista(request):
         equipos = equipos.filter(activo_local__isnull=True)
     elif filtro == "sin_reporte":
         equipos = equipos.filter(visto_en_ultima_sync=False)
-    
+
     # Búsqueda
     q = request.GET.get("q", "").strip()
     if q:
@@ -126,7 +126,7 @@ def equipos_lista(request):
             Q(id_ocs__icontains=q) |
             Q(usuario_dominio__icontains=q)
         )
-    
+
     # Paginación simple
     pagina = request.GET.get("page", 1)
     items_por_pagina = 25
@@ -134,15 +134,15 @@ def equipos_lista(request):
         pagina = int(pagina)
     except (ValueError, TypeError):
         pagina = 1
-    
+
     start_idx = (pagina - 1) * items_por_pagina
     end_idx = start_idx + items_por_pagina
-    
+
     total_items = equipos.count()
     equipos_paginados = equipos[start_idx:end_idx]
-    
+
     total_paginas = (total_items + items_por_pagina - 1) // items_por_pagina
-    
+
     context = {
         "equipos": equipos_paginados,
         "filtro": filtro,
@@ -153,7 +153,7 @@ def equipos_lista(request):
         "tiene_pagina_anterior": pagina > 1,
         "tiene_pagina_siguiente": pagina < total_paginas,
     }
-    
+
     return render(request, "yule/equipos_lista.html", context)
 
 
@@ -292,16 +292,16 @@ def api_buscar_activos(request):
 @requiere_permiso("inventario", "escritura")
 @require_POST
 def sincronizar(request):
-    
+
     logger.info(f"Sincronización iniciada por {request.user.username}")
-    
+
     log, mensaje = sincronizar_equipos_ocs(usuario=request.user, force=True)
-    
+
     if log.fue_exitosa:
         messages.success(request, mensaje)
     else:
         messages.error(request, mensaje)
-    
+
     return redirect("yule:index")
 
 
@@ -309,17 +309,17 @@ def sincronizar(request):
 def historial_sincronizaciones(request):
     """Historial de sincronizaciones"""
     logs = SincronizacionLog.objects.all()
-    
+
     # Filtros
     estado = request.GET.get("estado", "")
     if estado:
         logs = logs.filter(estado=estado)
-    
+
     context = {
         "logs": logs[:100],  # Últimas 100
         "estado_filtro": estado,
     }
-    
+
     return render(request, "yule/historial_sincronizaciones.html", context)
 
 
@@ -347,13 +347,13 @@ def equipos_sin_match(request):
 def test_conexion_ocs(request):
     """API para testear conexión OCS"""
     client = build_client()
-    
+
     if not client.is_configured():
         return JsonResponse({
             "success": False,
             "error": "OCS no configurado",
         })
-    
+
     try:
         if client.test_connection():
             return JsonResponse({

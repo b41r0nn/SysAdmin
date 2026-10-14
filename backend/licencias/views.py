@@ -1,5 +1,4 @@
 import os
-from datetime import date
 
 from django.conf import settings
 from django.contrib import messages
@@ -23,21 +22,21 @@ LOGO_PATH = os.path.join(settings.BASE_DIR, "static", "img", "logo_redihos_mark.
 # Cada entrada: key: (label, extractor(licencia))
 # El orden define el orden de columnas en el reporte completo.
 CAMPOS_LICENCIAS = {
-    "id": ("ID", lambda l: l.id),
-    "nombre": ("Software", lambda l: l.nombre),
-    "version": ("Versión", lambda l: l.version),
-    "proveedor": ("Proveedor / editor", lambda l: l.proveedor),
-    "clave": ("Clave / serial", lambda l: l.clave),
-    "tipo": ("Tipo de licencia", lambda l: l.get_tipo_display()),
-    "cantidad": ("Cantidad", lambda l: l.cantidad),
-    "estado": ("Estado", lambda l: dict(ESTADOS_LICENCIA)[l.estado_efectivo]),
-    "fecha_compra": ("Fecha de compra", lambda l: l.fecha_compra.strftime("%Y-%m-%d") if l.fecha_compra else ""),
-    "fecha_vencimiento": ("Fecha de vencimiento", lambda l: l.fecha_vencimiento.strftime("%Y-%m-%d") if l.fecha_vencimiento else ""),
-    "costo": ("Costo", lambda l: float(l.costo) if l.costo else None),
-    "responsable": ("Responsable", lambda l: l.responsable),
-    "cubiertos": ("Equipos cubiertos", lambda l: l.activos.count()),
-    "observaciones": ("Observaciones", lambda l: l.observaciones),
-    "fecha_creacion": ("Fecha de creación", lambda l: l.fecha_creacion.strftime("%Y-%m-%d")),
+    "id": ("ID", lambda lic: lic.id),
+    "nombre": ("Software", lambda lic: lic.nombre),
+    "version": ("Versión", lambda lic: lic.version),
+    "proveedor": ("Proveedor / editor", lambda lic: lic.proveedor),
+    "clave": ("Clave / serial", lambda lic: lic.clave),
+    "tipo": ("Tipo de licencia", lambda lic: lic.get_tipo_display()),
+    "cantidad": ("Cantidad", lambda lic: lic.cantidad),
+    "estado": ("Estado", lambda lic: dict(ESTADOS_LICENCIA)[lic.estado_efectivo]),
+    "fecha_compra": ("Fecha de compra", lambda lic: lic.fecha_compra.strftime("%Y-%m-%d") if lic.fecha_compra else ""),
+    "fecha_vencimiento": ("Fecha de vencimiento", lambda lic: lic.fecha_vencimiento.strftime("%Y-%m-%d") if lic.fecha_vencimiento else ""),
+    "costo": ("Costo", lambda lic: float(lic.costo) if lic.costo else None),
+    "responsable": ("Responsable", lambda lic: lic.responsable),
+    "cubiertos": ("Equipos cubiertos", lambda lic: lic.activos.count()),
+    "observaciones": ("Observaciones", lambda lic: lic.observaciones),
+    "fecha_creacion": ("Fecha de creación", lambda lic: lic.fecha_creacion.strftime("%Y-%m-%d")),
 }
 
 BADGES_ESTADO = {
@@ -61,7 +60,7 @@ def _licencias_filtradas(request):
 
     if estado:
         # El estado efectivo se calcula en Python según vencimiento
-        objetos = [l for l in qs if l.estado_efectivo == estado]
+        objetos = [lic for lic in qs if lic.estado_efectivo == estado]
     else:
         objetos = list(qs)
 
@@ -74,9 +73,9 @@ def lista(request):
 
     stats = {
         "total": len(objetos),
-        "activas": sum(1 for l in objetos if l.estado_efectivo == "activa"),
-        "por_vencer": sum(1 for l in objetos if l.estado_efectivo == "por_vencer"),
-        "vencidas": sum(1 for l in objetos if l.estado_efectivo == "vencida"),
+        "activas": sum(1 for lic in objetos if lic.estado_efectivo == "activa"),
+        "por_vencer": sum(1 for lic in objetos if lic.estado_efectivo == "por_vencer"),
+        "vencidas": sum(1 for lic in objetos if lic.estado_efectivo == "vencida"),
     }
 
     return render(request, "licencias/lista.html", {
@@ -235,12 +234,12 @@ def exportar_pdf(request):
 
     totales = {
         "total": len(objetos),
-        "activas": sum(1 for l in objetos if l.estado_efectivo == "activa"),
-        "por_vencer": sum(1 for l in objetos if l.estado_efectivo == "por_vencer"),
-        "vencidas": sum(1 for l in objetos if l.estado_efectivo == "vencida"),
+        "activas": sum(1 for lic in objetos if lic.estado_efectivo == "activa"),
+        "por_vencer": sum(1 for lic in objetos if lic.estado_efectivo == "por_vencer"),
+        "vencidas": sum(1 for lic in objetos if lic.estado_efectivo == "vencida"),
         "valor": None,
     }
-    con_costo = [float(l.costo) for l in objetos if l.costo]
+    con_costo = [float(lic.costo) for lic in objetos if lic.costo]
     if con_costo:
         totales["valor"] = f"${sum(con_costo):,.0f} COP"
 

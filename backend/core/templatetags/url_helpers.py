@@ -1,4 +1,3 @@
-from django.http import QueryDict
 
 from django import template
 

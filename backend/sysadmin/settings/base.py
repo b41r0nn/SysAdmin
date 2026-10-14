@@ -136,7 +136,10 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 180  # 3 minutos (inactividad)
+# Timeout por INACTIVIDAD (segundos). SAVE_EVERY_REQUEST renueva la expiración
+# en cada petición; sin él, el tiempo cuenta desde el login y no desde la última actividad.
+SESSION_COOKIE_AGE = int(os.environ.get('SESSION_COOKIE_AGE', '180'))
+SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
@@ -151,6 +154,7 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1  # hora
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_RESET_ON_SUCCESS = True
+AXES_CLIENT_IP_CALLABLE = "core.utils.get_client_ip"
 
 # Mensajes genéricos: no revelar si el usuario existe o no
 AXES_IP_COOLOFF_MESSAGE = "Demasiados intentos fallidos. Intente de nuevo más tarde."
@@ -168,6 +172,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ACCEL_REDIRECT = False
 
 OCS_BASE_URL = os.environ.get('OCS_BASE_URL', '').rstrip('/')
 OCS_USER = os.environ.get('OCS_USER', '')

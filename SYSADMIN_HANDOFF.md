@@ -69,7 +69,7 @@ El agente OCS apuntaba a `/ocsreports` o a `/ocsapi/v1`. El receptor de
 inventarios es **`/ocsinventory`** (raíz, sin subruta). Con la URL corregida el
 agente real reporta `200` y Yule ya muestra el inventario completo. Los campos
 vacíos que se veían (serial, procesador, IP, MAC, usuario) eran bugs del parser
-de Yule, no de OCS. Detalle en la sección 0 de `INFORME_OCS_YULE_2026-09-25.md`.
+de Yule, no de OCS. Detalle en la sección 0 de `docs/informes/INFORME_OCS_YULE_2026-09-25.md`.
 
 ### 2026-09-25 · OCS Inventory NG en producción + fix de MEDIA_ROOT
 
