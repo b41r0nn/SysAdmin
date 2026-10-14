@@ -21,7 +21,14 @@
 #        sudo mkdir -p /opt/sysadmin/restore
 #        sudo tar -xzf sysadmin_backup_AAAA-MM-DD_HH-MM.tar.gz -C /opt/sysadmin/restore
 #
-#   1. Restaurar la base de datos (con sysadmin_db ya arriba):
+#   1. Restaurar la base de datos (sobre un volumen vacío o con datos que se
+#      quieran reemplazar). `pg_dumpall` recrea roles y bases, así que los
+#      errores "role already exists" son esperables si el rol sysadmin_user ya
+#      existe:
+#        cd /opt/sysadmin/app
+#        docker compose down
+#        docker volume rm sysadmin_postgres_data   # o el nombre del volumen
+#        docker compose up -d db
 #        docker exec -i sysadmin_db psql -U sysadmin_user -d postgres \
 #            < /opt/sysadmin/restore/db_dump_AAAA-MM-DD_HH-MM.sql
 #
@@ -43,27 +50,32 @@ BACKUP_DIR="/opt/sysadmin/backups"
 DB_CONTAINER="sysadmin_db"
 DB_USER="sysadmin_user"
 
-# ── Configuración (defaults; pueden venir de backup.conf o del entorno) ────────
+# ── Capturar entorno ANTES de defaults (tiene prioridad sobre backup.conf) ─────
+_env_nas_ip="${NAS_IP:-}"
+_env_nas_path="${NAS_PATH:-}"
+_env_nas_user="${NAS_USER:-}"
+_env_retencion="${RETENCION_DIAS_LOCAL:-}"
+_env_pass="${BACKUP_ENV_PASSPHRASE:-}"
+
+# ── backup.conf (optativo, junto al script) ────────────────────────────────────
+CONF_FILE="${BACKUP_DIR}/backup.conf"
+if [ -f "${CONF_FILE}" ]; then
+    # shellcheck source=/dev/null
+    . "${CONF_FILE}"
+fi
+
+# ── Re-aplicar entorno si estaba definido ──────────────────────────────────────
+[ -n "${_env_nas_ip}" ] && NAS_IP="${_env_nas_ip}"
+[ -n "${_env_nas_path}" ] && NAS_PATH="${_env_nas_path}"
+[ -n "${_env_nas_user}" ] && NAS_USER="${_env_nas_user}"
+[ -n "${_env_retencion}" ] && RETENCION_DIAS_LOCAL="${_env_retencion}"
+[ -n "${_env_pass}" ] && BACKUP_ENV_PASSPHRASE="${_env_pass}"
+
+# ── Defaults ───────────────────────────────────────────────────────────────────
 NAS_IP="${NAS_IP:-}"
 NAS_PATH="${NAS_PATH:-/backups/sysadmin}"
 NAS_USER="${NAS_USER:-backup_user}"
 RETENCION_DIAS_LOCAL="${RETENCION_DIAS_LOCAL:-7}"
-
-# backup.conf (optativo, junto al script). Los valores del entorno tienen
-# prioridad: se guardan antes de leer el archivo y se re-aplican después.
-CONF_FILE="${BACKUP_DIR}/backup.conf"
-if [ -f "${CONF_FILE}" ]; then
-    _env_nas_ip="${NAS_IP}"
-    _env_nas_path="${NAS_PATH}"
-    _env_nas_user="${NAS_USER}"
-    _env_retencion="${RETENCION_DIAS_LOCAL}"
-    # shellcheck source=/dev/null
-    . "${CONF_FILE}"
-    if [ -n "${_env_nas_ip}" ]; then NAS_IP="${_env_nas_ip}"; fi
-    if [ -n "${_env_nas_path}" ]; then NAS_PATH="${_env_nas_path}"; fi
-    if [ -n "${_env_nas_user}" ]; then NAS_USER="${_env_nas_user}"; fi
-    if [ -n "${_env_retencion}" ]; then RETENCION_DIAS_LOCAL="${_env_retencion}"; fi
-fi
 
 FECHA="$(date +%Y-%m-%d_%H-%M)"
 BACKUP_FILE="sysadmin_backup_${FECHA}.tar.gz"
