@@ -1,7 +1,9 @@
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -530,3 +532,85 @@ class ProcesarColaEmailTests(TestCase):
             total, enviados, fallos, quedan = procesar_cola_email()
         self.assertEqual((total, enviados, fallos, quedan), (0, 0, 0, 0))
         self.assertEqual(enviados, 0)
+
+
+class GenerarNotificacionesMantenimientoCommandTests(TestCase):
+    def test_comando_sin_datos_no_falla(self):
+        out = StringIO()
+        call_command("generar_notificaciones_mantenimiento", stdout=out)
+        self.assertIn("creadas: 0", out.getvalue())
+
+    def test_comando_crea_notificacion_y_es_idempotente(self):
+        usuario = _user("superadmin")
+        PlanMantenimiento.objects.create(
+            tipo_dispositivo="escritorio",
+            tipo="preventivo",
+            proxima_ejecucion=HOY + timedelta(days=3),
+            estado="activo",
+        )
+
+        call_command("generar_notificaciones_mantenimiento", stdout=StringIO())
+        self.assertEqual(
+            Notificacion.objects.filter(usuario=usuario, tipo="mantenimiento").count(), 1
+        )
+
+        call_command("generar_notificaciones_mantenimiento", stdout=StringIO())
+        self.assertEqual(
+            Notificacion.objects.filter(usuario=usuario, tipo="mantenimiento").count(), 1
+        )
+
+
+class GenerarNotificacionesMantenimientoCommandNotificacionesTests(TestCase):
+    """El comando ``generar_notificaciones_mantenimiento`` del app ``notificaciones``
+    queda shadoweado por el homónimo de ``mantenimiento`` (Django resuelve por el
+    primer app de INSTALLED_APPS). Se invoca el objeto Command directamente para
+    cubrir su implementación."""
+
+    def test_handle_crea_notificacion(self):
+        from notificaciones.management.commands.generar_notificaciones_mantenimiento import (
+            Command as Comando,
+        )
+
+        usuario = _user("superadmin")
+        PlanMantenimiento.objects.create(
+            tipo_dispositivo="escritorio",
+            tipo="preventivo",
+            proxima_ejecucion=HOY + timedelta(days=3),
+            estado="activo",
+        )
+
+        comando = Comando()
+        comando.stdout = StringIO()
+        comando.handle()
+
+        self.assertIn("creadas: 1", comando.stdout.getvalue())
+        self.assertEqual(
+            Notificacion.objects.filter(usuario=usuario, tipo="mantenimiento").count(), 1
+        )
+
+
+class EnviarNotificacionesEmailCommandTests(TestCase):
+    def setUp(self):
+        self.config = ConfiguracionSistema.get_config()
+        self.config.smtp_host = "smtp.test.com"
+        self.config.smtp_puerto = 587
+        self.config.save()
+
+    def test_comando_sin_cola_no_falla(self):
+        out = StringIO()
+        call_command("enviar_notificaciones_email", stdout=out)
+        self.assertIn("0 enviados", out.getvalue())
+
+    @patch("notificaciones.services.get_connection")
+    def test_comando_envia_email_en_cola(self, mock):
+        from django.core.mail import get_connection as real_get_connection
+
+        encolar_email("a@b.co", "Asunto", "Cuerpo")
+
+        with self.settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
+            mock.return_value = real_get_connection()
+            out = StringIO()
+            call_command("enviar_notificaciones_email", stdout=out)
+
+        self.assertTrue(NotificacionEmail.objects.get().enviado)
+        self.assertIn("1 enviados", out.getvalue())

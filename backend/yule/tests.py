@@ -1,11 +1,13 @@
+from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from yule.client import build_client
+from yule.client import OCSClientException, build_client
 from yule.forms import ConfiguracionYuleForm
 from yule.models import ConfiguracionYule, EquipoOCS
 from yule.sync import sincronizar_equipos_ocs
@@ -336,6 +338,49 @@ class YuleSyncTests(TestCase):
         self.assertEqual(log.estado, "exitosa")
         self.assertIn("exitosa", msg)
         self.assertTrue(EquipoOCS.objects.filter(id_ocs="79").exists())
+
+
+class SyncOcsCommandTests(TestCase):
+    @override_settings(OCS_BASE_URL="", OCS_USER="", OCS_TOKEN="")
+    def test_comando_sincroniza_y_reporta_contadores(self):
+        with patch("yule.sync.build_client") as bc:
+            bc.return_value.is_configured.return_value = True
+            bc.return_value.get_computers.return_value = [
+                {
+                    "id": "100",
+                    "name": "CMD1",
+                    "hardware": {"SSN": "S1", "OSNAME": "Windows", "LASTCOME": "2026-10-01 10:00:00"},
+                },
+            ]
+            out = StringIO()
+            call_command("sync_ocs", force=True, stdout=out)
+
+        salida = out.getvalue()
+        self.assertIn("Iniciando sincronización OCS", salida)
+        self.assertIn("Equipos detectados: 1", salida)
+        self.assertTrue(EquipoOCS.objects.filter(id_ocs="100").exists())
+
+    @override_settings(OCS_BASE_URL="", OCS_USER="", OCS_TOKEN="")
+    def test_comando_no_revienta_si_ocs_falla(self):
+        with patch("yule.sync.build_client") as bc:
+            bc.return_value.is_configured.return_value = True
+            bc.return_value.get_computers.side_effect = OCSClientException("caido")
+            out = StringIO()
+            call_command("sync_ocs", force=True, stdout=out)
+
+        salida = out.getvalue()
+        self.assertIn("Fallo", salida)
+        self.assertIn("Estado: Fallo", salida)
+
+    @override_settings(OCS_BASE_URL="", OCS_USER="", OCS_TOKEN="")
+    def test_comando_avisa_usuario_inexistente(self):
+        with patch("yule.sync.build_client") as bc:
+            bc.return_value.is_configured.return_value = True
+            bc.return_value.get_computers.return_value = []
+            out = StringIO()
+            call_command("sync_ocs", force=True, user="noexiste", stdout=out)
+
+        self.assertIn("no encontrado", out.getvalue())
 
 
 class _FakeResponse:

@@ -1,12 +1,19 @@
+import os
 import tempfile
+from datetime import timedelta
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 
 from django.apps import apps
 from django.conf import settings
+from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.permisos import PERMISOS_POR_ROL
 from core.utils import get_client_ip
@@ -240,3 +247,91 @@ class VendorAssetsTests(TestCase):
                     if host in contenido:
                         encontrados.append(f"{plantilla.relative_to(base)} -> {host}")
         self.assertEqual(encontrados, [], f"Plantillas con CDN externo: {encontrados}")
+
+
+class LimpiarHistorialCommandTests(TestCase):
+    def test_dry_run_no_borra_nada(self):
+        from administracion.models import RegistroAuditoria
+
+        registro = RegistroAuditoria.objects.create(modulo="inventario", accion="crear")
+        RegistroAuditoria.objects.all().update(fecha=timezone.now() - timedelta(days=400))
+
+        out = StringIO()
+        call_command("limpiar_historial", dias=365, dry_run=True, stdout=out)
+
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=registro.pk).exists())
+        salida = out.getvalue()
+        self.assertIn("simulación", salida)
+        self.assertIn("Total registros afectados", salida)
+
+    def test_borra_solo_lo_antiguo(self):
+        from administracion.models import RegistroAuditoria
+        from notificaciones.models import Notificacion, NotificacionEmail
+        from yule.models import SincronizacionLog
+
+        usuario = _user("superadmin")
+        viejo = timezone.now() - timedelta(days=400)
+        nuevo = timezone.now()
+
+        audit_viejo = RegistroAuditoria.objects.create(modulo="inventario", accion="crear")
+        audit_nuevo = RegistroAuditoria.objects.create(modulo="inventario", accion="crear")
+        RegistroAuditoria.objects.filter(pk=audit_viejo.pk).update(fecha=viejo)
+
+        sync = SincronizacionLog.objects.create()
+        SincronizacionLog.objects.filter(pk=sync.pk).update(fecha_inicio=viejo)
+
+        content_type = ContentType.objects.get_for_model(RegistroAuditoria)
+        log_viejo = LogEntry.objects.create(
+            user=usuario,
+            content_type=content_type,
+            object_id="1",
+            object_repr="x",
+            action_flag=1,
+            action_time=viejo,
+        )
+
+        notif_vieja = Notificacion.objects.create(usuario=usuario, tipo="aviso", titulo="t", leida=True)
+        Notificacion.objects.filter(pk=notif_vieja.pk).update(fecha_creacion=viejo)
+        notif_nueva = Notificacion.objects.create(usuario=usuario, tipo="aviso", titulo="t", leida=True)
+        Notificacion.objects.filter(pk=notif_nueva.pk).update(fecha_creacion=nuevo)
+
+        mail_viejo = NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="s", cuerpo="c", enviado=True, fecha_enviado=viejo
+        )
+        mail_nuevo = NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="s2", cuerpo="c", enviado=True, fecha_enviado=nuevo
+        )
+
+        call_command("limpiar_historial", dias=365, stdout=StringIO())
+
+        self.assertFalse(RegistroAuditoria.objects.filter(pk=audit_viejo.pk).exists())
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=audit_nuevo.pk).exists())
+        self.assertFalse(SincronizacionLog.objects.filter(pk=sync.pk).exists())
+        self.assertFalse(LogEntry.objects.filter(pk=log_viejo.pk).exists())
+        self.assertFalse(Notificacion.objects.filter(pk=notif_vieja.pk).exists())
+        self.assertTrue(Notificacion.objects.filter(pk=notif_nueva.pk).exists())
+        self.assertFalse(NotificacionEmail.objects.filter(pk=mail_viejo.pk).exists())
+        self.assertTrue(NotificacionEmail.objects.filter(pk=mail_nuevo.pk).exists())
+
+    def test_borra_media_huerfana_y_respeta_referenciada(self):
+        from inventario.tests import crear_activo
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_dir = Path(tmp) / "inventario" / "fotos"
+            ref_dir.mkdir(parents=True)
+            referenciada = ref_dir / "keep.jpg"
+            referenciada.write_bytes(b"ref")
+            huerfana = Path(tmp) / "orphan.jpg"
+            huerfana.write_bytes(b"huerfana")
+
+            antiguo = (timezone.now() - timedelta(days=60)).timestamp()
+            os.utime(referenciada, (antiguo, antiguo))
+            os.utime(huerfana, (antiguo, antiguo))
+
+            crear_activo("SN-MEDIA-1", foto_activo="inventario/fotos/keep.jpg")
+
+            with override_settings(MEDIA_ROOT=tmp):
+                call_command("limpiar_historial", dias=365, media_dias=30, stdout=StringIO())
+
+            self.assertTrue(referenciada.exists())
+            self.assertFalse(huerfana.exists())
