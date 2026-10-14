@@ -11,15 +11,6 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
     raise ImproperlyConfigured("SECRET_KEY no está configurado en el entorno")
 
-# La clave del vault DEBE ser explícita en producción: sin ella, build_fernet()
-# la deriva de SECRET_KEY y una rotación deja ilegibles los secretos guardados.
-if not PASSWORDS_ENCRYPTION_KEY:  # noqa: F405
-    raise ImproperlyConfigured(
-        "PASSWORDS_ENCRYPTION_KEY no está configurado en el entorno. "
-        "Sin él la clave del vault se deriva de SECRET_KEY y una rotación de "
-        "SECRET_KEY deja ilegibles los secretos. Defínelo en .env."
-    )
-
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 # PostgreSQL obligatorio en producción.

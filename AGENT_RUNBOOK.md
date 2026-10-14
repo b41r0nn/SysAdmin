@@ -139,8 +139,10 @@ se activa `USER` no-root en el `Dockerfile`, hay que `sudo chown -R 1000:1000
   `administracion`; (3) actualizar `.env` y reiniciar `sysadmin_django`; (4)
   verificar el acceso a una credencial del vault. Con
   `PASSWORDS_ENCRYPTION_KEY` definida, rotar `SECRET_KEY` **ya no** rompe el
-  vault. `production.py` ahora **exige** la clave (`ImproperlyConfigured` si
-  falta) y `core.checks` emite el warning `sysadmin.W001` en el resto de entornos.
+  vault. `production.py` **no** exige la clave al arrancar (el contenedor debe
+  poder levantar aunque siga usando la clave derivada de `SECRET_KEY`);
+  `core.checks` emite el warning `sysadmin.W001` en `check --deploy` cuando
+  falta, y definir una clave nueva requiere re-cifrar antes (ver arriba).
 - **Backup**: el script (`deploy/backup.sh`, instalado en
   `/opt/sysadmin/backups/backup.sh`) separa el `.env` —que contiene la clave del
   vault— del dump+media y lo cifra con `BACKUP_ENV_PASSPHRASE`. Sin esa passphrase
