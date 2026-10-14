@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from decimal import Decimal
 import base64
 import io
 import os
@@ -10,7 +9,6 @@ import logging
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
@@ -23,7 +21,6 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
 import openpyxl
 
 from administracion.models import ConfiguracionSistema
@@ -41,6 +38,8 @@ from .services import acta_pdf_bytes
 
 from .software_sync import refrescar_activo, software_guardado, ultimo_reporte
 from accounts.permisos import requiere_permiso
+
+logger = logging.getLogger(__name__)
 
 
 # ── Lista ──────────────────────────────────────────────────────────────────────
@@ -297,7 +296,7 @@ def asignar_activo(request, pk):
     if activo.estado != "disponible":
         messages.error(request, "Solo se pueden asignar activos disponibles.")
         return redirect("inventario:detalle", pk=activo.pk)
-        
+
     if request.method == "POST":
         form = AsignacionForm(request.POST)
         if form.is_valid():
@@ -310,7 +309,7 @@ def asignar_activo(request, pk):
                 asignacion.activo = activo
                 asignacion.fecha_asignacion = timezone.now().date()
                 asignacion.save()
-            
+
                 Movimiento.objects.create(
                     activo=activo,
                     tipo="asignacion",
@@ -319,7 +318,7 @@ def asignar_activo(request, pk):
                     realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
                     usuario_destino=asignacion.usuario
                 )
-            
+
                 acta = ActaAsignacion.objects.create(asignacion=asignacion)
                 encolar_email(
                     asignacion.usuario.correo,
@@ -331,15 +330,15 @@ def asignar_activo(request, pk):
                     adjunto_tipo="acta",
                     adjunto_objeto_id=acta.pk,
                 )
-            
+
                 activo.estado = "asignado"
                 activo.save(update_fields=["estado", "fecha_actualizacion"])
-            
+
             messages.success(request, f"Activo asignado a {asignacion.usuario.nombre_completo}.")
             return redirect("inventario:detalle", pk=activo.pk)
     else:
         form = AsignacionForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form, "titulo": "Asignar Activo", "activo": activo, "accion": "Asignar"
     })
@@ -367,11 +366,11 @@ def editar_asignacion(request, asignacion_pk):
 def devolver_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion = activo.asignaciones.filter(activa=True).first()
-    
+
     if not asignacion:
         messages.error(request, "El activo no tiene una asignación activa.")
         return redirect("inventario:detalle", pk=activo.pk)
-        
+
     if request.method == "POST":
         form = DevolucionForm(request.POST)
         if form.is_valid():
@@ -387,7 +386,7 @@ def devolver_activo(request, pk):
                 if observaciones:
                     asignacion.observaciones = (asignacion.observaciones or "") + f"\n[Devolución]: {observaciones}"
                 asignacion.save()
-            
+
                 Movimiento.objects.create(
                     activo=activo,
                     tipo="devolucion",
@@ -395,15 +394,15 @@ def devolver_activo(request, pk):
                     descripcion=f"Devuelto por {asignacion.usuario.nombre_completo}. {observaciones}",
                     realizado_por=request.user.username if request.user.is_authenticated else "Sistema"
                 )
-            
+
                 activo.estado = "disponible"
                 activo.save(update_fields=["estado", "fecha_actualizacion"])
-            
+
             messages.success(request, "Activo devuelto correctamente.")
             return redirect("inventario:detalle", pk=activo.pk)
     else:
         form = DevolucionForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form, "titulo": "Devolver Activo", "activo": activo, "accion": "Devolver"
     })
@@ -412,23 +411,23 @@ def devolver_activo(request, pk):
 def trasladar_activo(request, pk):
     activo = get_object_or_404(Activo, pk=pk)
     asignacion_actual = activo.asignaciones.filter(activa=True).first()
-    
+
     if not asignacion_actual:
         messages.error(request, "El activo no está asignado actualmente.")
         return redirect("inventario:detalle", pk=activo.pk)
-        
+
     if request.method == "POST":
         form = TrasladoForm(request.POST)
         if form.is_valid():
             usuario_destino = form.cleaned_data["usuario_destino"]
             observaciones = form.cleaned_data["observaciones"]
-            
+
             if usuario_destino == asignacion_actual.usuario:
                 messages.error(request, "El usuario destino debe ser diferente al actual.")
                 return render(request, "inventario/asignacion_form.html", {
                     "form": form, "titulo": "Trasladar Activo", "activo": activo, "accion": "Trasladar"
                 })
-            
+
             with transaction.atomic():
                 activo = Activo.objects.select_for_update().get(pk=pk)
                 asignacion_actual = activo.asignaciones.filter(activa=True).first()
@@ -446,7 +445,7 @@ def trasladar_activo(request, pk):
                 if observaciones:
                     asignacion_actual.observaciones = (asignacion_actual.observaciones or "") + f"\n[Traslado a {usuario_destino.nombre_completo}]: {observaciones}"
                 asignacion_actual.save()
-                
+
                 # 2. Crear nueva asignación
                 nueva_asignacion = Asignacion.objects.create(
                     activo=activo,
@@ -454,7 +453,7 @@ def trasladar_activo(request, pk):
                     fecha_asignacion=timezone.now().date(),
                     observaciones=f"Trasladado desde {asignacion_actual.usuario.nombre_completo}. {observaciones}"
                 )
-                
+
                 # 3. Registrar movimiento
                 Movimiento.objects.create(
                     activo=activo,
@@ -464,7 +463,7 @@ def trasladar_activo(request, pk):
                     realizado_por=request.user.username if request.user.is_authenticated else "Sistema",
                     usuario_destino=usuario_destino
                 )
-                
+
                 acta = ActaAsignacion.objects.create(asignacion=nueva_asignacion)
                 encolar_email(
                     usuario_destino.correo,
@@ -478,12 +477,12 @@ def trasladar_activo(request, pk):
                 )
                 activo.estado = "asignado"
                 activo.save(update_fields=["estado", "fecha_actualizacion"])
-            
+
             messages.success(request, f"Activo trasladado a {usuario_destino.nombre_completo}.")
             return redirect("inventario:detalle", pk=activo.pk)
     else:
         form = TrasladoForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form, "titulo": "Trasladar Activo", "activo": activo, "accion": "Trasladar"
     })
@@ -626,11 +625,11 @@ def qr_imagen(request, pk):
 def subir_acta_firmada(request, asignacion_pk):
     asignacion = get_object_or_404(Asignacion, pk=asignacion_pk)
     acta = getattr(asignacion, "acta", None)
-    
+
     if not acta:
         messages.error(request, "No existe registro de acta para esta asignación.")
         return redirect("inventario:detalle", pk=asignacion.activo.pk)
-        
+
     if request.method == "POST":
         form = SubirActaForm(request.POST, request.FILES)
         if form.is_valid():
@@ -640,7 +639,7 @@ def subir_acta_firmada(request, asignacion_pk):
             return redirect("inventario:detalle", pk=asignacion.activo.pk)
     else:
         form = SubirActaForm()
-        
+
     return render(request, "inventario/asignacion_form.html", {
         "form": form,
         "titulo": "Subir Acta Firmada",

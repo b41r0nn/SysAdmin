@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -101,7 +100,7 @@ def ver_documento(request, pk):
         nombre = documento.archivo.name.split("/")[-1]
         return FileResponse(documento.archivo.open(), as_attachment=False, filename=nombre)
     except FileNotFoundError:
-        raise Http404("Archivo no encontrado en el servidor.")
+        raise Http404("Archivo no encontrado en el servidor.") from None
 
 
 @requiere_permiso("documentos", "lectura")
@@ -112,7 +111,7 @@ def descargar_documento(request, pk):
     try:
         return FileResponse(documento.archivo.open(), as_attachment=True, filename=documento.archivo.name.split("/")[-1])
     except FileNotFoundError:
-        raise Http404("Archivo no encontrado en el servidor.")
+        raise Http404("Archivo no encontrado en el servidor.") from None
 
 
 # ── Categorías ────────────────────────────────────────────────────────────────

@@ -116,7 +116,7 @@ class Command(BaseCommand):
             return 0
 
         borrados = 0
-        for root, dirs, files in os.walk(media_root):
+        for root, _dirs, files in os.walk(media_root):
             for nombre in files:
                 ruta_abs = os.path.join(root, nombre)
                 ruta_rel = os.path.relpath(ruta_abs, media_root)
