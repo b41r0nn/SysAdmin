@@ -43,7 +43,7 @@ class AsignarAtomicoTests(TestCase):
 
     def test_rollback_completo_si_falla_el_email(self):
         url = reverse("inventario:asignar", args=[self.activo.pk])
-        with patch("inventario.views.encolar_email", side_effect=RuntimeError("smtp")):
+        with patch("inventario.views.movimientos.encolar_email", side_effect=RuntimeError("smtp")):
             with self.assertRaises(RuntimeError):
                 self.client.post(url, {"usuario": self.persona.pk})
         self.activo.refresh_from_db()
@@ -80,7 +80,7 @@ class DevolverTrasladarAtomicoTests(TestCase):
 
     def test_devolver_rollback_si_falla_movimiento(self):
         url = reverse("inventario:devolver", args=[self.activo.pk])
-        with patch("inventario.views.Movimiento.objects.create", side_effect=RuntimeError("db")):
+        with patch("inventario.models.Movimiento.objects.create", side_effect=RuntimeError("db")):
             with self.assertRaises(RuntimeError):
                 self.client.post(url, {"observaciones": "ok"})
         self.asignacion.refresh_from_db()
@@ -90,7 +90,7 @@ class DevolverTrasladarAtomicoTests(TestCase):
 
     def test_trasladar_rollback_si_falla_movimiento(self):
         url = reverse("inventario:trasladar", args=[self.activo.pk])
-        with patch("inventario.views.Movimiento.objects.create", side_effect=RuntimeError("db")):
+        with patch("inventario.models.Movimiento.objects.create", side_effect=RuntimeError("db")):
             with self.assertRaises(RuntimeError):
                 self.client.post(url, {"usuario_destino": self.luis.pk, "observaciones": "x"})
         self.asignacion.refresh_from_db()
@@ -148,7 +148,7 @@ class ImportarFilaConErrorTests(TestCase):
                 raise IntegrityError("simulado")
             return original(**kwargs)
 
-        with patch("inventario.views.Activo.objects.create", side_effect=create_falla_en_a2):
+        with patch("inventario.models.Activo.objects.create", side_effect=create_falla_en_a2):
             self.client.post(reverse("inventario:importar_confirmar"))
         self.assertEqual(sorted(Activo.objects.values_list("serial", flat=True)), ["A1", "A3"])
 
