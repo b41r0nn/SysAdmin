@@ -1,6 +1,6 @@
 """Sincroniza los equipos de Yule con OCS."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from django.utils import timezone
@@ -84,7 +84,7 @@ def _parse_ocs_datetime(value: Any) -> Optional[datetime]:
             logger.warning(f"No se pudo interpretar la fecha de OCS: {text!r}")
             return None
     if timezone.is_naive(parsed):
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=dt_timezone.utc)
     return parsed
 
 

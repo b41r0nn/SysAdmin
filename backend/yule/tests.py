@@ -1,3 +1,4 @@
+from datetime import timezone as dt_timezone
 from io import StringIO
 from unittest.mock import patch
 
@@ -658,7 +659,7 @@ class ExtractEquipoDataTests(TestCase):
         self.assertIsInstance(datos["almacenamiento_total_gb"], int)
         self.assertEqual(datos["almacenamiento_total_gb"], 477)
         self.assertEqual(
-            datos["ultimo_reporte_ocs"].astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            datos["ultimo_reporte_ocs"].astimezone(dt_timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             "2026-09-28 20:27:57",
         )
 
