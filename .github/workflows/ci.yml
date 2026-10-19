@@ -34,7 +34,6 @@ jobs:
       SECRET_KEY: ci-secret-key-no-usar-en-produccion
       DEBUG: "False"
       SECURE_SSL_REDIRECT: "False"
-      DATABASE_URL: sqlite:///db_test.sqlite3
 
     steps:
       - uses: actions/checkout@v4
