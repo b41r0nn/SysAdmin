@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load permisos_extras %}
 
 {% block title %}Credenciales — SysAdmin{% endblock %}
 
@@ -74,9 +75,12 @@
             </span>
           </td>
           <td class="text-end">
+            {% puede_ver_secretos as ver_secretos %}
+            {% if ver_secretos %}
             <a class="btn btn-sm btn-outline-secondary" href="{% url 'passwords:credencial_secreto' vault_id=vault.id pk=cred.id %}">
               <i class="bi bi-eye"></i>
             </a>
+            {% endif %}
             <a class="btn btn-sm btn-outline-primary" href="{% url 'passwords:credencial_editar' vault_id=vault.id pk=cred.id %}">
               <i class="bi bi-pencil"></i>
             </a>

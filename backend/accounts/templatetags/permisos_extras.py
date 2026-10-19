@@ -1,6 +1,6 @@
 from django import template
 
-from accounts.permisos import PERMISOS_POR_ROL
+from accounts.permisos import PERMISOS_POR_ROL, puede_ver_secretos as _puede_ver_secretos
 
 register = template.Library()
 
@@ -17,6 +17,12 @@ def tiene_permiso(context, modulo, nivel="lectura"):
     if nivel == "escritura":
         return permiso == "escritura"
     return True
+
+
+@register.simple_tag(takes_context=True)
+def puede_ver_secretos(context):
+    """Template tag: True si el usuario puede revelar secretos de la bóveda."""
+    return _puede_ver_secretos(context.get("user"))
 
 
 @register.filter

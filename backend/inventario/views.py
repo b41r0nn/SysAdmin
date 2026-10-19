@@ -38,6 +38,7 @@ from .services import acta_pdf_bytes
 
 from .software_sync import refrescar_activo, software_guardado, ultimo_reporte
 from accounts.permisos import requiere_permiso
+from core.utils import guardar_excel
 
 logger = logging.getLogger(__name__)
 
@@ -1317,5 +1318,5 @@ def descargar_plantilla_activos(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = 'attachment; filename="plantilla_importar_activos.xlsx"'
-    wb.save(response)
+    guardar_excel(wb, response)
     return response

@@ -1,3 +1,5 @@
+from io import StringIO
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -211,3 +213,73 @@ class PasswordsPermisosTests(TestCase):
         self.client.force_login(user)
         resp = self.client.get(reverse("passwords:vault_crear"))
         self.assertEqual(resp.status_code, 302)
+
+
+class SecretoPermisosTests(TestCase):
+    """Ver secretos en claro: solo superadmin/admin, con límite de intentos."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.vault = _vault(nombre="Restringido", acceso_requerido=True)
+        self.vault.set_access_code("1111")
+        self.vault.save()
+        self.cred = Credencial.objects.create(vault=self.vault, titulo="C")
+        self.cred.set_secret("s3creto")
+        self.cred.save()
+        self.url = reverse("passwords:credencial_secreto", args=[self.vault.pk, self.cred.pk])
+
+    def test_rol_lectura_no_puede_ver_secreto(self):
+        self.client.force_login(_user("lectura"))
+        resp = self.client.post(self.url, {"acceso_codigo": "1111"})
+        self.assertRedirects(
+            resp, reverse("passwords:credenciales_lista", args=[self.vault.pk])
+        )
+        self.assertFalse(AccesoLog.objects.filter(accion="secreto_visto").exists())
+
+    def test_rol_lectura_no_ve_boton_de_secreto(self):
+        self.client.force_login(_user("lectura"))
+        resp = self.client.get(reverse("passwords:credenciales_lista", args=[self.vault.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, self.url)
+
+    def test_admin_puede_ver_secreto(self):
+        self.client.force_login(_user("admin"))
+        resp = self.client.post(self.url, {"acceso_codigo": "1111"})
+        self.assertEqual(resp.context["secreto"], "s3creto")
+
+    def test_codigo_invalido_queda_registrado(self):
+        self.client.force_login(_user("superadmin"))
+        self.client.post(self.url, {"acceso_codigo": "mal"})
+        self.assertTrue(AccesoLog.objects.filter(accion="codigo_invalido").exists())
+
+    def test_bloqueo_tras_intentos_fallidos(self):
+        from passwords.views import MAX_INTENTOS_CODIGO
+
+        self.client.force_login(_user("superadmin"))
+        for _ in range(MAX_INTENTOS_CODIGO):
+            self.client.post(self.url, {"acceso_codigo": "mal"})
+        resp = self.client.post(self.url, {"acceso_codigo": "1111"})
+        self.assertEqual(resp.context["secreto"], "")
+
+
+class RotarClaveVaultTests(TestCase):
+    def test_rota_secretos_legados_a_la_clave_nueva(self):
+        from cryptography.fernet import Fernet
+        from django.core.management import call_command
+        from django.test import override_settings
+
+        vault = _vault()
+        cred = Credencial(vault=vault, titulo="Legado")
+        with override_settings(PASSWORDS_ENCRYPTION_KEY=""):
+            cred.set_secret("viejo")
+            cred.save()
+
+        clave = Fernet.generate_key().decode()
+        with override_settings(PASSWORDS_ENCRYPTION_KEY=clave):
+            # Con la clave nueva todavía se lee lo legado.
+            self.assertEqual(Credencial.objects.get(pk=cred.pk).get_secret(), "viejo")
+            call_command("rotar_clave_vault", stdout=StringIO())
+            token = Credencial.objects.get(pk=cred.pk).secreto_encriptado
+            self.assertEqual(Fernet(clave).decrypt(token.encode()).decode(), "viejo")

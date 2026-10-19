@@ -346,3 +346,21 @@ class LimpiarHistorialCommandTests(TestCase):
 
             self.assertTrue(referenciada.exists())
             self.assertFalse(huerfana.exists())
+
+
+class GuardarExcelTests(TestCase):
+    def test_texto_con_igual_no_queda_como_formula(self):
+        from io import BytesIO
+
+        from openpyxl import Workbook, load_workbook
+
+        from core.utils import guardar_excel
+
+        wb = Workbook()
+        wb.active.append(["=HYPERLINK(\"http://x\",\"clic\")", "normal"])
+        buffer = BytesIO()
+        guardar_excel(wb, buffer)
+        buffer.seek(0)
+        celda = load_workbook(buffer).active["A1"]
+        self.assertEqual(celda.data_type, "s")
+        self.assertEqual(celda.value, "=HYPERLINK(\"http://x\",\"clic\")")
