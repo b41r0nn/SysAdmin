@@ -746,7 +746,7 @@ Para issues, contactar al equipo de sistemas.
 
 Para documentación técnica completa, ver **SYSADMIN_HANDOFF.md**
 
----
+--- 
 
 **Última actualización:** 2026-09-24  
 **Proyecto:** 100% Funcional · Listo para producción
