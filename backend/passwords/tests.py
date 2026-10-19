@@ -283,3 +283,22 @@ class RotarClaveVaultTests(TestCase):
             call_command("rotar_clave_vault", stdout=StringIO())
             token = Credencial.objects.get(pk=cred.pk).secreto_encriptado
             self.assertEqual(Fernet(clave).decrypt(token.encode()).decode(), "viejo")
+
+
+class SecretoIlegibleTests(TestCase):
+    def test_secreto_con_clave_desconocida_no_da_500(self):
+        from cryptography.fernet import Fernet
+
+        vault = _vault()
+        cred = Credencial.objects.create(
+            vault=vault,
+            titulo="Vieja",
+            secreto_encriptado=Fernet(Fernet.generate_key()).encrypt(b"x").decode(),
+        )
+        self.client.force_login(_user("superadmin"))
+        resp = self.client.post(
+            reverse("passwords:credencial_secreto", args=[vault.pk, cred.pk]), {}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["secreto"], "")
+        self.assertTrue(AccesoLog.objects.filter(accion="secreto_ilegible").exists())
