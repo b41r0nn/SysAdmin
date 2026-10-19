@@ -251,7 +251,7 @@ def _sincronizar_software_tras_equipos(usuario=None) -> None:
     extra en cada vuelta, que es lo que `sincronizar_software` hace aparte y
     con su propio horario.
     """
-    from inventario.sync_software import sincronizar_software
+    from inventario.software_sync_flota import sincronizar_software
 
     # Un equipo necesita software si su activo no tiene ninguna fila guardada
     # todavía. El related_name evita importar el modelo.

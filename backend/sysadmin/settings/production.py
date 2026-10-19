@@ -4,6 +4,7 @@ import os
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F401,F403
+from .base import _env_bool
 
 DEBUG = False
 
@@ -26,9 +27,9 @@ DATABASES = {
 }
 
 # HTTPS forzado (valores por defecto seguros; se pueden desactivar vía .env).
-SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)  # noqa: F405
-SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=True, cast=bool)  # noqa: F405
-CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=True, cast=bool)  # noqa: F405
+SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", True)
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", True)
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", True)
 
 # HSTS lo envía nginx para todo el tráfico; evitamos duplicarlo en
 # respuestas dinámicas de Django.
@@ -55,9 +56,7 @@ CACHES = {
 # En producción nginx sirve /media/ a través de X-Accel-Redirect (vista media_protegido).
 MEDIA_ACCEL_REDIRECT = True
 
-_origenes = os.environ.get("TRUSTED_ORIGINS", "")
-CSRF_TRUSTED_ORIGINS = (
-    [o.strip() for o in _origenes.split(",") if o.strip()]
-    if _origenes
-    else ["https://192.168.1.250:6060"]
-)
+if not CSRF_TRUSTED_ORIGINS:  # noqa: F405
+    raise ImproperlyConfigured(
+        "TRUSTED_ORIGINS no está configurado (ej. https://192.168.1.250:6060)"
+    )

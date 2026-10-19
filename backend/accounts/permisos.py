@@ -59,6 +59,18 @@ def puede_ver_secretos(user):
     return user.is_superuser or getattr(user, "rol", None) in ROLES_VER_SECRETOS
 
 
+def tiene_permiso(user, modulo, nivel="lectura"):
+    """True si el usuario tiene al menos `nivel` en `modulo`."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    permiso = PERMISOS_POR_ROL.get(getattr(user, "rol", None), {}).get(modulo, "ninguno")
+    if permiso == "ninguno":
+        return False
+    return nivel != "escritura" or permiso == "escritura"
+
+
 def requiere_permiso(modulo, nivel="lectura"):
     """
     Decorator que verifica permisos por rol.

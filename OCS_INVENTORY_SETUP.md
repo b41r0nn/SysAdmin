@@ -291,12 +291,17 @@ No se puso en cron a propósito: la API solo la consume el sync diario de las
 03:07, así que un fallo se ve en el log del propio sync. Si algún día se le
 sacan más consumidores, ahí sí conviene agendarlo.
 
-### Pendiente: contraseña de root de MySQL
+### Contraseña de root de MySQL (rotada 2026-10-19)
 
-`MYSQL_ROOT_PASSWORD : rootpass` en el `docker-compose.yml` sigue **sin rotar**.
-No causó este fallo (el `.env` de OCS es otro), pero es una contraseña de root
-débil en el mismo archivo que se acaba de tocar. Rotarla es un `ALTER USER` +
-actualizar el compose.
+`rootpass` ya no sirve. La contraseña nueva (24 caracteres, generada en el
+servidor) está **solo** en `MYSQL_ROOT_PASSWORD` del `docker-compose.yml` de
+OCS; nunca se escribió en otro lado. Los scripts que la necesitan
+(`deploy/ocs_verificar_api.sh`) la leen de ahí.
+
+**Ojo al recrear contenedores:** `docker compose up -d` sin nombrar servicios
+levanta también `ocsproxy`, que falla en bucle (`host not found in upstream
+"ocsapplication"`). Nombrar siempre los servicios:
+`docker compose up -d ocsdb ocsapplication`. Si se coló, `docker stop ocsinventory-proxy`.
 
 ## Parche obligatorio: bug de PHP 8 en `html_header.php`
 

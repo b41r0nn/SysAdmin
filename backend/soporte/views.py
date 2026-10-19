@@ -18,7 +18,7 @@ from accounts.permisos import requiere_permiso
 from core.utils import get_client_ip, guardar_excel
 from mantenimiento.models import OrdenMantenimiento
 from notificaciones.services import aviso_usuario, encolar_email
-from reports.views import (
+from reports.excel_estilo import (
     _adjust_column_widths,
     _apply_redihos_data_style,
     _apply_redihos_header,

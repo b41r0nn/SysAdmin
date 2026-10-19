@@ -67,6 +67,7 @@ jobs:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
           ALLOWED_HOSTS: localhost
+          TRUSTED_ORIGINS: https://localhost
         run: python manage.py check --deploy --fail-level ERROR
 
       - name: Check management commands load
@@ -83,7 +84,6 @@ jobs:
 
   test-postgres:
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: backend
@@ -136,7 +136,6 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

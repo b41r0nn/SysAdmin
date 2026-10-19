@@ -7,8 +7,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from inventario.models import Activo, SoftwareInstalado
-from inventario.views import _etiqueta_context
+from inventario.models import Activo, Asignacion, SoftwareInstalado
+from inventario.views.qr import _etiqueta_context
 from usuarios.models import Usuario
 
 CustomUser = get_user_model()
@@ -177,7 +177,7 @@ class AsignacionActaEmailTests(TestCase):
         )
 
     def test_asignar_encola_email_de_acta(self):
-        with patch("inventario.views.encolar_email") as mock:
+        with patch("inventario.views.movimientos.encolar_email") as mock:
             resp = self.client.post(
                 reverse("inventario:asignar", args=[self.activo.pk]),
                 {"usuario": self.persona.pk},
@@ -520,7 +520,7 @@ class SincronizarFlotaTests(SoftwareInventarioBase):
         return bc
 
     def test_lee_todos_los_activos_vinculados(self):
-        from inventario.sync_software import sincronizar_software
+        from inventario.software_sync_flota import sincronizar_software
 
         self._ocs({
             "3": [{"name": "Chrome", "version": "1", "publisher": "Google"}],
@@ -534,7 +534,7 @@ class SincronizarFlotaTests(SoftwareInventarioBase):
         self.assertEqual(SoftwareInstalado.objects.count(), 2)
 
     def test_segunda_vuelta_sin_cambios(self):
-        from inventario.sync_software import sincronizar_software
+        from inventario.software_sync_flota import sincronizar_software
 
         self._ocs({
             "3": [{"name": "Chrome", "version": "1", "publisher": "Google"}],
@@ -549,7 +549,7 @@ class SincronizarFlotaTests(SoftwareInventarioBase):
         self.assertEqual(SoftwareInstalado.objects.count(), 2)
 
     def test_un_equipo_caido_no_detiene_el_resto(self):
-        from inventario.sync_software import sincronizar_software
+        from inventario.software_sync_flota import sincronizar_software
         from yule.client import OCSClientException
 
         def por_id(cid):
@@ -577,7 +577,7 @@ class SincronizarFlotaTests(SoftwareInventarioBase):
         self.assertTrue(SoftwareInstalado.objects.filter(activo=self.activo, nombre="Antes").exists())
 
     def test_no_lee_activos_dados_de_baja(self):
-        from inventario.sync_software import activos_con_equipo_ocs
+        from inventario.software_sync_flota import activos_con_equipo_ocs
 
         self.otro.estado = "dado_de_baja"
         self.otro.save()
@@ -585,7 +585,7 @@ class SincronizarFlotaTests(SoftwareInventarioBase):
         self.assertIn(self.otro, list(activos_con_equipo_ocs(incluir_dados_de_baja=True)))
 
     def test_dry_run_no_escribe(self):
-        from inventario.sync_software import sincronizar_software
+        from inventario.software_sync_flota import sincronizar_software
 
         self._ocs({"3": [{"name": "Chrome", "version": "1", "publisher": "Google"}], "4": []})
         resumen = sincronizar_software(dry_run=True)
@@ -598,7 +598,7 @@ class SincronizarFlotaTests(SoftwareInventarioBase):
         self.assertEqual(por_host["W11F36F"], 0)
 
     def test_el_callback_va_recibiendo_avance(self):
-        from inventario.sync_software import sincronizar_software
+        from inventario.software_sync_flota import sincronizar_software
 
         self._ocs({"3": [], "4": []})
         vistos = []
@@ -713,3 +713,67 @@ class SoftwareGlobalTests(SoftwareInventarioBase):
         self.client.logout()
         resp = self.client.get(reverse("inventario:software_global"))
         self.assertIn(resp.status_code, (302, 403))
+
+
+class QrPublicoTokenTests(TestCase):
+    def setUp(self):
+        self.activo = crear_activo("SN-QR-TOKEN")
+
+    def test_url_con_token_es_publica(self):
+        resp = self.client.get(reverse("inventario:qr_publico_token", args=[self.activo.qr_token]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "SN-QR-TOKEN")
+
+    def test_url_por_id_requiere_login(self):
+        resp = self.client.get(reverse("inventario:qr_publico", args=[self.activo.pk]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("accounts:login"), resp.url)
+
+    def test_url_por_id_con_login_funciona(self):
+        self.client.force_login(crear_usuario("lectura"))
+        resp = self.client.get(reverse("inventario:qr_publico", args=[self.activo.pk]))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_tokens_distintos_por_activo(self):
+        otro = crear_activo("SN-QR-TOKEN-2")
+        self.assertNotEqual(self.activo.qr_token, otro.qr_token)
+
+    def test_qr_codifica_url_con_token(self):
+        from django.test import RequestFactory
+
+        from inventario.views.qr import _qr_url_publica
+
+        url = _qr_url_publica(RequestFactory().get("/"), self.activo)
+        self.assertIn(str(self.activo.qr_token), url)
+        self.assertNotIn(f"/{self.activo.pk}/qr/publico/", url)
+
+
+class ActaPdfPersistenciaTests(TestCase):
+    def setUp(self):
+        admin = crear_usuario("superadmin")
+        self.client.force_login(admin)
+        activo = crear_activo("SN-ACTA-PERSIST")
+        persona = Usuario.objects.create(
+            nombre_completo="Ana Acta", documento_identidad="999", cargo="X", area="Y", correo=""
+        )
+        with patch("inventario.views.movimientos.encolar_email"):
+            self.client.post(reverse("inventario:asignar", args=[activo.pk]), {"usuario": persona.pk})
+        self.asignacion = Asignacion.objects.get(activo=activo)
+
+    def _get_acta(self):
+        with patch("inventario.views.movimientos.acta_pdf_bytes", return_value=b"%PDF-1.4 prueba"):
+            return self.client.get(reverse("inventario:acta_pdf", args=[self.asignacion.pk]))
+
+    def test_lectura_ve_el_acta_sin_guardarla(self):
+        self.client.force_login(crear_usuario("lectura"))
+        resp = self._get_acta()
+        self.assertEqual(resp.status_code, 200)
+        self.asignacion.acta.refresh_from_db()
+        self.assertFalse(self.asignacion.acta.pdf_generado)
+
+    def test_escritura_guarda_el_acta(self):
+        resp = self._get_acta()
+        self.assertEqual(resp.status_code, 200)
+        self.asignacion.acta.refresh_from_db()
+        self.assertTrue(self.asignacion.acta.pdf_generado)
+        self.asignacion.acta.pdf_generado.delete(save=False)
