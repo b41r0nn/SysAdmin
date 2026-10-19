@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.cache import cache
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -6,7 +7,17 @@ from openpyxl import Workbook
 
 from .forms import CredencialForm, VaultForm
 from .models import AccesoLog, Credencial, Vault, ESTADOS_CREDENCIAL
-from accounts.permisos import requiere_permiso
+from accounts.permisos import puede_ver_secretos, requiere_permiso
+from core.utils import guardar_excel
+
+
+# Intentos fallidos del código de acceso antes de bloquear (por usuario y vault).
+MAX_INTENTOS_CODIGO = 5
+BLOQUEO_CODIGO_SEGUNDOS = 15 * 60
+
+
+def _clave_intentos(usuario, vault):
+    return f"passwords:intentos_codigo:{usuario.pk}:{vault.pk}"
 
 
 def _log_action(vault, usuario, accion, credencial=None, detalle=""):
@@ -191,14 +202,27 @@ def credencial_secreto(request, vault_id, pk):
 
     vault = get_object_or_404(Vault, pk=vault_id)
     credencial = get_object_or_404(Credencial, pk=pk, vault=vault)
+    if not puede_ver_secretos(request.user):
+        messages.error(request, "No tienes permiso para ver secretos de la bóveda.")
+        return redirect("passwords:credenciales_lista", vault_id=vault.id)
+
     secreto = ""
 
     if request.method == "POST":
-        acceso_codigo = request.POST.get("acceso_codigo", "")
-        if vault.check_access_code(acceso_codigo):
+        clave = _clave_intentos(request.user, vault)
+        intentos = cache.get(clave, 0)
+        if vault.acceso_requerido and intentos >= MAX_INTENTOS_CODIGO:
+            messages.error(
+                request,
+                "Demasiados intentos fallidos. Intenta de nuevo en unos minutos.",
+            )
+        elif vault.check_access_code(request.POST.get("acceso_codigo", "")):
+            cache.delete(clave)
             secreto = credencial.get_secret()
             _log_action(vault, request.user, "secreto_visto", credencial=credencial)
         else:
+            cache.set(clave, intentos + 1, timeout=BLOQUEO_CODIGO_SEGUNDOS)
+            _log_action(vault, request.user, "codigo_invalido", credencial=credencial)
             messages.error(request, "Codigo de acceso invalido.")
 
     return render(request, "passwords/credencial_secret.html", {
@@ -237,7 +261,7 @@ def credenciales_export(request, vault_id):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = f"attachment; filename=credenciales_{vault.id}.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
 
 
