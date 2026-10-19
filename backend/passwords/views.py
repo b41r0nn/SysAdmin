@@ -1,3 +1,4 @@
+from cryptography.fernet import InvalidToken
 from django.contrib import messages
 from django.core.cache import cache
 from django.db.models import Count, Q
@@ -218,8 +219,19 @@ def credencial_secreto(request, vault_id, pk):
             )
         elif vault.check_access_code(request.POST.get("acceso_codigo", "")):
             cache.delete(clave)
-            secreto = credencial.get_secret()
-            _log_action(vault, request.user, "secreto_visto", credencial=credencial)
+            try:
+                secreto = credencial.get_secret()
+            except InvalidToken:
+                # Cifrado con una clave que ya no está configurada: no se puede
+                # recuperar; hay que volver a escribirlo desde "Editar".
+                _log_action(vault, request.user, "secreto_ilegible", credencial=credencial)
+                messages.error(
+                    request,
+                    "No se pudo descifrar este secreto: fue cifrado con una clave "
+                    "anterior. Edita la credencial y vuelve a escribir la contraseña.",
+                )
+            else:
+                _log_action(vault, request.user, "secreto_visto", credencial=credencial)
         else:
             cache.set(clave, intentos + 1, timeout=BLOQUEO_CODIGO_SEGUNDOS)
             _log_action(vault, request.user, "codigo_invalido", credencial=credencial)
