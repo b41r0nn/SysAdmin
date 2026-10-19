@@ -6,12 +6,12 @@
     python manage.py sincronizar_software --activo 24
 
 Se deja para un cron o para un proceso que la llame cada pocas horas. Ver
-`inventario/sync_software.py` para qué no se engancha al sync de equipos.
+`inventario/software_sync_flota.py` para qué no se engancha al sync de equipos.
 """
 from django.core.management.base import BaseCommand, CommandError
 
 from inventario.models import Activo
-from inventario.sync_software import (
+from inventario.software_sync_flota import (
     activos_con_equipo_ocs,
     linea_resumen,
     sincronizar_software,
