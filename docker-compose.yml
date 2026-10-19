@@ -31,7 +31,8 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=sysadmin.settings.production
     volumes:
-      - ./backend:/app
+      # El código va dentro de la imagen (ver backend/Dockerfile); desplegar =
+      # docker compose build django && docker compose up -d django.
       - static_volume:/app/staticfiles
       # Bind mount (NO volumen con nombre): MEDIA_ROOT = BASE_DIR/'media' = /app/media.
       # Con un volumen nombrado, los archivos subidos por la web quedan dentro de
