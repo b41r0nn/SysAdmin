@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.http import content_disposition_header
 
 from accounts.permisos import PERMISOS_POR_ROL
 from inventario.models import Activo
@@ -84,7 +85,9 @@ def media_protegido(request, ruta):
         resp = FileResponse(destino.open("rb"))
 
     resp["Content-Type"] = tipo
-    resp["Content-Disposition"] = f'{disposicion}; filename="{destino.name}"'
+    resp["Content-Disposition"] = content_disposition_header(
+        disposicion == "attachment", destino.name
+    )
     resp["X-Content-Type-Options"] = "nosniff"
     resp["Cache-Control"] = "private, max-age=3600"
     return resp

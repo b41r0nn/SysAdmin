@@ -15,7 +15,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from accounts.permisos import requiere_permiso
-from core.utils import get_client_ip
+from core.utils import get_client_ip, guardar_excel
 from mantenimiento.models import OrdenMantenimiento
 from notificaciones.services import aviso_usuario, encolar_email
 from reports.views import (
@@ -462,5 +462,5 @@ def tickets_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = 'attachment; filename="tickets_soporte.xlsx"'
-    wb.save(response)
+    guardar_excel(wb, response)
     return response

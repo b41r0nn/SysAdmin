@@ -61,6 +61,18 @@ class DocumentosCRUDTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Documento.objects.filter(titulo="Manual").exists())
 
+    def test_rechaza_extension_no_permitida(self):
+        resp = self.client.post(
+            reverse("documentos:crear"),
+            {
+                "titulo": "Malo",
+                "tipo_documento": "manual",
+                "archivo": SimpleUploadedFile("script.exe", b"MZ"),
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Documento.objects.filter(titulo="Malo").exists())
+
     def test_editar_documento(self):
         d = _doc()
         resp = self.client.post(

@@ -11,6 +11,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from accounts.permisos import requiere_permiso
+from core.utils import guardar_excel
 
 from .forms import LicenciaForm
 from .models import ESTADOS_LICENCIA, LicenciaSoftware, TIPOS_LICENCIA
@@ -204,7 +205,7 @@ def exportar_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=licencias.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
 
 
