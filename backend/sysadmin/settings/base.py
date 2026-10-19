@@ -1,30 +1,20 @@
-import logging
+"""Settings comunes. No se usa directamente: ver local.py y production.py."""
 import os
-import secrets
 from pathlib import Path
-
-from decouple import config
-
-logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# SECRET_KEY: generar uno aleatorio si no existe (solo para desarrollo)
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    SECRET_KEY = secrets.token_urlsafe(50)
-    logger.critical(
-        "SECRET_KEY not set in environment. Generated temporary key. "
-        "Set SECRET_KEY in .env for production use."
-    )
 
-# PASSWORDS_ENCRYPTION_KEY: advertir si no está configurado
+def _env_bool(name, default):
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+# local.py genera una clave temporal si falta; production.py exige que exista.
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
+
+# Clave Fernet del vault. Si falta se deriva de SECRET_KEY (ver passwords.crypto
+# y el check sysadmin.W001).
 PASSWORDS_ENCRYPTION_KEY = os.environ.get('PASSWORDS_ENCRYPTION_KEY', '')
-if not PASSWORDS_ENCRYPTION_KEY:
-    logger.warning(
-        "PASSWORDS_ENCRYPTION_KEY not set. Secrets will be derived from SECRET_KEY. "
-        "Set PASSWORDS_ENCRYPTION_KEY in .env for production use."
-    )
 
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
@@ -93,23 +83,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'sysadmin.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
-# For local testing, we will just use sqlite3 to avoid postgres container issues if they don't want to run it, but the docker-compose expects postgres. Let's use SQLite if POSTGRES_DB is not set.
-if os.environ.get('POSTGRES_DB'):
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB'),
-        'USER': os.environ.get('POSTGRES_USER'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST', 'db'),
-        'PORT': os.environ.get('DB_PORT', 5432),
-    }
+# Cada entorno define su base de datos (local.py: SQLite o PostgreSQL;
+# production.py: PostgreSQL obligatorio).
+DATABASES = {}
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 LOGIN_URL = 'accounts:login'
@@ -182,8 +158,6 @@ OCS_VERIFY_SSL = os.environ.get('OCS_VERIFY_SSL', 'True') == 'True'
 # CSRF / Security Configuration
 # Leer flags de seguridad desde el entorno. Por defecto activamos valores seguros
 # cuando DEBUG=False (entorno de producción), y valores permissivos en desarrollo.
-def _env_bool(name, default):
-    return os.environ.get(name, str(default)).lower() in ("1", "true", "yes")
 
 # Headers de seguridad (nativos Django, activos siempre)
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -192,35 +166,25 @@ SECURE_REFERRER_POLICY = 'same-origin'
 
 # Por defecto desactivados para no romper login en LAN sin HTTPS.
 # Activar explícitamente en producción con HTTPS mediante variables de entorno.
-SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
+SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", False)
 
 # Django corre detrás de nginx, que termina el TLS y reenvía el esquema real
 # mediante X-Forwarded-Proto. Sin SECURE_PROXY_SSL_HEADER, Django ignora ese
 # header y con SECURE_SSL_REDIRECT=True entra en redirect loop (nunca "ve" que
 # la petición ya es HTTPS por parte del proxy).
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)
-CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", False)
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", False)
 
 # HSTS (usar con HTTPS en producción)
 SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000' if not DEBUG else '0'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', not DEBUG)
 SECURE_HSTS_PRELOAD = _env_bool('SECURE_HSTS_PRELOAD', not DEBUG)
 
-# CSRF trusted origins: permitir localhost en desarrollo, configurable en producción
-_default_csrf_origins = [
-    'http://127.0.0.1:8000',
-    'http://localhost:8000',
-    'http://localhost:8001',
-    'https://localhost:6060',
-    'https://192.168.1.250:6060',
+# Orígenes confiables para CSRF: lista separada por comas en TRUSTED_ORIGINS.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get('TRUSTED_ORIGINS', '').split(',') if o.strip()
 ]
-_env_csrf_origins = os.environ.get('TRUSTED_ORIGINS', '')
-CSRF_TRUSTED_ORIGINS = (
-    [o.strip() for o in _env_csrf_origins.split(',') if o.strip()]
-    if _env_csrf_origins
-    else _default_csrf_origins
-)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
