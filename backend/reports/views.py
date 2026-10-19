@@ -20,6 +20,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.units import pixels_to_EMU
 from PIL import Image as PILImage
 from accounts.permisos import requiere_permiso
+from core.utils import guardar_excel
 
 from inventario.models import Activo, Asignacion, Movimiento, TIPOS, ESTADOS
 from mantenimiento.models import OrdenMantenimiento
@@ -870,7 +871,7 @@ def inventario_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=reporte_inventario.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
 
 
@@ -937,7 +938,7 @@ def usuarios_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=reporte_usuarios.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
 
 
@@ -990,7 +991,7 @@ def costos_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=reporte_costos.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
 
 
@@ -1035,7 +1036,7 @@ def movimientos_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=reporte_movimientos.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
 
 
@@ -1099,5 +1100,5 @@ def mantenimiento_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=reporte_mantenimiento.xlsx"
-    wb.save(response)
+    guardar_excel(wb, response)
     return response
