@@ -327,7 +327,7 @@ class YuleSyncTests(TestCase):
         equipo.save()
 
         with patch("yule.sync.build_client") as bc, \
-             patch("inventario.sync_software.sincronizar_software") as ssw:
+             patch("inventario.software_sync_flota.sincronizar_software") as ssw:
             bc.return_value.is_configured.return_value = True
             bc.return_value.get_computers.return_value = [{
                 "id": "79", "name": "W11SYNC3",

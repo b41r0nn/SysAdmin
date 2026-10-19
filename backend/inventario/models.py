@@ -1,4 +1,5 @@
 import calendar
+import uuid
 from datetime import date
 
 from django.db import IntegrityError, models, transaction
@@ -85,6 +86,8 @@ class Activo(models.Model):
     modelo = models.CharField(max_length=100)
     serial = models.CharField(max_length=150, unique=True)
     numero_interno = models.PositiveIntegerField(unique=True, editable=False, null=True, blank=True)
+    # Identificador no adivinable para la URL pública del QR (etiquetas).
+    qr_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     estado = models.CharField(max_length=30, choices=ESTADOS, default="disponible")
     ubicacion_fisica = models.CharField(max_length=200, blank=True)
     fecha_compra = models.DateField(null=True, blank=True)

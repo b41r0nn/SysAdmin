@@ -16,7 +16,9 @@ urlpatterns = [
 
     # ── Etiquetas QR ───────────────────────────────────────────────────────────
     path("<int:pk>/qr/", views.qr_imagen, name="qr_imagen"),
+    # Etiquetas impresas antes del token: siguen funcionando, con login.
     path("<int:pk>/qr/publico/", views.qr_publico, name="qr_publico"),
+    path("qr/<uuid:token>/", views.qr_publico_token, name="qr_publico_token"),
     path("<int:pk>/etiqueta/", views.qr_etiqueta_pdf, name="etiqueta"),
     path("etiquetas/", views.qr_etiquetas_masivas, name="etiquetas"),
 

@@ -239,6 +239,35 @@ cat /opt/sysadmin/backups/backup.log
 
 ---
 
+## 8b. Actualizar una instalación existente
+
+`/opt/sysadmin/app` **no es un clon de git**: el código se copia. Desde el
+repo en Windows (Git Bash):
+
+```bash
+# LF obligatorio: con autocrlf, git archive mete CRLF y entrypoint.sh no arranca.
+git -c core.autocrlf=false -c core.eol=lf archive --format=tar.gz -o /tmp/release.tgz master     backend nginx/nginx.conf nginx/Dockerfile docker-compose.yml deploy .env.example
+scp /tmp/release.tgz sistemas@192.168.1.250:/tmp/
+```
+
+En el servidor:
+
+```bash
+cd /opt/sysadmin/app
+TS=$(date +%F-%H%M); mkdir -p backups/$TS
+docker exec sysadmin_db sh -c 'pg_dump -U $POSTGRES_USER -d $POSTGRES_DB -Fc' > backups/$TS/db.dump
+tar xzf /tmp/release.tgz && rm /tmp/release.tgz
+docker compose build django nginx
+docker compose up -d django nginx
+docker ps --filter name=sysadmin_   # django debe quedar (healthy)
+```
+
+Desde 2026-10-19 el contenedor de Django corre como usuario `app` (UID 1000 =
+`sistemas`) y el código va **dentro de la imagen**: un cambio de código no se
+ve hasta reconstruir. `backend/media/` debe pertenecer a `sistemas` (UID 1000);
+si aparece algo de root ahí, `docker run --rm -v /opt/sysadmin/app/backend/media:/m
+--entrypoint chown -u 0 app-django -R 1000:1000 /m`.
+
 ## 9. Rollback
 
 ```bash
