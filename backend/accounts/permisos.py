@@ -47,6 +47,18 @@ PERMISOS_POR_ROL = {
 }
 
 
+# Roles que pueden ver secretos de la bóveda en claro. El permiso "lectura" del
+# módulo passwords solo da acceso al listado (títulos, usuarios, URLs).
+ROLES_VER_SECRETOS = {"superadmin", "admin"}
+
+
+def puede_ver_secretos(user):
+    """True si el usuario puede revelar secretos de la bóveda."""
+    if not user or not user.is_authenticated:
+        return False
+    return user.is_superuser or getattr(user, "rol", None) in ROLES_VER_SECRETOS
+
+
 def requiere_permiso(modulo, nivel="lectura"):
     """
     Decorator que verifica permisos por rol.

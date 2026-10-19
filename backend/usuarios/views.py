@@ -11,6 +11,7 @@ import openpyxl
 from .models import Usuario
 from .forms import UsuarioForm
 from accounts.permisos import requiere_permiso
+from core.utils import guardar_excel
 
 logger = logging.getLogger(__name__)
 
@@ -389,5 +390,5 @@ def descargar_plantilla_usuarios(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = 'attachment; filename="plantilla_importar_usuarios.xlsx"'
-    wb.save(response)
+    guardar_excel(wb, response)
     return response

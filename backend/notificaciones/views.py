@@ -1,8 +1,11 @@
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .models import Notificacion
 from .services import generar_notificaciones
+
+CAMPANA_REGENERAR_SEGUNDOS = 5 * 60
 
 
 @login_required
@@ -20,7 +23,11 @@ def lista_notificaciones(request):
 
 @login_required
 def cantidad(request):
-    generar_notificaciones(request.user)
+    # La campana se carga en cada página: recalcular las alertas como mucho
+    # una vez cada CAMPANA_REGENERAR_SEGUNDOS por usuario. La bandeja
+    # (lista_notificaciones) sigue recalculando siempre.
+    if cache.add(f"notificaciones:campana:{request.user.pk}", True, CAMPANA_REGENERAR_SEGUNDOS):
+        generar_notificaciones(request.user)
     count = request.user.notificaciones.filter(leida=False).count()
     return render(request, "notificaciones/partials/campana.html", {"count": count})
 

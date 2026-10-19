@@ -614,3 +614,21 @@ class EnviarNotificacionesEmailCommandTests(TestCase):
 
         self.assertTrue(NotificacionEmail.objects.get().enviado)
         self.assertIn("1 enviados", out.getvalue())
+
+
+class CampanaThrottleTests(TestCase):
+    def test_campana_regenera_una_vez_por_ventana(self):
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+        from django.core.cache import cache
+
+        cache.clear()
+        user = get_user_model().objects.create_user(
+            username="campana_throttle", password="x", rol="superadmin"
+        )
+        self.client.force_login(user)
+        with patch("notificaciones.views.generar_notificaciones") as gen:
+            self.client.get(reverse("notificaciones:cantidad"))
+            self.client.get(reverse("notificaciones:cantidad"))
+        self.assertEqual(gen.call_count, 1)
