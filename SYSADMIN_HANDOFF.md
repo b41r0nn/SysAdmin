@@ -556,7 +556,7 @@ SysAdmin/
 
     └── inventario/              ← FASE 7B-bis: inventario de software
         ├── software_sync.py     ← aplicar_reporte(): compara y escribe solo diferencias
-        ├── sync_software.py     ← recorrido de la flota con errores aislados por equipo
+        ├── software_sync_flota.py ← recorrido de la flota con errores aislados por equipo
         ├── management/commands/
         │   └── sincronizar_software.py   ← comando que ejecuta el cron
         ├── migrations/0009_softwareinstalado.py

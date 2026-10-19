@@ -440,7 +440,7 @@ Saber qué software hay instalado en cada equipo, y no solo "qué hardware tiene
 
 - `backend/inventario/models.py` (modelo `SoftwareInstalado`)
 - `backend/inventario/software_sync.py` (comparación y aplicación de diferencias)
-- `backend/inventario/sync_software.py` (recorrido de la flota con errores aislados)
+- `backend/inventario/software_sync_flota.py` (recorrido de la flota con errores aislados)
 - `backend/inventario/management/commands/sincronizar_software.py` (comando CLI)
 - `backend/inventario/views.py` + `urls.py` (las dos vistas)
 - `backend/yule/sync.py` (`_sincronizar_software_tras_equipos`, hook tras vincular equipos)
