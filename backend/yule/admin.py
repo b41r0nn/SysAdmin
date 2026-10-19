@@ -145,11 +145,11 @@ class EquipoOCSAdmin(admin.ModelAdmin):
         if dias is None:
             return "—"
         if dias == 0:
-            return format_html('<span style="color: green;">Hoy</span>')
+            return format_html('<span style="color: {};">Hoy</span>', "green")
         elif dias < 7:
-            return format_html(f'<span style="color: orange;">{dias}d</span>')
+            return format_html('<span style="color: orange;">{}d</span>', dias)
         else:
-            return format_html(f'<span style="color: red;">{dias}d</span>')
+            return format_html('<span style="color: red;">{}d</span>', dias)
     dias_sin_reporte_display.short_description = "Días sin reporte"
 
     def activo_local_link(self, obj):
