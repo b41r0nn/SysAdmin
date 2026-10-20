@@ -27,6 +27,14 @@ backend/inventario/templates/inventario/etiqueta_pdf.html
 
 Se renderiza con WeasyPrint (standalone, patrón `acta_pdf.html`). Si en el futuro cambia el tamaño de la plaqueta, ese archivo es el único lugar donde ajustar `width`/`height` de `.label` (y `.qr` si hace falta).
 
-Vistas que generan el PDF (en `backend/inventario/views.py`):
-- `inventario/views.py` → `qr_etiqueta_pdf` (etiqueta individual) y `qr_etiquetas_masivas` (selección masiva).
+Vistas que generan el PDF (en `backend/inventario/views/qr.py`):
+- `qr_etiqueta_pdf` (etiqueta individual) y `qr_etiquetas_masivas` (selección masiva).
 - Rutas: `inventario/urls.py` → `etiqueta` y `etiquetas`.
+
+## A dónde apunta el QR (desde 2026-10-19)
+
+- **Etiquetas nuevas**: `https://192.168.1.250:6060/inventario/qr/<token>/`. El token es un UUID
+  por activo (`Activo.qr_token`): la página es pública pero no se puede recorrer el inventario
+  cambiando números.
+- **Etiquetas impresas antes**: `.../inventario/<id>/qr/publico/`. Siguen funcionando, pero
+  **piden iniciar sesión**. Reimprimir las que tengan que verse sin login.

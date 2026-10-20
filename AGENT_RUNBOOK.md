@@ -8,9 +8,9 @@
 
 - Servidor: `sistemas@192.168.1.250` · Ubuntu Server 22.04 · proyecto en `/opt/sysadmin/app` (Docker Compose).
 - Web: `https://192.168.1.250:6060` (HTTPS) · `http://192.168.1.250:6061` (301 → https). Cert autofirmado CN=192.168.1.250.
-- Contenedores: `sysadmin_db` (postgres:15-alpine) · `sysadmin_django` (django 4.2 / python 3.11, gunicorn, axes) · `sysadmin_nginx`. Hikvision corre aparte en sus propios contenedores/redes y **ocupa los puertos 80/443 del host** (no se toca).
+- Contenedores: `sysadmin_db` (postgres:15-alpine) · `sysadmin_django` (django 5.2 LTS / python 3.11, gunicorn 23, axes; corre como usuario `app` UID 1000, código dentro de la imagen) · `sysadmin_nginx`. Hikvision corre aparte en sus propios contenedores/redes y **ocupa los puertos 80/443 del host** (no se toca).
 - OCS Inventory NG: `http://192.168.1.250:8081/ocsreports/` (contenedores `ocsinventory-db` / `ocsinventory-server`; el `ocsinventory-proxy` está detenido a propósito).
-- `.env` en `/opt/sysadmin/app/.env` (`DEBUG=False`). Repo local = fuente · servidor = copia vía `rsync` (excluye `venv/`, `backend/media/`, `tmp_scratch*`).
+- `.env` en `/opt/sysadmin/app/.env` (`DEBUG=False`). Repo local = fuente · servidor = copia (no es clon de git): `git archive` con LF + `docker compose build`. Ver `GUIA_DEPLOY_PASO_A_PASO.md` §8b.
 
 ## Accesos
 

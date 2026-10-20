@@ -57,8 +57,9 @@
 | 🧪 Tests de cobertura          | todas las apps   | ✅ Completa | Fase 4 |
 | 🛡️ Seguridad del login (django-axes) + auditoría de fallos | `accounts` | ✅ Completa | Fase 7 |
 | 🔒 HTTPS interno (nginx + cert autofirmado) | infraestructura | ✅ Completa | Fase 7 |
+| 🧯 Auditoría de seguridad y hardening (2026-10-19) | todas | ✅ Completa | Auditoría |
 
-**Producción** (2026-09-29): 24 activos · 1 vinculado a OCS (W11F35F) · 121 programas inventariados · 404 tests en verde. El resto de la flota se está cargando por partes; el sync de software ya corre solo a diario aunque hoy solo tenga un equipo al que leerle.
+**Producción** (2026-10-19): 24 activos · Django 5.2 LTS · contenedor sin root · **465 tests en verde** (SQLite y PostgreSQL). Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0).
 
 ---
 
@@ -66,12 +67,12 @@
 
 | Componente        | Tecnología                          |
 | ----------------- | ----------------------------------- |
-| **Backend**       | Django 4.2 + Python 3.11            |
+| **Backend**       | Django 5.2 LTS + Python 3.11 + gunicorn 23 |
 | **Base de Datos** | PostgreSQL 15                       |
 | **Frontend**      | Bootstrap 5.3 + HTMX                |
-| **Reportes**      | WeasyPrint (PDF) + openpyxl (Excel) |
+| **Reportes**      | WeasyPrint 70 (PDF) + openpyxl (Excel) |
 | **Seguridad**     | Cryptography + Argon2               |
-| **Contenedores**  | Docker Compose                      |
+| **Contenedores**  | Docker Compose (Django corre como usuario `app`, UID 1000, con el código dentro de la imagen) |
 | **Proxy Inverso** | Nginx 1.25                          |
 | **Red**           | LAN Local (192.168.1.250)           |
 
@@ -103,14 +104,18 @@ SysAdmin/
     ├── templates/
     │   └── base.html               ← Plantilla base (sidebar + topbar)
     ├── sysadmin/                   ← Configuración Django
-    │   ├── settings/base.py
+    │   ├── settings/base.py        ← común (no se usa directo)
+    │   ├── settings/local.py       ← desarrollo (manage.py)
+    │   ├── settings/production.py  ← producción (wsgi / Docker)
     │   ├── urls.py
     │   └── wsgi.py
     ├── accounts/                   ← Autenticación (Login/Logout)
     ├── core/                       ← Dashboard (Estadísticas)
     ├── usuarios/                   ← Gestión de personas
     ├── inventario/                 ← Gestión de activos
+    │   └── views/                  ← activos, movimientos, qr, catalogo, excel
     ├── reports/                    ← Reportes y exportes (PDF/Excel)
+    │   ├── views.py · datos.py · excel_estilo.py
     ├── mantenimiento/              ← Órdenes de mantenimiento
     ├── passwords/                  ← Vault de contraseñas cifradas
     ├── yule/                       ← Sincronización OCS Inventory NG
@@ -183,8 +188,13 @@ TRUSTED_ORIGINS=https://192.168.1.250:6060
 OCS_BASE_URL=http://192.168.1.250:8081/ocsapi/v1
 OCS_USER=Administrador
 OCS_TOKEN=token_ocs_aqui
-OCS_VERIFY_SSL=False
+OCS_VERIFY_SSL=True
+
+# Vault de contraseñas: clave Fernet propia (obligatoria en producción)
+PASSWORDS_ENCRYPTION_KEY=clave_fernet_44_caracteres
 ```
+
+> `TRUSTED_ORIGINS` y `SECRET_KEY` son **obligatorios** en producción: si faltan, Django no arranca (no hay valores por defecto).
 
 > **Nota:** `manage.py` y `wsgi.py` cargan `.env` automáticamente en desarrollo con `python-dotenv`. En producción Docker las variables vienen del `env_file` de `docker-compose.yml`.
 
@@ -193,6 +203,8 @@ OCS_VERIFY_SSL=False
 ```bash
 docker compose up -d --build
 ```
+
+> El código de Django va **dentro de la imagen**: cualquier cambio de código requiere `docker compose build django` antes del `up`. Para actualizar una instalación existente seguir `GUIA_DEPLOY_PASO_A_PASO.md` §8b.
 
 Verificar que todo esté corriendo:
 ```bash
@@ -348,7 +360,7 @@ Gestión completa de activos IT con soporte para múltiples tipos de dispositivo
 - ✅ Seguimiento de garantía
 - ✅ Historial de movimientos
 - ✅ Actas de asignación en PDF
-- ✅ **Etiquetas QR imprimibles** (etiqueta individual, selección masiva de hasta 8 por hoja A4 y código QR integrado en la ficha del activo)
+- ✅ **Etiquetas QR imprimibles** (etiqueta individual, selección masiva de hasta 8 por hoja A4 y código QR integrado en la ficha del activo). El QR apunta a `/inventario/qr/<token>/` (público, no adivinable); las etiquetas impresas antes de 2026-10-19 usan `/inventario/<id>/qr/publico/`, que sigue funcionando pero pide login
 - ✅ Exportación a Excel
 - ✅ **Importación masiva desde Excel** (plantilla descargable, vista previa, confirmación)
 - ✅ **Plantilla Excel** con 39 columnas, 2 ejemplos (Portátil/Celular) y hoja Instrucciones
@@ -420,11 +432,11 @@ Gestión de órdenes de mantenimiento preventivo y correctivo.
 Vault seguro de credenciales con cifrado.
 
 **Características:**
-- ✅ Cifrado simétrico (cryptography)
-- ✅ Hash de acceso con Argon2
-- ✅ Control de rol (staff/superuser)
-- ✅ Auditoría de accesos
-- ✅ Exportación segura
+- ✅ Cifrado simétrico Fernet con clave propia (`PASSWORDS_ENCRYPTION_KEY`); `manage.py rotar_clave_vault` re-cifra lo guardado con la clave anterior
+- ✅ Código de acceso por vault con hash Argon2; 5 intentos fallidos bloquean 15 min
+- ✅ Ver secretos en claro: solo **superadmin** y **admin** (el rol lectura ve el listado, no los secretos)
+- ✅ Auditoría de accesos (`secreto_visto`, `codigo_invalido`, `secreto_ilegible`, …)
+- ✅ Exportación segura (sin secretos; celdas sin fórmulas)
 
 **Acceso:** `https://192.168.1.250:6060/passwords/`
 
@@ -442,6 +454,7 @@ Repositorio centralizado de manuales, procedimientos, políticas y documentos ge
 - ✅ Filtros por tipo, categoría y texto
 - ✅ Descarga directa de archivos
 - ✅ Iconos por tipo de archivo (PDF, Word, Excel, etc.)
+- ✅ Solo tipos permitidos (PDF, Office, OpenDocument, imágenes, txt/csv/md, zip, vsdx) y máximo 50 MB
 
 **Acceso:** `https://192.168.1.250:6060/documentos/`
 
@@ -506,16 +519,10 @@ OCS_VERIFY_SSL=True
 
 ## 📋 Tareas Críticas Pendientes
 
-1. **Deploy en servidor**
-   - Ejecutar `migrate` (42 migraciones; nuevas: `licencias`, `prestamos`, `soporte`, `mantenimiento` 0002/0003, `administracion` 0002, `yule` 0002, `passwords` 0002/0003, etc.)
-   - Reiniciar contenedor Django
-   - Verificar módulos Fases 1-6 (tickets, licencias, préstamos) y validación manual de reportes configurables + importación masiva + etiquetas QR
-
-2. **HTTPS (Fase 7)**: el acceso ahora es `https://192.168.1.250:6060` (cert autofirmado en `nginx/certs/`); `http://...:6061` redirige a HTTPS. Al desplegar, levantar con `docker compose up -d --build` y confirmar que https carga sin 500 y el redirect funciona.
-
-3. **Tests**: Suite automatizada — ✅ **404/404 OK** (Fases 1-7 + inventario de software 7B-bis)
-
-4. **Cron del inventario de software**: corre solo a las **03:07**. En un servidor nuevo hay que instalarlo con `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh`.
+1. **Archivos sensibles fuera de OneDrive** (PC de desarrollo): `.env`, `sysadmin_data.dump`, `*.sqlite3`, `nginx/certs/`, `backend/media/` no deben quedar en carpetas sincronizadas.
+2. **Etiquetas QR viejas**: las impresas antes de 2026-10-19 piden login al escanearlas. Reimprimir las que deban verse sin sesión.
+3. **Tests**: ✅ **465/465 OK** en SQLite y en PostgreSQL 15.
+4. **Cron del inventario de software**: corre solo a las **03:07**. En un servidor nuevo: `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh`.
 
 ---
 
@@ -571,6 +578,23 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-10-19 — v1.12.0 · Auditoría de seguridad y hardening
+
+- ✅ **Dependencias**: Django 4.2 (sin soporte) → **5.2.18 LTS**, gunicorn 22 → 23 (CVE request smuggling), WeasyPrint 60.2 → 70 (6 CVEs), psycopg2, openpyxl y django-htmx al día. `pip-audit` sin hallazgos. Se quitó `python-decouple`
+- ✅ **Bóveda**: solo superadmin/admin ven secretos; límite de 5 intentos del código de acceso; clave Fernet propia en producción + comando `rotar_clave_vault`; un secreto ilegible muestra aviso en vez de error 500
+- ✅ **QR público por token** (no enumerable); URL vieja por id con login
+- ✅ **Documentos**: lista blanca de extensiones y máximo 50 MB
+- ✅ **Excel**: ninguna celda exportada se guarda como fórmula (formula injection)
+- ✅ **Actas PDF**: solo se guardan en disco si el usuario tiene escritura
+- ✅ **Campana de notificaciones**: recalcula como mucho cada 5 min por usuario
+- ✅ **nginx**: CSP mínima, sin `X-XSS-Protection` obsoleto
+- ✅ **Contenedor Django sin root** (usuario `app`, UID 1000), sin `build-essential`, código dentro de la imagen; permisos del servidor 755/644 y `.env` 600
+- ✅ **Settings**: sin `SECRET_KEY` aleatoria ni SQLite de respaldo en `base.py`; `TRUSTED_ORIGINS` obligatorio; sesión por defecto 30 min
+- ✅ **CI**: `pip-audit` y tests con PostgreSQL bloquean
+- ✅ **Refactor**: `inventario/views.py` → paquete de 5 módulos; `reports/views.py` → `views` + `datos` + `excel_estilo`; `sync_software.py` → `software_sync_flota.py`
+- ✅ **OCS**: contraseña root de MySQL rotada
+- ✅ Suite **465/465 OK** (SQLite y PostgreSQL)
 
 ### 2026-09-24 — v1.10.0 · Seguridad del login + HTTPS interno (Fase 7)
 

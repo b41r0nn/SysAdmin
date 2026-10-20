@@ -46,7 +46,7 @@ TRUSTED_ORIGINS=https://192.168.1.250:6060,https://localhost:6060
 OCS_BASE_URL=http://192.168.1.250:8081/ocsapi/v1
 OCS_USER=Administrador
 OCS_TOKEN=<token_ocs>
-OCS_VERIFY_SSL=False
+OCS_VERIFY_SSL=True
 ```
 
 > **⚠️ CRÍTICO — Vault de contraseñas:** `PASSWORDS_ENCRYPTION_KEY` debe ser una
@@ -56,9 +56,8 @@ OCS_VERIFY_SSL=False
 > `ValueError: Fernet key must be 32 url-safe base64-encoded bytes` y **nada se
 > puede cifrar**: ni las credenciales del vault ni la contraseña de OCS en Yule
 > (el formulario de configuración revienta en el `save()`).
-> Si además `SECRET_KEY` falta, `base.py:15` genera una clave aleatoria **en cada
-> arranque** (y distinta en cada worker de gunicorn) → sesiones perdidas en cada
-> restart y descifrado intermitente del vault.
+> Si falta `SECRET_KEY` o `TRUSTED_ORIGINS`, `production.py` **no arranca**
+> (desde 2026-10-19 no hay valores por defecto).
 > Definir ambas claves ANTES del primer arranque, respaldarlas (el `backup.sh` ya
 > incluye el `.env` en el paquete) y validar:
 > ```bash
@@ -182,7 +181,8 @@ ls -la backend/media && rm -f backend/media/PRUEBA
 - [ ] `DEBUG=True` en `.env` local de desarrollo (no usar en servidor).
 - [ ] **OCS**: el servidor OCS (puerto 8081) es infraestructura independiente; si se expone
       fuera de la LAN, habilitar en UFW (`sudo ufw allow 8081/tcp`). OCS usa HTTP plano en LAN
-      con `OCS_VERIFY_SSL=False` — no exponer fuera de la red interna sin TLS.
+      (la llamada de SysAdmin a OCS no sale del servidor; `OCS_VERIFY_SSL=True` aplica si algún día
+      pasa a HTTPS) — no exponer fuera de la red interna sin TLS.
 - [ ] **SOAP de OCS**: `Cannot find XML::Entities` — el paquete `libxml-entities-perl` no existe
       en Ubuntu 22.04. El agente SOAP no funciona; la web y la API JSON sí. No bloqueante para Yule.
 - [ ] **Documentos**: los 2 PDFs de `documentos/2026/09/` están en el bind mount y
