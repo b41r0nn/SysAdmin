@@ -22,6 +22,16 @@
 - **B10 — gunicorn/contenedor**: `--workers`/`--timeout`/logs configurables (`GUNICORN_WORKERS`, `GUNICORN_TIMEOUT`) + `backend/.dockerignore`.
 - **B11 — Estilo/docs**: `ruff` (E,F,W,B,DJ) obligatorio (`backend/ruff.toml`; `ruff check backend`), imports muertos fuera, `format_html` en vez de `mark_safe`, sin BOM; informes movidos a `docs/informes/`.
 
+## Cambios de la auditoría 2026-10-19 (ya en `master` y en producción)
+
+- **Despliegue**: el código va dentro de la imagen; `/opt/sysadmin/app` no es clon de git. Seguir `GUIA_DEPLOY_PASO_A_PASO.md` §8b (`git archive` con LF → `docker compose build django nginx` → `up -d`). Borrar en el servidor los archivos que git eliminó o renombró (el tar no los quita).
+- **Contenedor**: Django corre como `app` (UID 1000 = `sistemas`); `backend/media/` debe ser de UID 1000.
+- **Vault**: solo superadmin/admin ven secretos; clave propia en `PASSWORDS_ENCRYPTION_KEY`; `rotar_clave_vault` para re-cifrar.
+- **QR**: `/inventario/qr/<token>/` pública; `/inventario/<id>/qr/publico/` con login.
+- **Mocks en tests**: las vistas de inventario están en `inventario/views/<módulo>.py`; parchear ahí (p. ej. `inventario.views.movimientos.encolar_email`).
+- **OCS**: `docker compose up -d ocsdb ocsapplication` (nombrar servicios; si no, arranca el proxy roto).
+- Detalle completo: `SYSADMIN_HANDOFF.md` → "AUDITORIA DE SEGURIDAD 2026-10-19".
+
 ## Estado actual (2026-09-29, producción + OCS + inventario de software)
 
 - **Servidor**: `sistemas@192.168.1.250` (Ubuntu Server 22.04), proyecto en `/opt/sysadmin/app` (Docker Compose).

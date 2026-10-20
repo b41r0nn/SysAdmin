@@ -108,7 +108,7 @@ TRUSTED_ORIGINS=https://192.168.1.250:6060,https://localhost:6060
 OCS_BASE_URL=http://192.168.1.250:8081/ocsapi/v1
 OCS_USER=<usuario_ocs>
 OCS_TOKEN=<token_ocs>
-OCS_VERIFY_SSL=False
+OCS_VERIFY_SSL=True
 ```
 
 > **⚠️ Claves cripto:** falta `SECRET_KEY` → producción **no arranca**; falta

@@ -460,7 +460,7 @@ OCS_VERIFY_SSL=True
 
 ## STACK TÉCNICO
 
-- Backend: Django 4.2 + Python 3.11
+- Backend: Django 5.2 LTS + Python 3.11 + gunicorn 23 (contenedor sin root, usuario `app` UID 1000)
 - DB: PostgreSQL 15
 - Frontend: Bootstrap 5.3 + Django Templates + HTMX
 - Fuentes: Sora (UI) + JetBrains Mono (datos técnicos)
@@ -842,7 +842,7 @@ from inventario.models import Activo
 
 ```
 Proyecto: SysAdmin (sistema gestion IT)
-Stack: Django 4.2 · PostgreSQL 15 · Bootstrap 5.3 · HTMX · Docker Compose
+Stack: Django 5.2 LTS · PostgreSQL 15 · Bootstrap 5.3 · HTMX · Docker Compose
 Etapas 0, 1, 2 completas. Iniciando Etapa 3 — inventario, sub-etapa [INDICAR: 3A/3B/3C/3D/3E/3F].
 Respetar design system --sa-*, convenciones del proyecto, nunca recrear archivos existentes.
 Terse responses. Código completo. Sin fluff.
@@ -850,21 +850,23 @@ Terse responses. Código completo. Sin fluff.
 
 ---
 
-## REQUIREMENTS.TXT ACTUAL
+## REQUIREMENTS.TXT ACTUAL (2026-10-19)
 
 ```
-Django==4.2.13
-gunicorn==21.2.0
-psycopg2-binary==2.9.9
-WeasyPrint==60.2
-openpyxl==3.1.2
-cryptography==42.0.8
+Django==5.2.18
+gunicorn==23.0.0
+psycopg2-binary==2.9.13
+WeasyPrint==70.0
+pydyf==0.13.0
+openpyxl==3.1.5
+cryptography==50.0.2
 argon2-cffi==23.1.0
-python-decouple==3.8
-Pillow==10.3.0
-django-htmx==1.17.3
+python-dotenv==1.2.2
+Pillow==12.3.0
 qrcode==8.2
-django-axes==8.3.1        ← FASE 7: rate limit/lockout del login
+django-htmx==1.23.0
+django-axes==8.3.1
+requests==2.33.0
 ```
 
 > **Nota:** `backend/requirements.txt` es la fuente de verdad de dependencias (el build de Docker la instala desde `./backend`). El duplicado de la raíz se eliminó en 2026-09-24 para evitar divergencias.
@@ -1744,4 +1746,25 @@ Para aprovechar los cambios:
 
 ---
 
-*Última actualización: 2026-09-09 · v1.1.0 + post-release importación masiva · Módulo documentos y mejoras de inventario integradas*
+## AUDITORIA DE SEGURIDAD 2026-10-19
+
+Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge en `master`). Tag de respaldo previo: `pre-auditoria-2026-10-19`.
+
+- **Dependencias**: Django 5.2.18 LTS, gunicorn 23, WeasyPrint 70 (+ pydyf 0.13), psycopg2 2.9.13, openpyxl 3.1.5, django-htmx 1.23. Sin `python-decouple`. `django.utils.timezone.utc` ya no existe en Django 5 (`yule/sync.py` usa `datetime.timezone.utc`).
+- **Vault**: `accounts.permisos.puede_ver_secretos` (superadmin/admin); 5 intentos fallidos del código → bloqueo 15 min (caché); `AccesoLog` registra `codigo_invalido` y `secreto_ilegible`. `passwords.crypto.build_fernet` usa `MultiFernet([clave propia, clave derivada de SECRET_KEY])`; `manage.py rotar_clave_vault [--dry-run]` re-cifra.
+- **QR**: `Activo.qr_token` (UUID, migración `inventario.0010`). Ruta pública `inventario:qr_publico_token`; `inventario:qr_publico` (por id) exige login.
+- **Actas**: `generar_acta_pdf` solo persiste el PDF con permiso de escritura (`accounts.permisos.tiene_permiso`).
+- **Documentos**: `DocumentoForm.clean_archivo` con `EXTENSIONES_DOCUMENTO` y 50 MB.
+- **Excel**: todos los exportes guardan con `core.utils.guardar_excel` (sin fórmulas).
+- **Campana**: `notificaciones.views.cantidad` regenera como mucho cada 5 min por usuario.
+- **Settings**: `base.py` sin SECRET_KEY aleatoria ni DATABASES por defecto; `production.py` exige `SECRET_KEY` y `TRUSTED_ORIGINS`.
+- **Docker**: imagen sin `build-essential`, usuario `app`, código dentro de la imagen (sin `./backend:/app`), `ENTRYPOINT ["bash", "/app/entrypoint.sh"]`, `.gitattributes` fuerza LF. `media/` y `app_static_volume` pertenecen a UID 1000. Desplegar: `GUIA_DEPLOY_PASO_A_PASO.md` §8b.
+- **Estructura**: `inventario/views/` (activos, movimientos, qr, catalogo, excel); `reports/{views,datos,excel_estilo}.py`; `inventario/software_sync_flota.py` (antes `sync_software.py`). Para mockear en tests: `inventario.views.movimientos.encolar_email`.
+- **nginx**: CSP mínima (`frame-ancestors`, `object-src`, `base-uri`, `form-action`); sin `X-XSS-Protection`.
+- **CI**: `pip-audit` y `test-postgres` bloquean.
+- **Servidor**: permisos 755/644, `.env` 600; contraseña root de MySQL de OCS rotada (solo en su `docker-compose.yml`).
+- Tests: **465/465** (SQLite y PostgreSQL 15).
+
+---
+
+*Última actualización: 2026-10-19 · v1.12.0 · Auditoría de seguridad y hardening*
