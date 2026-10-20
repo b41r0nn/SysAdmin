@@ -48,7 +48,7 @@ def catalogo_json(request):
 
 @requiere_permiso("inventario", "lectura")
 def lista_catalogo(request):
-    from .models import TIPOS
+    from ..models import TIPOS
     qs = CatalogoModelo.objects.all()
 
     tipo = request.GET.get("tipo", "")
