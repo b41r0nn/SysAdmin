@@ -46,7 +46,7 @@ def lista_activos(request):
             | Q(imei__icontains=q)
         )
 
-    from .models import ESTADOS, TIPOS
+    from ..models import ESTADOS, TIPOS
     stats = Activo.objects.aggregate(
         total=Count("pk"),
         asignados=Count(Case(When(estado="asignado", then=Value(1)), output_field=IntegerField())),

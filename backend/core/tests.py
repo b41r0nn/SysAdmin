@@ -364,3 +364,60 @@ class GuardarExcelTests(TestCase):
         celda = load_workbook(buffer).active["A1"]
         self.assertEqual(celda.data_type, "s")
         self.assertEqual(celda.value, "=HYPERLINK(\"http://x\",\"clic\")")
+
+
+class SmokeVistasTests(TestCase):
+    """Abre con superadmin las páginas de solo lectura de cada módulo.
+
+    Existe porque un import roto dentro de una vista (no en la cabecera del
+    módulo) solo falla al abrir esa página: la lista de inventario estuvo rota
+    en producción sin que ningún test la tocara.
+    """
+
+    RUTAS = [
+        "core:dashboard",
+        "usuarios:lista", "usuarios:crear", "usuarios:importar", "usuarios:importar_plantilla",
+        "inventario:lista", "inventario:software_global", "inventario:crear", "inventario:etiquetas",
+        "inventario:catalogo_lista", "inventario:catalogo_crear", "inventario:catalogo_json",
+        "inventario:exportar_opciones", "inventario:importar", "inventario:importar_plantilla",
+        "reports:index", "reports:activos_por_usuario", "reports:inventario_excel",
+        "reports:movimientos_excel", "reports:usuarios_excel", "reports:costos_excel",
+        "reports:mantenimiento_excel",
+        "mantenimiento:lista_ordenes", "mantenimiento:lista_planes", "mantenimiento:calendario",
+        "mantenimiento:calendario_eventos", "mantenimiento:reportar", "mantenimiento:crear_plan",
+        "mantenimiento:crear_orden", "mantenimiento:hoja_de_vida_buscar",
+        "passwords:index", "passwords:vault_crear",
+        "yule:index", "yule:configuracion", "yule:equipos_lista", "yule:equipos_sin_match",
+        "yule:historial",
+        "documentos:lista", "documentos:crear", "documentos:categorias_lista",
+        "administracion:lista_auditoria", "administracion:cuentas", "administracion:crear_cuenta",
+        "administracion:configuracion",
+        "notificaciones:lista", "notificaciones:cantidad",
+        "soporte:lista", "soporte:reportar_publico", "soporte:excel", "soporte:crear",
+        "licencias:lista", "licencias:crear", "licencias:exportar_excel",
+        "prestamos:lista", "prestamos:crear",
+    ]
+
+    def test_paginas_de_lectura_responden_200(self):
+        from inventario.models import Activo
+
+        user = get_user_model().objects.create_user(
+            username="smoke_admin", password="x", rol="superadmin"
+        )
+        self.client.force_login(user)
+        activo = Activo.objects.create(
+            serial="SN-SMOKE", tipo_dispositivo="escritorio", marca="HP",
+            modelo="X", estado="disponible",
+        )
+        rutas = [(r, []) for r in self.RUTAS] + [
+            ("inventario:detalle", [activo.pk]),
+            ("inventario:software", [activo.pk]),
+            ("inventario:editar", [activo.pk]),
+            ("inventario:asignar", [activo.pk]),
+            ("inventario:qr_publico", [activo.pk]),
+            ("mantenimiento:hoja_de_vida", [activo.pk]),
+        ]
+        for nombre, args in rutas:
+            with self.subTest(ruta=nombre):
+                resp = self.client.get(reverse(nombre, args=args))
+                self.assertEqual(resp.status_code, 200, nombre)
