@@ -34,7 +34,7 @@ class DocumentoForm(forms.ModelForm):
             "tipo_documento": forms.Select(attrs={"class": "form-select"}),
             "archivo": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "version": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej. 1.0"}),
-            "fecha_version": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "fecha_version": forms.DateInput(attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 

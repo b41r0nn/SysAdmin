@@ -421,3 +421,36 @@ class SmokeVistasTests(TestCase):
             with self.subTest(ruta=nombre):
                 resp = self.client.get(reverse(nombre, args=args))
                 self.assertEqual(resp.status_code, 200, nombre)
+
+
+class CamposFechaFormatoISOTests(TestCase):
+    """<input type="date"> solo acepta AAAA-MM-DD; con LANGUAGE_CODE es-co Django
+    renderiza DD/MM/AAAA si el widget no fija format, y el campo aparece vacío al editar."""
+
+    def test_todos_los_input_date_renderizan_iso(self):
+        import importlib
+        from datetime import date
+
+        from django import forms
+        from django.utils import translation
+
+        revisados = 0
+        with translation.override("es-co"):
+            for app in apps.get_app_configs():
+                if not app.path.startswith(str(settings.BASE_DIR)):
+                    continue
+                try:
+                    modulo = importlib.import_module(f"{app.name}.forms")
+                except ModuleNotFoundError:
+                    continue
+                for nombre_form, form_cls in vars(modulo).items():
+                    campos = getattr(form_cls, "base_fields", None)
+                    if not isinstance(campos, dict):
+                        continue
+                    for nombre, campo in campos.items():
+                        widget = campo.widget
+                        if isinstance(widget, forms.DateInput) and widget.input_type == "date":
+                            revisados += 1
+                            with self.subTest(form=f"{app.name}.{nombre_form}", campo=nombre):
+                                self.assertEqual(widget.format_value(date(2025, 3, 14)), "2025-03-14")
+        self.assertGreater(revisados, 0)

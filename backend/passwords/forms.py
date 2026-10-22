@@ -66,7 +66,7 @@ class CredencialForm(forms.ModelForm):
             "url": forms.URLInput(attrs={"class": "form-control"}),
             "notas": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "estado": forms.Select(attrs={"class": "form-select"}),
-            "fecha_expiracion": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "fecha_expiracion": forms.DateInput(attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"),
         }
 
     def save(self, commit=True):

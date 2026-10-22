@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -777,3 +778,38 @@ class ActaPdfPersistenciaTests(TestCase):
         self.asignacion.acta.refresh_from_db()
         self.assertTrue(self.asignacion.acta.pdf_generado)
         self.asignacion.acta.pdf_generado.delete(save=False)
+
+
+class EditarActivoFechaCompraTests(TestCase):
+    """La fecha de compra se borraba al editar: el <input type="date"> recibía
+    "14/03/2025" (formato es-co), el navegador lo descartaba y al guardar quedaba vacía."""
+
+    def setUp(self):
+        self.client.force_login(crear_usuario("superadmin"))
+        self.activo = crear_activo("SN-FECHA", fecha_compra=date(2025, 3, 14))
+
+    def test_formulario_de_edicion_muestra_la_fecha_guardada(self):
+        resp = self.client.get(reverse("inventario:editar", args=[self.activo.pk]))
+        self.assertContains(resp, 'name="fecha_compra" value="2025-03-14"')
+
+    def test_reenviar_el_formulario_sin_tocarla_la_conserva(self):
+        from django import forms as dj_forms
+
+        resp = self.client.get(reverse("inventario:editar", args=[self.activo.pk]))
+        form = resp.context["form"]
+        datos = {
+            nombre: form[nombre].value()
+            for nombre, campo in form.fields.items()
+            if form[nombre].value() is not None and not isinstance(campo, dj_forms.FileField)
+        }
+        # El navegador vacía un <input type="date"> cuyo value no es AAAA-MM-DD.
+        valor = form["fecha_compra"].as_widget().split('value="')[1].split('"')[0]
+        try:
+            date.fromisoformat(valor)
+        except ValueError:
+            valor = ""
+        datos["fecha_compra"] = valor
+        resp = self.client.post(reverse("inventario:editar", args=[self.activo.pk]), datos)
+        self.assertEqual(resp.status_code, 302)
+        self.activo.refresh_from_db()
+        self.assertEqual(self.activo.fecha_compra, date(2025, 3, 14))

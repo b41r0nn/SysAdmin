@@ -18,8 +18,8 @@ class PrestamoForm(forms.ModelForm):
             "observaciones",
         ]
         widgets = {
-            "fecha_prestamo": forms.DateInput(attrs={"type": "date"}),
-            "fecha_devolucion_prevista": forms.DateInput(attrs={"type": "date"}),
+            "fecha_prestamo": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "fecha_devolucion_prevista": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
     def clean_activo(self):
