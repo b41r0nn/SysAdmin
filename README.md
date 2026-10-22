@@ -585,6 +585,7 @@ BD: PostgreSQL 15 en contenedor
 - ✅ **Lista de activos y catálogo daban error 500** (`31903ce`): imports relativos rotos tras dividir `inventario/views`. Test de humo `SmokeVistasTests` abre las páginas de cada módulo
 - ✅ **Pillow 12.3.0 → 13.0.0** (`8be9ae3`): 24 CVE; QR, actas PDF y Excel verificados con la imagen real
 - ✅ **OCS: PHP parcheado contra php2shell** (CVE-2026-109618/109619): `php8.1` `2ubuntu2.25` → `2ubuntu2.28` en `ocsinventory-server`; `patch_ocs_server.sh` lo reaplica. SysAdmin no usa PHP
+- ✅ **OCS: la API `/ocsapi` exige usuario y contraseña** (antes cualquiera en la LAN leía el inventario); clave de la API rotada a 28 caracteres. Sin cambios en Yule ni en los agentes
 - ✅ Suite **469/469 OK** (SQLite y PostgreSQL) · CI en verde
 
 ### 2026-10-19 — v1.12.0 · Auditoría de seguridad y hardening

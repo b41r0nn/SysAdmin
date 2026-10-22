@@ -1772,7 +1772,9 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 - **Lista de activos y catálogo con error 500** (`31903ce`): al pasar `inventario/views.py` a paquete, los imports dentro de funciones quedaron como `from .models` (deben ser `from ..models`). `core.tests.SmokeVistasTests` abre con superadmin las páginas de lectura de cada módulo para detectar esto.
 - **Fechas que se borraban al editar** (`8d759c0`): con `LANGUAGE_CODE = 'es-co'`, un `DateInput` sin `format` renderiza `DD/MM/AAAA`; el `<input type="date">` solo acepta `AAAA-MM-DD`, el navegador vacía el campo y al guardar la fecha queda en `NULL`. Los 11 widgets llevan `format="%Y-%m-%d"`. **Todo `DateInput` nuevo con `type="date"` debe llevarlo**: `core.tests.CamposFechaFormatoISOTests` recorre los formularios de todas las apps y falla si falta. Revisado contra los backups del 19-oct: ningún activo perdió la fecha desde entonces; los 15 sin fecha ya estaban vacíos.
 - **Pillow 13.0.0** (`8be9ae3`): 24 CVE de 12.3.0 que hicieron fallar `pip-audit` en CI. Los cambios incompatibles de 13.0 no afectan a la app; QR, PDF (WeasyPrint) y Excel con imagen verificados en un contenedor aislado con la imagen real y luego en producción.
-- Backups previos en el servidor: `backups/pre-fechas-20261022-*` y `backups/pre-pillow13-20261022-*` (`db.dump`).
+- **OCS — php2shell** (CVE-2026-109618/109619): PHP 8.1 del contenedor `ocsinventory-server` `2ubuntu2.25` → `2ubuntu2.28`; `patch_ocs_server.sh` paso 4. Un graceful no recarga `libphp`: hace falta `docker restart`.
+- **OCS — API protegida**: `/ocsapi` exige HTTP Basic (`OCS_USER`/`OCS_TOKEN` del `.env`, `OCS_TOKEN` rotado a 28 caracteres); `patch_ocs_server.sh` paso 5 y `deploy/ocs_verificar_api.sh` lo comprueban. Detalle en `OCS_INVENTORY_SETUP.md`.
+- Backups previos en el servidor: `backups/pre-fechas-20261022-*`, `backups/pre-pillow13-20261022-*` (`db.dump`), `backups/pre-ocsapi-auth-20261022-*` (`.env` anterior) e imagen `ocs-server-backup:pre-php2shell-20261022`.
 - Tests: **469/469** (SQLite y PostgreSQL 15).
 
 ---
