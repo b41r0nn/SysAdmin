@@ -89,8 +89,8 @@ if printf '%s' "$PASS" | grep -q '[|&]'; then
 fi
 
 # Los dos .conf no usan el mismo formato:
-#   z-ocsinventory-server.conf   ->  PerlSetVar OCS_DB_PWD P@assword1
-#   zz-ocsinventory-restapi.conf ->  $ENV{OCS_DB_PWD} = 'P@assword1';
+#   z-ocsinventory-server.conf   ->  PerlSetVar OCS_DB_PWD <clave>
+#   zz-ocsinventory-restapi.conf ->  $ENV{OCS_DB_PWD} = '<clave>';
 # Se toma el primer token no alfanumerico que sigue al nombre. El archivo se
 # trae con `cat` y se parsea en bash: meter sed dentro de docker exec habria
 # que anidar comillas en tres niveles y es fragil.
@@ -107,14 +107,14 @@ for f in z-ocsinventory-server.conf zz-ocsinventory-restapi.conf; do
     elif [ "$dentro" = "$PASS" ]; then
         verde "$f: coincide con el compose"
     else
-        rojo "$f: usa '$dentro' pero el compose dice '$PASS' -> 500 en la API"
+        rojo "$f: la clave no coincide con la del compose -> 500 en la API"
         if [ $ARREGLAR -eq 1 ]; then
             docker exec "$SERVER" sed -i "s|$dentro|$PASS|g" "/etc/apache2/conf-available/$f" 2>/dev/null
             despues=$(pwd_de_conf "$f")
             if [ "$despues" = "$PASS" ]; then
                 verde "$f: reparado"; CAMBIOS=1
             else
-                rojo "$f: no se pudo reparar (queda '$despues')"
+                rojo "$f: no se pudo reparar (la clave sigue sin coincidir)"
             fi
         fi
     fi
@@ -140,8 +140,15 @@ fi
 # --- 4. pruebas de humo ---------------------------------------------------
 echo
 echo "4. Pruebas de humo"
-api=$(curl -s -o /dev/null -w '%{http_code}' -u "sistemas:$PASS" "$API/ocsapi/v1/computers?limit=1" 2>/dev/null)
-[ "$api" = "200" ] && verde "API /ocsapi/v1/computers -> 200" || rojo "API /ocsapi/v1/computers -> ${api:-sin respuesta}"
+# Desde 2026-10-22 /ocsapi exige HTTP Basic (htpasswd en el volumen
+# httpdconfdata). La cuenta es la que usa SysAdmin: OCS_USER/OCS_TOKEN de su .env.
+SYSADMIN_ENV="${SYSADMIN_ENV:-/opt/sysadmin/app/.env}"
+API_USER=$(grep -E '^OCS_USER=' "$SYSADMIN_ENV" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')
+API_PASS=$(grep -E '^OCS_TOKEN=' "$SYSADMIN_ENV" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')
+abierta=$(curl -s -o /dev/null -w '%{http_code}' "$API/ocsapi/v1/computers?limit=1" 2>/dev/null)
+[ "$abierta" = "401" ] && verde "API sin credenciales -> 401 (protegida)" || rojo "API sin credenciales -> ${abierta:-sin respuesta} (deberia ser 401: ver patch_ocs_server.sh paso 5)"
+api=$(curl -s -o /dev/null -w '%{http_code}' -u "$API_USER:$API_PASS" "$API/ocsapi/v1/computers?limit=1" 2>/dev/null)
+[ "$api" = "200" ] && verde "API /ocsapi/v1/computers con la cuenta de SysAdmin -> 200" || rojo "API /ocsapi/v1/computers con la cuenta de SysAdmin -> ${api:-sin respuesta}"
 
 panel=$(curl -s -o /dev/null -w '%{http_code}' "$API/ocsreports/" 2>/dev/null)
 [ "$panel" = "200" ] && verde "panel /ocsreports/ -> 200" || rojo "panel /ocsreports/ -> ${panel:-sin respuesta}"
@@ -162,8 +169,8 @@ fi
 
 echo
 echo "=============================================================="
-if [ "$api" = "200" ] && [ "$panel" = "200" ]; then
-    echo " Resultado: API y panel operativos"
+if [ "$api" = "200" ] && [ "$panel" = "200" ] && [ "$abierta" = "401" ]; then
+    echo " Resultado: API (protegida) y panel operativos"
 else
     echo " Resultado: HAY ALGO ROTO. Arriba esta el motivo."
 fi

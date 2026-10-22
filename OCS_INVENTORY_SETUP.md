@@ -161,20 +161,24 @@ De ahí la falsa sensación de que "solo se rompió la API".
 Se comprueba lado a lado:
 
 ```bash
+# La clave es OCS_DB_PASS del docker-compose.yml de OCS; se pasa por variable
+# de entorno para no escribirla en la línea de comandos.
+P=$(grep -E '^\s*OCS_DB_PASS\s*:' docker-compose.yml | sed 's/.*:\s*//' | tr -d "\"' \r")
+
 # Perl (lo que usa la API) -> falla
-docker exec ocsinventory-server perl -e 'use DBI; my $p="P".chr(64)."assword1";
-  my $d=DBI->connect("dbi:mysql:database=ocsweb;host=ocsinventory-db;port=3306","ocsuser",$p);
+docker exec -e P="$P" ocsinventory-server perl -e 'use DBI;
+  my $d=DBI->connect("dbi:mysql:database=ocsweb;host=ocsinventory-db;port=3306","ocsuser",$ENV{P});
   print $d ? "PERL_DBI_OK\n" : "PERL_DBI_FAIL: $DBI::errstr\n";'
 
 # PHP (lo que usa el panel) -> bien
-docker exec ocsinventory-server php -r 'mysqli_report(MYSQLI_REPORT_OFF);
-  $c=@mysqli_connect("ocsinventory-db","ocsuser","P@assword1","ocsweb");
+docker exec -e P="$P" ocsinventory-server php -r 'mysqli_report(MYSQLI_REPORT_OFF);
+  $c=@mysqli_connect("ocsinventory-db","ocsuser",getenv("P"),"ocsweb");
   echo $c ? "PHP_MYSQLI_OK\n" : "PHP_MYSQLI_FAIL\n";'
 ```
 
-> El `chr(64)` no es capricho: en Perl `"P@assword1"` dentro de comillas dobles
-> interpola `@assword1` como array y la contraseña se queda en `P`. Es un
-> clásico que da un "Access denied" falso si pruebas a mano.
+> Si escribes la clave literal en Perl, ojo: una `@` dentro de comillas dobles
+> se interpola como array y la contraseña queda cortada. Es un clásico que da
+> un "Access denied" falso si pruebas a mano; por eso va por `$ENV{P}`.
 
 Arreglo (idempotente, vive en la base, no en el contenedor):
 
@@ -420,6 +424,30 @@ curl -s -o /dev/null -w 'api=%{http_code}\n' -u '<OCS_USER>:<OCS_TOKEN>' \
 
 `200` = autenticación OK. `null` en el cuerpo = todavía no hay equipos
 inventariados, no es un error.
+
+### La API exige usuario y contraseña (desde 2026-10-22)
+
+La imagen deja `/ocsapi` **abierta**: sin esto, cualquier equipo de la LAN lee
+el inventario completo con un `curl`. Ahora Apache pide HTTP Basic:
+
+- Cuenta: la misma que usa SysAdmin, `OCS_USER` / `OCS_TOKEN` del `.env` de
+  `/opt/sysadmin/app` (`OCS_TOKEN` se cambió ese día por una clave aleatoria de
+  28 caracteres generada en el servidor; la anterior era de 8).
+- `htpasswd` (bcrypt): `/etc/apache2/conf-available/ocsapi.htpasswd`, `root:www-data 640`.
+- Bloque `AuthType Basic … Require valid-user` dentro de `<Location /ocsapi>` en
+  `zz-ocsinventory-restapi.conf`. Ambos viven en el volumen `httpdconfdata`:
+  sobreviven a un `--force-recreate`. Si se pierde el volumen,
+  `patch_ocs_server.sh` (paso 5) los recrea desde el `.env` de SysAdmin.
+- No afecta al panel `/ocsreports/` (tiene su propio login) ni a los agentes
+  (`/ocsinventory`).
+- Comprobar: `bash deploy/ocs_verificar_api.sh` → "API sin credenciales -> 401"
+  y "con la cuenta de SysAdmin -> 200".
+- **Cambiar la clave**: generar una nueva, ponerla en `OCS_TOKEN` del `.env`,
+  `docker compose up -d django`, y `htpasswd -iB /etc/apache2/conf-available/ocsapi.htpasswd sistemas`
+  dentro de `ocsinventory-server` (la lee de stdin, no queda en el historial).
+- La fila de **Yule › Configuración** en la BD tiene URL `/ocsinventory` y
+  usuario vacío, así que se ignora y manda el `.env`. Si alguien rellena el
+  usuario ahí, debe poner también la URL `/ocsapi/v1` y esta misma clave.
 
 **No existe una tabla `ocs_computers`** en esta versión (ni `hosts`). El
 inventario vive en las tablas por sección: `hardware`, `bios`, `networks`,

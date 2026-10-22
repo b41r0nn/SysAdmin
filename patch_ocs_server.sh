@@ -25,6 +25,10 @@
 #      8.1.2-1ubuntu2.28). Se actualizan los paquetes php8.1-* instalados desde
 #      jammy-security; un --force-recreate vuelve a la version de la imagen.
 #
+#   5. La API REST (/ocsapi) viene abierta sin autenticacion. Se protege con
+#      HTTP Basic (htpasswd con la cuenta OCS_USER/OCS_TOKEN del .env de
+#      SysAdmin). Vive en el volumen httpdconfdata; solo se crea si falta.
+#
 # USO (despues de cada `docker compose up -d --force-recreate` de OCS):
 #   bash patch_ocs_server.sh
 #
@@ -52,21 +56,21 @@ fi
 
 # --- 1. XML::Entities (no existe como paquete en Ubuntu 22.04) ---------------
 if docker exec "$CONTAINER" perl -e 'use XML::Entities;' >/dev/null 2>&1; then
-    log "1/4 XML::Entities ya instalado."
+    log "1/5 XML::Entities ya instalado."
 else
-    log "1/4 instalando XML::Entities desde CPAN..."
+    log "1/5 instalando XML::Entities desde CPAN..."
     docker exec "$CONTAINER" sh -c \
         'command -v cpanm >/dev/null || apt-get install -y --no-install-recommends cpanminus' >/dev/null
     docker exec "$CONTAINER" cpanm --notest --quiet XML::Entities
     docker exec "$CONTAINER" perl -e 'use XML::Entities;'
-    log "1/4 OK."
+    log "1/5 OK."
 fi
 
 # --- 2. SOAP::Transport::HTTP2 (lo exige el web service con mod_perl2) --------
 if docker exec "$CONTAINER" perl -e 'require SOAP::Transport::HTTP2;' >/dev/null 2>&1; then
-    log "2/4 SOAP::Transport::HTTP2 ya disponible."
+    log "2/5 SOAP::Transport::HTTP2 ya disponible."
 else
-    log "2/4 creando SOAP::Transport::HTTP2..."
+    log "2/5 creando SOAP::Transport::HTTP2..."
     docker exec -i "$CONTAINER" sh -c \
         "mkdir -p $PERL_LIB/SOAP/Transport && cat > $PERL_LIB/SOAP/Transport/HTTP2.pm" <<'PERL'
 package SOAP::Transport::HTTP2;
@@ -76,7 +80,7 @@ package SOAP::Transport::HTTP2::Apache;
 our @ISA = q(SOAP::Transport::HTTP::Apache);
 1;
 PERL
-    log "2/4 OK."
+    log "2/5 OK."
 fi
 
 # --- 3. html_header.php (bug PHP 8: consola en blanco) ------------------------
@@ -85,12 +89,12 @@ if [ -f "$SCRIPT_DIR/patches/html_header.php" ]; then
         'find /usr/share/ocsinventory-reports -name html_header.php | head -1' | tr -d '\r')"
     if [ -n "$TARGET" ]; then
         docker cp "$SCRIPT_DIR/patches/html_header.php" "$CONTAINER:$TARGET" >/dev/null
-        log "3/4 html_header.php parcheado en $TARGET."
+        log "3/5 html_header.php parcheado en $TARGET."
     else
-        log "3/4 AVISO: no se encontro html_header.php en el contenedor."
+        log "3/5 AVISO: no se encontro html_header.php en el contenedor."
     fi
 else
-    log "3/4 OMITIDO: no existe $SCRIPT_DIR/patches/html_header.php."
+    log "3/5 OMITIDO: no existe $SCRIPT_DIR/patches/html_header.php."
 fi
 
 # --- 4. Parches de seguridad de PHP (paquetes de jammy-security) -------------
@@ -98,7 +102,7 @@ fi
 # Un graceful NO recarga libphp (el PID 1 sigue con la .so vieja "(deleted)"),
 # asi que si cambia la version se reinicia el contenedor; docker restart
 # conserva el sistema de archivos (los parches 1-3 no se pierden).
-log "4/4 actualizando paquetes PHP desde jammy-security..."
+log "4/5 actualizando paquetes PHP desde jammy-security..."
 PHP_ANTES="$(docker exec "$CONTAINER" dpkg-query -W -f='${Version}' php8.1-common)"
 docker exec -i -u 0 -e DEBIAN_FRONTEND=noninteractive "$CONTAINER" sh -s <<'SH'
 set -e
@@ -108,7 +112,36 @@ apt-get update -qq
 apt-get install -y -qq --only-upgrade -o Dpkg::Options::=--force-confold $pkgs >/dev/null
 SH
 PHP_DESPUES="$(docker exec "$CONTAINER" dpkg-query -W -f='${Version}' php8.1-common)"
-log "4/4 OK: PHP $PHP_ANTES -> $PHP_DESPUES."
+log "4/5 OK: PHP $PHP_ANTES -> $PHP_DESPUES."
+
+# --- 5. /ocsapi con usuario y contrasena (HTTP Basic) -------------------------
+# La imagen deja la API REST abierta: cualquiera en la LAN lee el inventario.
+# htpasswd y .conf viven en el volumen httpdconfdata (/etc/apache2/conf-available),
+# asi que sobreviven a un --force-recreate; esto solo actua si faltan.
+# La cuenta es la de SysAdmin (OCS_USER/OCS_TOKEN de su .env).
+HTPASSWD="/etc/apache2/conf-available/ocsapi.htpasswd"
+RESTAPI_CONF="/etc/apache2/conf-available/zz-ocsinventory-restapi.conf"
+SYSADMIN_ENV="${SYSADMIN_ENV:-/opt/sysadmin/app/.env}"
+if docker exec "$CONTAINER" test -s "$HTPASSWD"; then
+    log "5/5 htpasswd de la API ya existe."
+elif [ -r "$SYSADMIN_ENV" ]; then
+    API_USER=$(grep -E '^OCS_USER=' "$SYSADMIN_ENV" | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')
+    grep -E '^OCS_TOKEN=' "$SYSADMIN_ENV" | head -1 | cut -d= -f2- | tr -d '"'"'"' \r\n' \
+        | docker exec -i -u 0 "$CONTAINER" htpasswd -iBc "$HTPASSWD" "$API_USER" >/dev/null 2>&1
+    docker exec -u 0 "$CONTAINER" sh -c "chown root:www-data $HTPASSWD && chmod 640 $HTPASSWD"
+    log "5/5 htpasswd creado para '$API_USER' desde $SYSADMIN_ENV."
+else
+    log "5/5 AVISO: no hay htpasswd ni puedo leer $SYSADMIN_ENV; la API queda abierta."
+fi
+if docker exec "$CONTAINER" test -s "$HTPASSWD" \
+   && ! docker exec "$CONTAINER" grep -q "AuthUserFile $HTPASSWD" "$RESTAPI_CONF"; then
+    docker exec -u 0 "$CONTAINER" sed -i \
+        "s#^<Location /ocsapi>\$#<Location /ocsapi>\n  AuthType Basic\n  AuthName \"OCS API\"\n  AuthUserFile $HTPASSWD\n  Require valid-user#" \
+        "$RESTAPI_CONF"
+    log "5/5 /ocsapi ahora exige usuario y contrasena."
+else
+    log "5/5 /ocsapi ya protegida (o sin htpasswd)."
+fi
 
 # --- reload de Apache --------------------------------------------------------
 if [ "$PHP_ANTES" != "$PHP_DESPUES" ]; then
