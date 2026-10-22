@@ -270,14 +270,32 @@ si aparece algo de root ahí, `docker run --rm -v /opt/sysadmin/app/backend/medi
 
 ## 9. Rollback
 
+`/opt/sysadmin/app` no es clon de git: se vuelve atrás desplegando el commit
+anterior con el mismo procedimiento de §8b (cambiando `master` por el tag o
+commit bueno):
+
 ```bash
+# En Windows (Git Bash)
+git -c core.autocrlf=false -c core.eol=lf archive --format=tar.gz -o /tmp/release.tgz <tag-o-commit-bueno>     backend nginx/nginx.conf nginx/Dockerfile docker-compose.yml deploy .env.example
+scp /tmp/release.tgz sistemas@192.168.1.250:/tmp/
+
+# En el servidor
 cd /opt/sysadmin/app
-sudo git checkout <tag-anterior>      # o v2.2.0-2026-09-16
-sudo docker compose up -d --build --force-recreate
-sudo docker compose down && sudo docker compose up -d   # si hubo que reiniciar el stack
+tar xzf /tmp/release.tgz && rm /tmp/release.tgz
+docker compose build django nginx && docker compose up -d django nginx
 ```
 
-> La BD vive en el volumen `postgres_data`; el backup diario a NAS protege contra pérdida.
+Si además hay que devolver la base de datos al backup tomado antes del deploy
+(se pierde lo escrito después):
+
+```bash
+docker compose stop django
+docker exec -i sysadmin_db sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB --clean --if-exists' < backups/<TS>/db.dump
+docker compose start django
+```
+
+> La BD vive en el volumen `postgres_data`; además del `db.dump` de cada deploy,
+> `backup.timer` hace restic diario (lun–sáb 02:30) en `/mnt/hdd1t`.
 
 ---
 

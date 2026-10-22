@@ -32,6 +32,12 @@
 - **OCS**: `docker compose up -d ocsdb ocsapplication` (nombrar servicios; si no, arranca el proxy roto).
 - Detalle completo: `SYSADMIN_HANDOFF.md` → "AUDITORIA DE SEGURIDAD 2026-10-19".
 
+## Reglas aprendidas tras salir a producción (2026-10-22)
+
+- **Campos de fecha**: todo `forms.DateInput(attrs={"type": "date"})` debe llevar `format="%Y-%m-%d"`. Sin eso, con `es-co` se renderiza `DD/MM/AAAA`, el navegador vacía el campo y al editar se borra la fecha guardada. Lo vigila `core.tests.CamposFechaFormatoISOTests`.
+- **Imports dentro de `inventario/views/<módulo>.py`**: los modelos y forms de la app se importan con `..` (`from ..models import ...`), no con `.`. `core.tests.SmokeVistasTests` abre las páginas de cada módulo; agregar ahí las rutas nuevas.
+- **Dependencias**: si `pip-audit` falla en CI por un CVE nuevo, subir la versión, correr la suite y probar QR/PDF/Excel con la imagen real en un contenedor aislado (`--network none`) antes de desplegar.
+
 ## Estado actual (2026-09-29, producción + OCS + inventario de software)
 
 - **Servidor**: `sistemas@192.168.1.250` (Ubuntu Server 22.04), proyecto en `/opt/sysadmin/app` (Docker Compose).
@@ -47,7 +53,7 @@
 - **OCS receptor de inventarios**: el handler Perl que ingiere el XML de los agentes vive en **`/ocsinventory`** (raíz), NO en `/ocsreports`. La imagen 2.12.1 nace con el stack roto (`XML::Entities` no existe como paquete en jammy → se instala con `cpanm`; `SOAP::Transport::HTTP2` no lo trae nadie → se crea como alias de `SOAP::Transport::HTTP::Apache`). `bash patch_ocs_server.sh` los reaplica (idempotente) porque un `--force-recreate` los borra. El `DEVICEID` del XML debe cumplir `NOMBRE-AAAA-MM-DD-HH-MM-SS`.
 - **OCS `/computers` devuelve un dict indexado por ID** (`{"1": {...}}`), no una lista. `OCSClient._computers_from_payload()` lo normaliza; sin eso el sync contaba 0 equipos.
 - **Formato real de la API OCS 2.12** (importante al tocar el parser): `/computers` devuelve un dict indexado por ID y las secciones llegan con la forma de su tabla — `bios` es **lista** (`SSN` = serial del sistema), `hardware.PROCESSORS` es la frecuencia en MHz mientras el nombre está en `PROCESSORT`, `hardware.IPADDR` trae la IP real y `hardware.USERID`/`WORKGROUP` el usuario. `hardware.LASTCOME` es **UTC** (lo evalúa la BD). El software de `/computer/{id}` viene bajo la **clave vacía `""`**, no bajo `"software"`.
-- **Tests**: 406, todos verdes. Local `manage.py test`; en el server con `docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test --noinput` (sin esos overrides fallan ~225 por el redirect HTTPS a 6060).
+- **Tests**: 469, todos verdes (2026-10-22). Local `manage.py test`; en el server con `docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test --noinput` (sin esos overrides fallan ~225 por el redirect HTTPS a 6060).
 - **Paginación**: listados de activos y tickets paginados a 20 filas (`core/partials/paginacion.html`, templatetag `query_string`).
 - **Limpieza de historial**: comando `python manage.py limpiar_historial --dias 365 --media-dias 30 --dry-run` borra auditoría, logs de vault, sync Yule, LogEntry admin, notificaciones leídas y emails enviados antiguos, más archivos huérfanos de media. Cron semanal en `deploy/instalar_cron_limpieza.sh`.
 - **CI/CD**: `.github/workflows/ci.yml` ejecuta tests en Python 3.11 con SQLite en cada push/PR.

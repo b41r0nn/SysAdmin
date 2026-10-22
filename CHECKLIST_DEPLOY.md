@@ -169,12 +169,8 @@ ls -la backend/media && rm -f backend/media/PRUEBA
 
 ## 6. Rollback
 
-- El tag del commit desplegado (hoy `v2.4.0-2026-09-29`) es el punto de restauración git.
-- Volumen `postgres_data` contiene la BD — respaldar antes de migrar (ver `setup_server.sh` → backup a NAS).
-- Para rollback rápido:
-  ```bash
-  git checkout <tag-anterior> && docker compose up -d --build
-  ```
+- `/opt/sysadmin/app` **no es clon de git**: el rollback es desplegar el commit bueno anterior con `git archive` (LF) + `docker compose build django nginx && docker compose up -d django nginx`. Pasos en `GUIA_DEPLOY_PASO_A_PASO.md` §9.
+- Volumen `postgres_data` contiene la BD — antes de cada deploy, `pg_dump -Fc` a `backups/<TS>/db.dump` (§8b); restaurar con `pg_restore --clean --if-exists` (§9).
 
 ## 7. Pendientes conocidos
 
