@@ -303,6 +303,29 @@ levanta también `ocsproxy`, que falla en bucle (`host not found in upstream
 "ocsapplication"`). Nombrar siempre los servicios:
 `docker compose up -d ocsdb ocsapplication`. Si se coló, `docker stop ocsinventory-proxy`.
 
+## Parches de seguridad de PHP (php2shell, 2026-10-22)
+
+La imagen 2.12.1 trae PHP 8.1 de Ubuntu 22.04 congelado en la versión con la
+que se construyó. El 2026-10-21 salió **php2shell** (CVE-2026-109618 y
+CVE-2026-109619: ejecución remota de código sin autenticación, explotado
+activamente); Ubuntu lo corrigió en `8.1.2-1ubuntu2.28` (USN-8948). SysAdmin
+(Python) no se ve afectado; el único PHP del servidor es este contenedor,
+expuesto a la LAN en `:8081`.
+
+- Aplicado el 2026-10-22: `2ubuntu2.25` → `2ubuntu2.28`. Instantánea previa del
+  contenedor: imagen `ocs-server-backup:pre-php2shell-20261022`, que se puede borrar
+  pasadas unas semanas (`docker rmi`).
+- `patch_ocs_server.sh` (paso 4/4) actualiza los `php8.1-*` instalados desde
+  `jammy-security`. **Correrlo tras cada `--force-recreate`** (la imagen vuelve
+  a la versión vulnerable) y cuando Ubuntu publique otro USN de `php8.1`.
+- **Un `apache2ctl -k graceful` no basta**: el PID 1 sigue mapeando la
+  `libphp8.1.so` vieja (`/proc/1/maps` la muestra `(deleted)`). El script hace
+  `docker restart` cuando cambia la versión; `restart` conserva el sistema de
+  archivos, así que los parches no se pierden.
+- Comprobar: `docker exec -u 0 ocsinventory-server grep -c "libphp8.1.so (deleted)" /proc/1/maps` → `0`.
+- `/var/log/apache2/error.log` es un enlace a `/proc/self/fd/2`: un `tail`
+  sobre él se queda colgado. Los errores se leen con `docker logs ocsinventory-server`.
+
 ## Parche obligatorio: bug de PHP 8 en `html_header.php`
 
 Sin este parche la consola OCS **muestra solo el logo** (página en blanco con
