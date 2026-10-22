@@ -584,6 +584,7 @@ BD: PostgreSQL 15 en contenedor
 - ✅ **Fechas que se borraban al editar** (`8d759c0`): con `es-co`, los `DateInput` renderizaban `14/03/2025` y el `<input type="date">` solo acepta `2025-03-14`; el navegador descartaba el valor y al guardar la fecha quedaba vacía (p. ej. la fecha de compra del activo). Se fija `format="%Y-%m-%d"` en los 11 campos de fecha (inventario, licencias, préstamos, mantenimiento, bóveda y documentos). Test `CamposFechaFormatoISOTests` revisa todos los formularios
 - ✅ **Lista de activos y catálogo daban error 500** (`31903ce`): imports relativos rotos tras dividir `inventario/views`. Test de humo `SmokeVistasTests` abre las páginas de cada módulo
 - ✅ **Pillow 12.3.0 → 13.0.0** (`8be9ae3`): 24 CVE; QR, actas PDF y Excel verificados con la imagen real
+- ✅ **OCS: PHP parcheado contra php2shell** (CVE-2026-109618/109619): `php8.1` `2ubuntu2.25` → `2ubuntu2.28` en `ocsinventory-server`; `patch_ocs_server.sh` lo reaplica. SysAdmin no usa PHP
 - ✅ Suite **469/469 OK** (SQLite y PostgreSQL) · CI en verde
 
 ### 2026-10-19 — v1.12.0 · Auditoría de seguridad y hardening
