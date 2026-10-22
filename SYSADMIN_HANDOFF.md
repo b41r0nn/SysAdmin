@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-09-29 · v1.11.0 + Fase 7B-bis (inventario de software) · 404 tests OK
+> Documento actualizado: 2026-10-22 · v1.12.1 (auditoría 2026-10-19 + correcciones) · 469 tests OK
 
 ---
 
@@ -850,7 +850,7 @@ Terse responses. Código completo. Sin fluff.
 
 ---
 
-## REQUIREMENTS.TXT ACTUAL (2026-10-19)
+## REQUIREMENTS.TXT ACTUAL (2026-10-22)
 
 ```
 Django==5.2.18
@@ -862,7 +862,7 @@ openpyxl==3.1.5
 cryptography==50.0.2
 argon2-cffi==23.1.0
 python-dotenv==1.2.2
-Pillow==12.3.0
+Pillow==13.0.0
 qrcode==8.2
 django-htmx==1.23.0
 django-axes==8.3.1
@@ -1767,4 +1767,14 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
-*Última actualización: 2026-10-19 · v1.12.0 · Auditoría de seguridad y hardening*
+## CORRECCIONES POSTERIORES (2026-10-20 / 2026-10-22) · v1.12.1
+
+- **Lista de activos y catálogo con error 500** (`31903ce`): al pasar `inventario/views.py` a paquete, los imports dentro de funciones quedaron como `from .models` (deben ser `from ..models`). `core.tests.SmokeVistasTests` abre con superadmin las páginas de lectura de cada módulo para detectar esto.
+- **Fechas que se borraban al editar** (`8d759c0`): con `LANGUAGE_CODE = 'es-co'`, un `DateInput` sin `format` renderiza `DD/MM/AAAA`; el `<input type="date">` solo acepta `AAAA-MM-DD`, el navegador vacía el campo y al guardar la fecha queda en `NULL`. Los 11 widgets llevan `format="%Y-%m-%d"`. **Todo `DateInput` nuevo con `type="date"` debe llevarlo**: `core.tests.CamposFechaFormatoISOTests` recorre los formularios de todas las apps y falla si falta. Revisado contra los backups del 19-oct: ningún activo perdió la fecha desde entonces; los 15 sin fecha ya estaban vacíos.
+- **Pillow 13.0.0** (`8be9ae3`): 24 CVE de 12.3.0 que hicieron fallar `pip-audit` en CI. Los cambios incompatibles de 13.0 no afectan a la app; QR, PDF (WeasyPrint) y Excel con imagen verificados en un contenedor aislado con la imagen real y luego en producción.
+- Backups previos en el servidor: `backups/pre-fechas-20261022-*` y `backups/pre-pillow13-20261022-*` (`db.dump`).
+- Tests: **469/469** (SQLite y PostgreSQL 15).
+
+---
+
+*Última actualización: 2026-10-22 · v1.12.1 · Correcciones tras salir a producción*
