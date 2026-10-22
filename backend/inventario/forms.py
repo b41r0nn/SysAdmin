@@ -72,7 +72,7 @@ class ActivoForm(forms.ModelForm):
             "serial": forms.TextInput(attrs={"class": "form-control"}),
             "estado": forms.Select(attrs={"class": "form-select"}),
             "ubicacion_fisica": forms.TextInput(attrs={"class": "form-control"}),
-            "fecha_compra": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "fecha_compra": forms.DateInput(attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"),
             "proveedor": forms.TextInput(attrs={"class": "form-control"}),
             "valor_compra": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "garantia_fabrica_meses": forms.NumberInput(attrs={"class": "form-control"}),

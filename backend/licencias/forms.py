@@ -22,8 +22,8 @@ class LicenciaForm(forms.ModelForm):
             "observaciones",
         ]
         widgets = {
-            "fecha_compra": forms.DateInput(attrs={"type": "date"}),
-            "fecha_vencimiento": forms.DateInput(attrs={"type": "date"}),
+            "fecha_compra": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "fecha_vencimiento": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "costo": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
             "activos": forms.SelectMultiple(attrs={"size": "8"}),
         }
