@@ -1,12 +1,35 @@
-from io import StringIO
+from datetime import date
+from io import BytesIO, StringIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
+from openpyxl import Workbook
 
+from passwords.crypto import build_fernet
 from passwords.models import AccesoLog, Credencial, Vault
 
 CustomUser = get_user_model()
+
+ENCABEZADOS = ("Título", "Usuario", "Contraseña", "URL", "Notas", "Estado", "Fecha de expiración")
+
+
+def _xlsx(filas, encabezados=ENCABEZADOS, nombre="claves.xlsx"):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(list(encabezados))
+    for fila in filas:
+        ws.append(list(fila))
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    buffer.name = nombre
+    return buffer
+
+
+def _descifrar(token):
+    return build_fernet().decrypt(token.encode()).decode()
 
 
 def _user(rol):
@@ -302,3 +325,105 @@ class SecretoIlegibleTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["secreto"], "")
         self.assertTrue(AccesoLog.objects.filter(accion="secreto_ilegible").exists())
+
+
+# ─── Importación desde Excel: lectura y validación ───────────────
+
+
+class ImportacionLecturaTests(TestCase):
+    def setUp(self):
+        self.vault = _vault()
+
+    def _leer(self, filas, **kw):
+        from passwords.importacion import leer_credenciales
+        return leer_credenciales(_xlsx(filas, **kw), self.vault)
+
+    def test_fila_valida_queda_nueva_y_cifrada(self):
+        filas, avisos = self._leer([("Router", "admin", "S3creta!", "192.168.1.1", "", "", "")])
+        self.assertEqual(avisos, [])
+        f = filas[0]
+        self.assertEqual((f["fila"], f["resultado"], f["estado"]), (2, "nueva", "activa"))
+        self.assertEqual(f["url"], "https://192.168.1.1")
+        self.assertNotIn("S3creta!", f["secreto_cifrado"])
+        self.assertEqual(_descifrar(f["secreto_cifrado"]), "S3creta!")
+
+    def test_falta_titulo_o_contrasena_es_error(self):
+        filas, _ = self._leer([("", "u", "x"), ("T", "u", "")])
+        self.assertEqual([f["resultado"] for f in filas], ["error", "error"])
+        self.assertEqual(filas[0]["detalle"], "Falta el título")
+        self.assertEqual(filas[1]["detalle"], "Falta la contraseña")
+        self.assertEqual(filas[1]["secreto_cifrado"], "")
+
+    def test_ya_existe_en_la_boveda_por_titulo_y_usuario_sin_mayusculas(self):
+        Credencial.objects.create(vault=self.vault, titulo="Router", usuario="Admin")
+        filas, _ = self._leer([(" router ", "admin", "x")])
+        self.assertEqual(filas[0]["resultado"], "ya_existe")
+        self.assertEqual(filas[0]["secreto_cifrado"], "")
+        from passwords.importacion import leer_credenciales
+        otra, _ = leer_credenciales(_xlsx([(" router ", "admin", "x")]), _vault("Otra"))
+        self.assertEqual(otra[0]["resultado"], "nueva")
+
+    def test_repetida_dentro_del_archivo(self):
+        filas, _ = self._leer([("Router", "admin", "a"), ("ROUTER", "Admin ", "b")])
+        self.assertEqual([f["resultado"] for f in filas], ["nueva", "repetida"])
+        self.assertEqual(filas[1]["detalle"], "Repetida en el archivo")
+
+    def test_encabezados_alternativos(self):
+        filas, avisos = self._leer([("NAS", "root", "x", "nas.local")], encabezados=("Nombre", "User", "Clave", "Sitio"))
+        self.assertEqual(avisos, [])
+        self.assertEqual((filas[0]["titulo"], filas[0]["usuario"], filas[0]["resultado"]), ("NAS", "root", "nueva"))
+
+    def test_clave_numerica_no_pierde_formato(self):
+        filas, _ = self._leer([("A", "u1", 123456), ("B", "u2", 123456.0)])
+        self.assertEqual([_descifrar(f["secreto_cifrado"]) for f in filas], ["123456", "123456"])
+
+    def test_clave_convertida_en_fecha_es_error(self):
+        filas, _ = self._leer([("A", "u", date(2024, 2, 1))])
+        self.assertEqual(filas[0]["resultado"], "error")
+        self.assertIn("fecha", filas[0]["detalle"])
+
+    def test_estado_y_fecha(self):
+        filas, _ = self._leer([
+            ("A", "u1", "x", "", "", "Revocada", "31/12/2027"),
+            ("B", "u2", "x", "", "", "Bloqueada", ""),
+            ("C", "u3", "x", "", "", "", "31-31-2027"),
+            ("D", "u4", "x", "", "", "expirada", date(2027, 1, 15)),
+        ])
+        self.assertEqual((filas[0]["estado"], filas[0]["fecha_expiracion"]), ("revocada", "2027-12-31"))
+        self.assertEqual(filas[1]["resultado"], "error")
+        self.assertIn("Estado no válido", filas[1]["detalle"])
+        self.assertEqual(filas[2]["resultado"], "error")
+        self.assertIn("Fecha de expiración no válida", filas[2]["detalle"])
+        self.assertEqual((filas[3]["estado"], filas[3]["fecha_expiracion"]), ("expirada", "2027-01-15"))
+
+    def test_url_invalida_va_a_notas(self):
+        filas, _ = self._leer([("A", "u", "x", "intranet de contabilidad", "Nota previa")])
+        self.assertEqual(filas[0]["resultado"], "nueva")
+        self.assertEqual(filas[0]["url"], "")
+        self.assertEqual(filas[0]["notas"], "Nota previa\nSitio: intranet de contabilidad")
+
+    def test_columna_contrasena_faltante_advierte(self):
+        filas, avisos = self._leer([("A", "u")], encabezados=("Título", "Usuario"))
+        self.assertEqual(avisos, ['No se encontró la columna "Contraseña".'])
+        self.assertEqual(filas[0]["resultado"], "error")
+
+    def test_filas_vacias_se_omiten_y_hay_limite(self):
+        filas, _ = self._leer([("A", "u", "x"), (None, None, None), ("B", "u", "y")])
+        self.assertEqual([f["fila"] for f in filas], [2, 4])
+        from passwords.importacion import ArchivoInvalido
+        with patch("passwords.importacion.MAX_FILAS", 1):
+            with self.assertRaises(ArchivoInvalido):
+                self._leer([("A", "u", "x"), ("B", "u", "y")])
+
+    def test_contrasena_conserva_espacios(self):
+        filas, _ = self._leer([("A", "u", " a b ")])
+        self.assertEqual(_descifrar(filas[0]["secreto_cifrado"]), " a b ")
+
+    def test_titulo_muy_largo_es_error(self):
+        filas, _ = self._leer([("T" * 151, "u", "x")])
+        self.assertEqual(filas[0]["detalle"], "El título supera 150 caracteres")
+
+    def test_resumen(self):
+        from passwords.importacion import resumen
+        filas = [{"resultado": r} for r in ("nueva", "nueva", "ya_existe", "repetida", "error")]
+        self.assertEqual(resumen(filas), {"nuevas": 2, "ya_existen": 2, "errores": 1, "total": 5})
