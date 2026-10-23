@@ -437,6 +437,7 @@ Vault seguro de credenciales con cifrado.
 - ✅ Ver secretos en claro: solo **superadmin** y **admin** (el rol lectura ve el listado, no los secretos)
 - ✅ Auditoría de accesos (`secreto_visto`, `codigo_invalido`, `secreto_ilegible`, …)
 - ✅ Exportación segura (sin secretos; celdas sin fórmulas)
+- ✅ Importación masiva desde Excel por bóveda: plantilla descargable (columnas en formato Texto), vista previa que nunca muestra las claves, duplicados (mismo título y usuario) omitidos sin sobrescribir; cada clave se cifra apenas se lee el archivo
 
 **Acceso:** `https://192.168.1.250:6060/passwords/`
 
@@ -578,6 +579,12 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-10-23 — Importación de contraseñas desde Excel (rama `feat/importar-contrasenas`, pendiente de despliegue)
+
+- ✅ **Contraseñas › Importar desde Excel**, dentro de cada bóveda: plantilla `plantilla_importar_contrasenas.xlsx`, vista previa por fila (nuevas / ya existen / con error) y confirmación. Encabezados flexibles ("Clave", "Password"…), claves numéricas sin `.0`, URL sin esquema → `https://`, máx. 1.000 filas / 5 MB
+- ✅ Seguridad: la clave se cifra al leer el archivo; ni la sesión, ni el HTML, ni la bitácora (`importacion_excel`) la contienen. Solo `passwords: escritura` (superadmin)
+- ✅ Suite **496/496 OK** (27 tests nuevos)
 
 ### 2026-10-22 — v1.12.1 · Correcciones tras salir a producción
 
