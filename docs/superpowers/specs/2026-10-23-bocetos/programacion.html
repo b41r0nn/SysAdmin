@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Boceto: programacion</title>
+<style>:root{--text-secondary:#64748b}body{margin:24px;font-family:system-ui,sans-serif;background:#f5f5f7;color:#1d1d1f}.subtitle{color:#64748b;margin-bottom:1rem}.label{font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:1rem 0 .5rem}h2{margin:0 0 .4rem}</style></head><body>
+<style>
+  .sa { background: #f4f6f9; color: #1e293b; border-radius: 12px; padding: 18px 20px; font-size: 13px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .sa h1 { font-size: 20px; margin: 0; }
+  .sa .subt { color: #64748b; font-size: 12.5px; margin-top: 2px; }
+  .sa .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .sa .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sa .btn { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 7px; padding: 5px 10px; font-size: 12.5px; white-space: nowrap; }
+  .sa .btn.pri { background: #0156a6; border-color: #0156a6; color: #fff; }
+  .sa .btn.sm { padding: 3px 8px; font-size: 12px; }
+  .sa .btn.ghost { background: transparent; }
+  .sa .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+  .sa .stat { background: #fff; border-radius: 10px; padding: 10px 12px; border: 1px solid #e2e8f0; }
+  .sa .stat .v { font-size: 22px; font-weight: 700; }
+  .sa .stat .k { color: #64748b; font-size: 12px; }
+  .sa .stat.amb .v { color: #b45309; } .sa .stat.blu .v { color: #0156a6; } .sa .stat.pur .v { color: #6d28d9; } .sa .stat.grn .v { color: #15803d; }
+  .sa .tabs { display: flex; gap: 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 0; flex-wrap: wrap; }
+  .sa .tab { padding: 7px 12px; color: #64748b; border-bottom: 2px solid transparent; font-weight: 600; font-size: 12.5px; }
+  .sa .tab.on { color: #0156a6; border-color: #0156a6; }
+  .sa .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 0 0 10px 10px; overflow: hidden; }
+  .sa table { width: 100%; border-collapse: collapse; }
+  .sa th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; background: #f8fafc; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+  .sa td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .sa .eq b { display: block; }
+  .sa .muted { color: #64748b; font-size: 12px; }
+  .sa .chip { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .sa .chip.amb { background: #fef3c7; color: #92400e; }
+  .sa .chip.blu { background: #dbeafe; color: #1e40af; }
+  .sa .chip.pur { background: #ede9fe; color: #5b21b6; }
+  .sa .chip.grn { background: #dcfce7; color: #166534; }
+  .sa .chip.gry { background: #f1f5f9; color: #475569; }
+  .sa .acc { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .sa .pop { margin-top: 6px; background: #fff; border: 1px solid #93c5fd; box-shadow: 0 6px 18px rgba(1,86,166,.15); border-radius: 8px; padding: 8px; display: inline-flex; gap: 6px; align-items: center; }
+  .sa .pop input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .sa .note { font-size: 12px; color: #475569; margin-top: 10px; }
+</style>
+
+<h2>Pantalla principal de mantenimiento</h2>
+<p class="subtitle">Equipos que te tocan, sin fechas estrictas: la fecha es una referencia y tú programas cuando puedas. Datos inventados.</p>
+
+<div class="sa">
+  <div class="top">
+    <div>
+      <h1>Mantenimiento</h1>
+      <div class="subt">Portátiles y PC: le toca al vencer la garantía y luego cada 12 meses desde el último.</div>
+    </div>
+    <div class="btns">
+      <span class="btn">Calendario</span>
+      <span class="btn">Hoja de vida</span>
+      <span class="btn">Checklists</span>
+      <span class="btn pri">+ Mantenimiento</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat amb"><div class="v">3</div><div class="k">Le toca</div></div>
+    <div class="stat blu"><div class="v">1</div><div class="k">Programados</div></div>
+    <div class="stat pur"><div class="v">8</div><div class="k">En garantía</div></div>
+    <div class="stat grn"><div class="v">6</div><div class="k">Al día</div></div>
+  </div>
+
+  <div class="tabs">
+    <span class="tab on">Por hacer (4)</span>
+    <span class="tab">En garantía (8)</span>
+    <span class="tab">Al día (6)</span>
+    <span class="tab">Historial</span>
+    <span class="tab">Fallas reportadas (2)</span>
+  </div>
+  <div class="card">
+    <table>
+      <tr><th>Equipo</th><th>Responsable</th><th>Último mantenimiento</th><th>Estado</th><th></th></tr>
+      <tr>
+        <td class="eq"><b>Portátil HP ProBook 440 G8</b><span class="muted">5CD1234XYZ · N° 1012</span></td>
+        <td>Marta López Gómez<div class="muted">Finanzas</div></td>
+        <td><span class="muted">Nunca</span><div class="muted">Garantía venció 14/03/2025</div></td>
+        <td><span class="chip amb">Le toca desde 14/03/2025</span></td>
+        <td><div class="acc"><span class="btn sm">Programar</span><span class="btn sm pri">Iniciar</span></div></td>
+      </tr>
+      <tr>
+        <td class="eq"><b>PC Lenovo ThinkCentre M70q</b><span class="muted">MJ0ABC12 · N° 1003</span></td>
+        <td>Carlos Ruiz<div class="muted">Bodega</div></td>
+        <td>20/10/2025<div class="muted">Preventivo · acta 0031</div></td>
+        <td><span class="chip blu">Programado 30/10/2026</span><div class="muted" style="margin-top:3px">Le toca desde 20/10/2026</div></td>
+        <td><div class="acc"><span class="btn sm ghost">Cambiar fecha</span><span class="btn sm pri">Iniciar</span></div></td>
+      </tr>
+      <tr>
+        <td class="eq"><b>Portátil Dell Latitude 3440</b><span class="muted">7HXYZ34 · N° 1020</span></td>
+        <td><span class="muted">No asignado</span></td>
+        <td><span class="muted">Nunca</span><div class="muted">Garantía venció 01/06/2026</div></td>
+        <td><span class="chip amb">Le toca desde 01/06/2026</span></td>
+        <td>
+          <div class="acc"><span class="btn sm">Programar</span><span class="btn sm pri">Iniciar</span></div>
+          <div class="acc"><span class="pop">Fecha <input type="text" value="05/11/2026" size="10"> <span class="btn sm pri">Guardar</span></span></div>
+        </td>
+      </tr>
+      <tr>
+        <td class="eq"><b>PC HP ProDesk 400 G9</b><span class="muted">MXL1234 · N° 1008</span></td>
+        <td>Juan Pérez<div class="muted">Comercial</div></td>
+        <td>15/01/2026<div class="muted">Preventivo · acta 0035</div></td>
+        <td><span class="chip gry">Le toca el 15/01/2027</span><div class="muted" style="margin-top:3px">en menos de 3 meses</div></td>
+        <td><div class="acc"><span class="btn sm">Programar</span></div></td>
+      </tr>
+    </table>
+  </div>
+  <div class="note"><b>En garantía</b> (otra pestaña): no aparecen como pendientes. Si hace falta, “Iniciar” abre un mantenimiento con checklist reducido: solo limpieza externa y mantenimiento lógico, y el acta dice “En garantía”.</div>
+</div>
+
+</body></html>
