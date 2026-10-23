@@ -3,8 +3,9 @@
 Cada contraseña se cifra en cuanto se lee: la vista previa y la sesión (que
 vive en la base de datos) solo guardan el texto cifrado, nunca la clave.
 """
+import re
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 
 import openpyxl
 from django.core.exceptions import ValidationError
@@ -15,21 +16,76 @@ from .models import Credencial
 
 MAX_FILAS = 1000
 MAX_BYTES = 5 * 1024 * 1024
+# Solo se miran las primeras columnas del encabezado: una celda con formato en
+# XFD1 haría que el rango "usado" de la hoja tenga 16.384 columnas.
+MAX_COLUMNAS = 50
 
 ALIAS = {
-    "titulo": {"titulo", "nombre", "servicio", "sistema", "aplicacion"},
-    "usuario": {"usuario", "user", "login", "cuenta", "correo", "email"},
-    "secreto": {"contrasena", "clave", "password", "pass"},
-    "url": {"url", "sitio", "sitio web", "enlace", "link", "direccion", "ip"},
-    "notas": {"notas", "nota", "observaciones", "comentarios", "descripcion"},
+    "titulo": {"titulo", "nombre", "servicio", "sistema", "aplicacion", "plataforma"},
+    "usuario": {
+        "usuario", "user", "username", "login", "cuenta", "correo", "email", "e mail", "mail",
+        "correo electronico", "usuario correo", "nombre de usuario",
+    },
+    "secreto": {
+        "contrasena", "contrasenas", "clave", "claves", "password", "passwords", "pass", "clave de acceso",
+    },
+    "url": {
+        "url", "sitio", "sitio web", "enlace", "link", "direccion", "ip", "direccion ip",
+        "pagina", "pagina web", "web", "host", "servidor",
+    },
+    "notas": {
+        "notas", "nota", "observaciones", "observacion", "comentarios", "comentario", "descripcion", "detalle",
+    },
     "estado": {"estado"},
     "fecha_expiracion": {
         "fecha de expiracion", "expiracion", "vence", "vencimiento", "fecha de vencimiento",
+        "caduca", "caducidad",
     },
 }
 ESTADOS = {"activa", "expirada", "revocada"}
 FORMATOS_FECHA = ("%d/%m/%Y", "%Y-%m-%d")
 COLUMNAS_OBLIGATORIAS = (("titulo", "Título"), ("secreto", "Contraseña"))
+# Formatos de número con los que Excel guarda lo mismo que se escribió.
+FORMATOS_NUMERO_SEGUROS = {"General", "0", "@"}
+# Un número de Excel (double) pierde dígitos a partir de ~15 cifras.
+LIMITE_DIGITOS = 10 ** 15
+# Solo se antepone https:// a algo con forma de host[:puerto][/ruta].
+FORMA_DE_HOST = re.compile(r"[\w.-]+(:\d+)?(/\S*)?")
+PARECE_DIRECCION = re.compile(r"^(https?://|www\.|\\\\)|^\d{1,3}(\.\d{1,3}){3}(:\d+)?(/\S*)?$", re.IGNORECASE)
+# Las URL que no lo son solo hacen sospechar columnas cruzadas con varias filas.
+MIN_FILAS_ORDEN = 3
+
+ENCABEZADOS_PLANTILLA = ["Título", "Usuario", "Contraseña", "URL", "Notas", "Estado", "Fecha de expiración"]
+EJEMPLOS_PLANTILLA = [
+    ["Correo Gerencia", "gerencia@empresa.com", "Ejemplo-Clave-1", "https://outlook.office.com",
+     "Cuenta principal", "Activa", ""],
+    ["Router oficina", "admin", "Ejemplo-Clave-2", "http://192.168.1.1", "", "Activa", "31/12/2027"],
+]
+CLAVES_EJEMPLO = {ejemplo[2] for ejemplo in EJEMPLOS_PLANTILLA}
+INSTRUCCIONES_PLANTILLA = [
+    "INSTRUCCIONES DE USO",
+    "",
+    "1. Pegue sus contraseñas en la hoja 'Plantilla Contraseñas', debajo de los encabezados.",
+    "   Borre o reemplace las dos filas de ejemplo: si las deja, se marcan con error y no se importan.",
+    "2. Todas las columnas están en formato Texto para que Excel no cambie claves como 00123 o 1/2/24.",
+    "   Si pega desde otro Excel, use Pegado especial > Texto (o 'Mantener solo texto') para que se copie",
+    "   lo que se ve. Evite 'Pegar valores' si alguna clave parece fecha, hora o porcentaje.",
+    "3. Guarde como .xlsx y súbalo desde la bóveda: Importar desde Excel.",
+    "",
+    "COLUMNAS OBLIGATORIAS: Título y Contraseña.",
+    "COLUMNAS OPCIONALES: Usuario, URL, Notas, Estado, Fecha de expiración.",
+    "  - También se reconocen: Nombre o Servicio (Título); Correo, E-mail o Login (Usuario);",
+    "    Clave o Password (Contraseña); Sitio, Página web o Dirección IP (URL); Observaciones (Notas).",
+    "  - Estado: Activa, Expirada o Revocada (vacío = Activa).",
+    "  - Fecha de expiración: dd/mm/aaaa (ej. 31/12/2027) o aaaa-mm-dd.",
+    "  - URL: si no empieza por http(s):// se le agrega https://; si no es una dirección válida, va a Notas.",
+    "",
+    "IMPORTANTE:",
+    "  - Si en la bóveda ya existe una credencial con el mismo Título y Usuario, la fila se omite (no se sobrescribe).",
+    f"  - Máximo {MAX_FILAS} filas por archivo.",
+    "  - Nada se guarda hasta que confirme en la vista previa.",
+    "  - Cuando termine, borre este archivo de su PC y de la papelera: tiene las contraseñas en texto plano.",
+]
 
 
 class ArchivoInvalido(Exception):
@@ -42,8 +98,8 @@ def _sin_tildes(texto):
 
 
 def _normalizar_encabezado(valor):
-    texto = _sin_tildes(str(valor or "")).lower().replace("*", " ")
-    return " ".join(texto.split())
+    texto = _sin_tildes(str(valor or "")).lower()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", texto).split())
 
 
 def _campo_de(encabezado):
@@ -67,11 +123,33 @@ def _texto(valor):
     return str(valor)
 
 
+def _error_de_la_clave(valor, tipo, formato):
+    """Motivo por el que Excel pudo alterar la contraseña, o ""."""
+    if isinstance(valor, bool) or tipo == "b":
+        return "Excel convirtió la contraseña en VERDADERO/FALSO; escríbela como texto"
+    if tipo == "e":
+        return "La celda de la contraseña tiene un error de Excel (#N/A, #REF!…)"
+    if isinstance(valor, (datetime, date, time, timedelta)):
+        return "Excel convirtió la contraseña en fecha u hora; usa la plantilla (columnas en Texto)"
+    if isinstance(valor, (int, float)):
+        if abs(valor) >= LIMITE_DIGITOS:
+            return "Número demasiado largo: Excel perdió dígitos; escribe la contraseña como texto"
+        if (formato or "General") not in FORMATOS_NUMERO_SEGUROS:
+            return ("Excel le dio formato de número (porcentaje, moneda o fecha) a la contraseña; "
+                    "escríbela como texto")
+    return ""
+
+
 def _normalizar_url(texto):
     """Devuelve (url, nota). Lo que no sea una URL válida pasa a las notas."""
     if not texto:
         return "", ""
-    url = texto if "://" in texto else f"https://{texto}"
+    if "://" in texto:
+        url = texto
+    elif FORMA_DE_HOST.fullmatch(texto):
+        url = f"https://{texto}"
+    else:
+        return "", f"Sitio: {texto}"
     if len(url) > 200:
         return "", f"Sitio: {texto}"
     try:
@@ -102,14 +180,16 @@ def clave_duplicado(titulo, usuario):
     return (titulo.strip().lower(), usuario.strip().lower())
 
 
-def _validar(datos, valor_secreto, estado_crudo, fecha_cruda):
+def _validar(datos, error_clave, estado_crudo, fecha_cruda):
     """Devuelve el motivo del error o "" si la fila es válida."""
     if not datos["titulo"]:
         return "Falta el título"
-    if isinstance(valor_secreto, (date, datetime)):
-        return "Excel convirtió la contraseña en fecha; usa la plantilla (columnas en Texto)"
+    if error_clave:
+        return error_clave
     if not datos["secreto"].strip():
         return "Falta la contraseña"
+    if datos["secreto"] in CLAVES_EJEMPLO:
+        return "Fila de ejemplo de la plantilla: bórrala o reemplázala"
     if len(datos["titulo"]) > 150:
         return "El título supera 150 caracteres"
     if len(datos["usuario"]) > 150:
@@ -121,41 +201,72 @@ def _validar(datos, valor_secreto, estado_crudo, fecha_cruda):
     return error_fecha
 
 
+def _leer_hoja(archivo):
+    """Devuelve (columnas, ignoradas, filas) de la primera hoja.
+
+    columnas: campo → índice; ignoradas: encabezados no reconocidos o repetidos;
+    filas: [(número de fila en Excel, celdas)] sin las filas vacías.
+    """
+    wb = openpyxl.load_workbook(archivo, read_only=True, data_only=True)
+    try:
+        ws = wb.worksheets[0]
+        # Sin esto openpyxl confía en la dimensión que declara el archivo, que
+        # una sola celda con formato lejos de los datos vuelve gigantesca.
+        ws.reset_dimensions()
+        encabezado = next(ws.iter_rows(min_row=1, max_row=1, max_col=MAX_COLUMNAS, values_only=True), ())
+        columnas, ignoradas = {}, []
+        for indice, valor in enumerate(encabezado):
+            if valor is None or str(valor).strip() == "":
+                continue
+            campo = _campo_de(valor)
+            if campo and campo not in columnas:
+                columnas[campo] = indice
+            else:
+                ignoradas.append(str(valor).strip())
+
+        ancho = max(columnas.values(), default=0) + 1
+        filas = []
+        for celdas in ws.iter_rows(min_row=2, max_col=ancho):
+            if all(_texto(getattr(c, "value", None)).strip() == "" for c in celdas):
+                continue
+            numero = next(c.row for c in celdas if getattr(c, "row", None))
+            filas.append((numero, celdas))
+            if len(filas) > MAX_FILAS:
+                raise ArchivoInvalido(f"El archivo tiene más de {MAX_FILAS} filas con datos.")
+        return columnas, ignoradas, filas
+    finally:
+        wb.close()
+
+
+def _advertencias(columnas, ignoradas):
+    advertencias = []
+    faltantes = [nombre for campo, nombre in COLUMNAS_OBLIGATORIAS if campo not in columnas]
+    for nombre in faltantes:
+        advertencias.append(f'No se encontró la columna "{nombre}".')
+    if not faltantes and "usuario" not in columnas:
+        advertencias.append(
+            'No se encontró la columna "Usuario": las filas con el mismo título se tratarán como repetidas.'
+        )
+    if ignoradas:
+        nombres = ", ".join(f"«{n}»" for n in ignoradas)
+        advertencias.append(
+            f"Se ignoraron columnas que no se reconocen o están repetidas: {nombres}. "
+            "Si tienen datos que necesitas, renombra el encabezado (ver la hoja Instrucciones)."
+        )
+    return advertencias, faltantes
+
+
 def leer_credenciales(archivo, vault):
     """Lee la primera hoja del Excel y valida cada fila contra la bóveda.
 
     Returns:
         (filas, advertencias). Cada fila es un dict serializable a JSON con
-        fila, titulo, usuario, url, notas, estado, fecha_expiracion,
-        secreto_cifrado, resultado ("nueva" | "ya_existe" | "repetida" |
-        "error") y detalle.
+        fila, titulo, usuario, url, url_a_notas, notas, estado,
+        fecha_expiracion, secreto_cifrado, resultado ("nueva" | "ya_existe" |
+        "repetida" | "error") y detalle.
     """
-    wb = openpyxl.load_workbook(archivo, data_only=True)
-    try:
-        ws = wb.worksheets[0]
-        encabezados = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
-        columnas = {}
-        for indice, encabezado in enumerate(encabezados):
-            campo = _campo_de(encabezado)
-            if campo and campo not in columnas:
-                columnas[campo] = indice
-
-        advertencias = []
-        faltantes = []
-        for campo, nombre in COLUMNAS_OBLIGATORIAS:
-            if campo not in columnas:
-                advertencias.append(f'No se encontró la columna "{nombre}".')
-                faltantes.append(nombre)
-
-        crudas = []
-        for numero, fila in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-            if all(_texto(v).strip() == "" for v in fila):
-                continue
-            crudas.append((numero, fila))
-            if len(crudas) > MAX_FILAS:
-                raise ArchivoInvalido(f"El archivo tiene más de {MAX_FILAS} filas con datos.")
-    finally:
-        wb.close()
+    columnas, ignoradas, crudas = _leer_hoja(archivo)
+    advertencias, faltantes = _advertencias(columnas, ignoradas)
 
     existentes = {
         clave_duplicado(t, u)
@@ -164,28 +275,49 @@ def leer_credenciales(archivo, vault):
     vistas = set()
     fernet = build_fernet()
     filas = []
-    for numero, fila in crudas:
-        def celda(campo, fila=fila):
+    con_clave = claves_como_direccion = urls_escritas = urls_a_notas = 0
+    for numero, celdas in crudas:
+        def celda(campo, celdas=celdas):
             indice = columnas.get(campo)
-            return fila[indice] if indice is not None and indice < len(fila) else None
+            return celdas[indice] if indice is not None and indice < len(celdas) else None
 
-        valor_secreto = celda("secreto")
+        def valor(campo):
+            return getattr(celda(campo), "value", None)
+
+        celda_clave = celda("secreto")
+        valor_clave = getattr(celda_clave, "value", None)
+        error_clave = ""
+        if valor_clave is not None:
+            error_clave = _error_de_la_clave(
+                valor_clave,
+                getattr(celda_clave, "data_type", None),
+                getattr(celda_clave, "number_format", "General"),
+            )
         datos = {
-            "titulo": _texto(celda("titulo")).strip(),
-            "usuario": _texto(celda("usuario")).strip(),
-            "secreto": "" if isinstance(valor_secreto, (date, datetime)) else _texto(valor_secreto),
+            "titulo": _texto(valor("titulo")).strip(),
+            "usuario": _texto(valor("usuario")).strip(),
+            "secreto": "" if error_clave else _texto(valor_clave),
         }
-        estado_crudo = _texto(celda("estado")).strip()
-        fecha_cruda = celda("fecha_expiracion")
-        url, nota_url = _normalizar_url(_texto(celda("url")).strip())
-        notas = "\n".join(t for t in (_texto(celda("notas")).strip(), nota_url) if t)
+        estado_crudo = _texto(valor("estado")).strip()
+        fecha_cruda = valor("fecha_expiracion")
+        url_original = _texto(valor("url")).strip()
+        url, nota_url = _normalizar_url(url_original)
+        notas = "\n".join(t for t in (_texto(valor("notas")).strip(), nota_url) if t)
         fecha_iso, _ = _fecha(fecha_cruda)
+
+        if datos["secreto"].strip():
+            con_clave += 1
+            claves_como_direccion += bool(PARECE_DIRECCION.match(datos["secreto"].strip()))
+        if url_original:
+            urls_escritas += 1
+            urls_a_notas += bool(nota_url)
 
         registro = {
             "fila": numero,
             "titulo": datos["titulo"],
             "usuario": datos["usuario"],
             "url": url,
+            "url_a_notas": bool(nota_url),
             "notas": notas,
             "estado": _sin_tildes(estado_crudo).lower() or "activa",
             "fecha_expiracion": fecha_iso,
@@ -197,7 +329,7 @@ def leer_credenciales(archivo, vault):
         if faltantes:
             error = "Falta la columna " + " y ".join(f'"{n}"' for n in faltantes)
         else:
-            error = _validar(datos, valor_secreto, estado_crudo, fecha_cruda)
+            error = _validar(datos, error_clave, estado_crudo, fecha_cruda)
         clave = clave_duplicado(datos["titulo"], datos["usuario"])
         if error:
             registro.update(resultado="error", detalle=error)
@@ -208,7 +340,23 @@ def leer_credenciales(archivo, vault):
         else:
             vistas.add(clave)
             registro["secreto_cifrado"] = fernet.encrypt(datos["secreto"].encode("utf-8")).decode("utf-8")
+            if isinstance(valor_clave, (int, float)):
+                registro["detalle"] = "Revisa: en Excel era un número"
         filas.append(registro)
+
+    # Columnas pegadas en otro orden: las claves terminarían en URL o en Notas,
+    # en texto plano. Ante la sospecha no se importa nada.
+    cruzadas = (claves_como_direccion and claves_como_direccion * 2 >= con_clave) or (
+        urls_escritas >= MIN_FILAS_ORDEN and urls_a_notas * 2 >= urls_escritas
+    )
+    if cruzadas:
+        advertencias.append(
+            "Las contraseñas parecen direcciones o las URL no lo son: ¿pegaste las columnas en otro orden? "
+            "Revisa el archivo; no se importó nada."
+        )
+        for registro in filas:
+            registro.update(resultado="error", detalle="Revisa el orden de las columnas",
+                            secreto_cifrado="", url="", url_a_notas=False, notas="")
 
     return filas, advertencias
 
@@ -220,35 +368,6 @@ def resumen(filas):
         "errores": sum(1 for f in filas if f["resultado"] == "error"),
         "total": len(filas),
     }
-
-
-ENCABEZADOS_PLANTILLA = ["Título", "Usuario", "Contraseña", "URL", "Notas", "Estado", "Fecha de expiración"]
-EJEMPLOS_PLANTILLA = [
-    ["Correo Gerencia", "gerencia@empresa.com", "Ejemplo-Clave-1", "https://outlook.office.com",
-     "Cuenta principal", "Activa", ""],
-    ["Router oficina", "admin", "Ejemplo-Clave-2", "http://192.168.1.1", "", "Activa", "31/12/2027"],
-]
-INSTRUCCIONES_PLANTILLA = [
-    "INSTRUCCIONES DE USO",
-    "",
-    "1. Pegue sus contraseñas en la hoja 'Plantilla Contraseñas', debajo de los encabezados.",
-    "   Borre o reemplace las dos filas de ejemplo antes de subir el archivo.",
-    "2. Todas las columnas están en formato Texto para que Excel no cambie claves como 00123 o 1/2/24.",
-    "   Si pega desde otro Excel, use 'Pegar valores'.",
-    "3. Guarde como .xlsx y súbalo desde la bóveda: Importar desde Excel.",
-    "",
-    "COLUMNAS OBLIGATORIAS: Título y Contraseña.",
-    "COLUMNAS OPCIONALES: Usuario, URL, Notas, Estado, Fecha de expiración.",
-    "  - Estado: Activa, Expirada o Revocada (vacío = Activa).",
-    "  - Fecha de expiración: dd/mm/aaaa (ej. 31/12/2027) o aaaa-mm-dd.",
-    "  - URL: si no empieza por http(s):// se le agrega https://; si no es una dirección válida, va a Notas.",
-    "",
-    "IMPORTANTE:",
-    "  - Si en la bóveda ya existe una credencial con el mismo Título y Usuario, la fila se omite (no se sobrescribe).",
-    f"  - Máximo {MAX_FILAS} filas por archivo.",
-    "  - Nada se guarda hasta que confirme en la vista previa.",
-    "  - Cuando termine, borre este archivo de su PC y de la papelera: tiene las contraseñas en texto plano.",
-]
 
 
 def plantilla_workbook():
