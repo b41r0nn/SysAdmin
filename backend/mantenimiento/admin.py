@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repuesto
+from .models import (
+    ChecklistItem,
+    OrdenMantenimiento,
+    PlanMantenimiento,
+    PlantillaChecklist,
+    PuntoPlantilla,
+    Repuesto,
+)
 
 
 @admin.register(PlanMantenimiento)
@@ -28,3 +35,15 @@ class ChecklistItemAdmin(admin.ModelAdmin):
     list_display = ("descripcion", "plan", "orden", "completado", "posicion")
     list_filter = ("completado",)
     search_fields = ("descripcion",)
+
+
+class PuntoPlantillaInline(admin.TabularInline):
+    model = PuntoPlantilla
+    extra = 0
+    fields = ("posicion", "seccion", "descripcion", "aplica_en_garantia", "activo")
+
+
+@admin.register(PlantillaChecklist)
+class PlantillaChecklistAdmin(admin.ModelAdmin):
+    list_display = ("tipo_dispositivo", "frecuencia_meses", "fecha_actualizacion")
+    inlines = [PuntoPlantillaInline]

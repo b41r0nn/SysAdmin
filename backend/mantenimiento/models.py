@@ -1,6 +1,9 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.utils import timezone
+
+from inventario.models import _ver_tipo
 
 
 TIPOS_MANTENIMIENTO = [
@@ -32,6 +35,10 @@ CRITICIDADES = [
     ("media", "Media"),
     ("alta", "Alta"),
 ]
+
+# Secciones que se ofrecen al agregar un punto a un checklist. Es solo una
+# sugerencia: la sección de un punto es texto libre.
+SECCIONES_SUGERIDAS = ["Hardware", "Limpieza", "Mantenimiento lógico"]
 
 
 class PlanMantenimiento(models.Model):
@@ -205,3 +212,60 @@ class FotoMantenimiento(models.Model):
 
     def __str__(self):
         return self.descripcion or f"Foto #{self.pk}"
+
+
+class PlantillaChecklist(models.Model):
+    """Checklist de un preventivo. Hay uno por tipo de equipo.
+
+    Los tipos que tienen plantilla son los que entran en la programación. Al
+    iniciar un preventivo se copian a la orden los puntos activos; cambiar la
+    plantilla después no toca las órdenes ya iniciadas.
+    """
+
+    # Sin choices a propósito (igual que Activo): también hay tipos creados a mano.
+    tipo_dispositivo = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Tipo de equipo",
+    )
+    frecuencia_meses = models.PositiveSmallIntegerField(
+        default=12,
+        validators=[MinValueValidator(1)],
+        verbose_name="Frecuencia (meses)",
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["tipo_dispositivo"]
+        verbose_name = "Checklist"
+        verbose_name_plural = "Checklists"
+
+    def __str__(self):
+        return f"Checklist · {self.get_tipo_dispositivo_display()}"
+
+    def get_tipo_dispositivo_display(self):
+        return _ver_tipo(self.tipo_dispositivo)
+
+
+class PuntoPlantilla(models.Model):
+    """Un punto de un checklist: sección, texto y si aplica en garantía."""
+
+    plantilla = models.ForeignKey(
+        PlantillaChecklist,
+        on_delete=models.CASCADE,
+        related_name="puntos",
+    )
+    seccion = models.CharField(max_length=60, verbose_name="Sección")
+    descripcion = models.CharField(max_length=150, verbose_name="Descripción")
+    posicion = models.PositiveIntegerField(default=0, verbose_name="Posición")
+    aplica_en_garantia = models.BooleanField(default=False, verbose_name="Aplica en garantía")
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["posicion", "id"]
+        verbose_name = "Punto de checklist"
+        verbose_name_plural = "Puntos de checklist"
+
+    def __str__(self):
+        return f"{self.seccion} · {self.descripcion}"
