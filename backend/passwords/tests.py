@@ -1,10 +1,15 @@
 import json
-from datetime import date
+import threading
+import time as reloj
+from datetime import date, time, timedelta
 from io import BytesIO, StringIO
+from unittest import skipUnless
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.db import connection
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from openpyxl import Workbook
 
@@ -452,14 +457,20 @@ class PlantillaImportacionTests(TestCase):
         self.assertEqual(ws["C2"].number_format, "@")
         self.assertEqual(ws["C500"].number_format, "@")
 
-    def test_la_plantilla_se_puede_importar_tal_cual(self):
+    def test_filas_de_ejemplo_de_la_plantilla_no_se_importan(self):
+        from openpyxl import load_workbook
         from passwords.importacion import leer_credenciales
         resp, _ = self._descargar()
-        archivo = BytesIO(resp.content)
+        wb = load_workbook(BytesIO(resp.content))
+        wb["Plantilla Contraseñas"].append(["Router oficina", "admin", "Clave-Real-1", "", "", "", ""])
+        archivo = BytesIO()
+        wb.save(archivo)
+        archivo.seek(0)
         archivo.name = "plantilla.xlsx"
         filas, avisos = leer_credenciales(archivo, _vault())
-        self.assertEqual(avisos, [])
-        self.assertEqual([f["resultado"] for f in filas], ["nueva", "nueva"])
+        self.assertEqual([f["resultado"] for f in filas], ["error", "error", "nueva"])
+        self.assertEqual(filas[0]["detalle"], "Fila de ejemplo de la plantilla: bórrala o reemplázala")
+        self.assertEqual(_descifrar(filas[2]["secreto_cifrado"]), "Clave-Real-1")
 
     def test_admin_con_lectura_no_descarga(self):
         self.client.force_login(_user("admin"))
@@ -480,6 +491,10 @@ class ImportacionVistasTests(TestCase):
     def _url(self, nombre, vault=None):
         return reverse(f"passwords:{nombre}", kwargs={"vault_id": (vault or self.vault).pk})
 
+    def _confirmar(self, vault=None, **kw):
+        datos = self.client.session.get(f"importar_credenciales:{(vault or self.vault).pk}") or {}
+        return self.client.post(self._url("credenciales_importar_confirmar", vault), {"lote": datos.get("lote", "")}, **kw)
+
     def _previsualizar(self, filas=None, vault=None, nombre="claves.xlsx"):
         filas = filas or [("Router", "admin", self.CLAVE, "192.168.1.1")]
         return self.client.post(self._url("credenciales_importar", vault), {"archivo": _xlsx(filas, nombre=nombre)})
@@ -494,7 +509,7 @@ class ImportacionVistasTests(TestCase):
 
     def test_confirmar_crea_credenciales_cifradas_y_registra_log(self):
         self._previsualizar()
-        resp = self.client.post(self._url("credenciales_importar_confirmar"))
+        resp = self._confirmar()
         self.assertRedirects(resp, self._url("credenciales_lista"))
         cred = Credencial.objects.get(vault=self.vault)
         self.assertEqual(cred.get_secret(), self.CLAVE)
@@ -510,8 +525,8 @@ class ImportacionVistasTests(TestCase):
 
     def test_confirmar_dos_veces_no_duplica(self):
         self._previsualizar()
-        self.client.post(self._url("credenciales_importar_confirmar"))
-        self.client.post(self._url("credenciales_importar_confirmar"))
+        self._confirmar()
+        self._confirmar()
         self.assertEqual(Credencial.objects.count(), 1)
 
     def test_no_sobrescribe_existentes(self):
@@ -519,7 +534,7 @@ class ImportacionVistasTests(TestCase):
         vieja.set_secret("vieja")
         vieja.save()
         self._previsualizar()
-        self.client.post(self._url("credenciales_importar_confirmar"))
+        self._confirmar()
         self.assertEqual(Credencial.objects.count(), 1)
         vieja.refresh_from_db()
         self.assertEqual(vieja.get_secret(), "vieja")
@@ -551,3 +566,188 @@ class ImportacionVistasTests(TestCase):
         self.assertContains(self.client.get(self._url("credenciales_lista")), url)
         self.client.force_login(_user("admin"))
         self.assertNotContains(self.client.get(self._url("credenciales_lista")), url)
+
+
+# ─── Importación desde Excel: endurecimiento tras la revisión ────
+
+
+class ImportacionEndurecimientoTests(TestCase):
+    def setUp(self):
+        self.vault = _vault()
+
+    def _leer_wb(self, wb, nombre="claves.xlsx"):
+        from passwords.importacion import leer_credenciales
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        buffer.name = nombre
+        return leer_credenciales(buffer, self.vault)
+
+    def _wb(self, filas, encabezados=ENCABEZADOS):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(list(encabezados))
+        for fila in filas:
+            ws.append(list(fila))
+        return wb
+
+    def test_excel_con_celda_fantasma_se_lee_rapido(self):
+        wb = self._wb([("A", "u", "x")])
+        wb.active.cell(row=1048576, column=1).number_format = "@"
+        inicio = reloj.monotonic()
+        filas, _ = self._leer_wb(wb)
+        self.assertLess(reloj.monotonic() - inicio, 10)
+        self.assertEqual([f["resultado"] for f in filas], ["nueva"])
+
+    def test_valores_transformados_por_excel_son_error(self):
+        wb = self._wb([
+            ("Bool", "u1", True),
+            ("Hora", "u2", time(12, 30)),
+            ("Duracion", "u3", timedelta(days=1, hours=2)),
+            ("Porcentaje", "u4", 0.5),
+            ("Moneda", "u5", 100),
+            ("Larga", "u6", 1234567890123456789),
+            ("ErrorExcel", "u7", "#N/A"),
+        ])
+        ws = wb.active
+        ws["C5"].number_format = "0%"
+        ws["C6"].number_format = '"$"#,##0'
+        filas, _ = self._leer_wb(wb)
+        self.assertEqual([f["resultado"] for f in filas], ["error"] * 7)
+        self.assertTrue(all(f["secreto_cifrado"] == "" for f in filas))
+        self.assertIn("VERDADERO/FALSO", filas[0]["detalle"])
+        self.assertIn("fecha u hora", filas[1]["detalle"])
+        self.assertIn("fecha u hora", filas[2]["detalle"])
+        self.assertIn("formato", filas[3]["detalle"])
+        self.assertIn("formato", filas[4]["detalle"])
+        self.assertIn("perdió dígitos", filas[5]["detalle"])
+        self.assertIn("error de Excel", filas[6]["detalle"])
+
+    def test_numero_valido_queda_nueva_con_aviso(self):
+        filas, _ = self._leer_wb(self._wb([("A", "u", 123456)]))
+        self.assertEqual(filas[0]["resultado"], "nueva")
+        self.assertIn("número", filas[0]["detalle"])
+
+    def test_encabezados_no_reconocidos_avisan(self):
+        wb = self._wb([("Outlook", "a@x.com", "c1", "10.0.0.1", "dato")],
+                      encabezados=("Servicio", "Correo electrónico", "Contraseña", "Dirección IP", "Extra"))
+        filas, avisos = self._leer_wb(wb)
+        self.assertEqual((filas[0]["usuario"], filas[0]["url"]), ("a@x.com", "https://10.0.0.1"))
+        self.assertEqual(len(avisos), 1)
+        self.assertIn("Extra", avisos[0])
+
+    def test_alias_ampliados(self):
+        wb = self._wb([("A", "u@x.com", "c", "intranet.local", "nota")],
+                      encabezados=("Título", "Usuario/Correo", "Contraseñas", "Página web", "Observación"))
+        filas, avisos = self._leer_wb(wb)
+        self.assertEqual(avisos, [])
+        f = filas[0]
+        self.assertEqual((f["usuario"], f["url"], f["notas"], f["resultado"]),
+                         ("u@x.com", "https://intranet.local", "nota", "nueva"))
+
+    def test_sin_columna_usuario_avisa(self):
+        filas, avisos = self._leer_wb(self._wb([("A", "c")], encabezados=("Título", "Contraseña")))
+        self.assertEqual(avisos, ['No se encontró la columna "Usuario": las filas con el mismo título '
+                                  'se tratarán como repetidas.'])
+
+    def test_columnas_en_otro_orden_no_importa_nada(self):
+        wb = self._wb([
+            ("NAS", "admin", "https://nas.local", "Nas.Backup#7"),
+            ("FW", "root", "192.168.1.1", "Fw-Clave-2024!"),
+            ("Router", "admin", "http://192.168.1.254", "Rt-Clave-9"),
+        ])
+        filas, avisos = self._leer_wb(wb)
+        self.assertTrue(any("orden" in a for a in avisos))
+        self.assertEqual({f["resultado"] for f in filas}, {"error"})
+        self.assertEqual({f["detalle"] for f in filas}, {"Revisa el orden de las columnas"})
+        self.assertTrue(all(f["secreto_cifrado"] == "" and f["url"] == "" and f["notas"] == "" for f in filas))
+
+    def test_url_que_no_es_direccion_se_marca_en_la_fila(self):
+        filas, _ = self._leer_wb(self._wb([("A", "u", "x", "intranet de contabilidad")]))
+        self.assertTrue(filas[0]["url_a_notas"])
+
+
+class ImportacionVistasEndurecimientoTests(TestCase):
+    def setUp(self):
+        self.client.force_login(_user("superadmin"))
+        self.vault = _vault()
+        self.clave_sesion = f"importar_credenciales:{self.vault.pk}"
+
+    def _url(self, nombre):
+        return reverse(f"passwords:{nombre}", kwargs={"vault_id": self.vault.pk})
+
+    def _previsualizar(self, filas):
+        return self.client.post(self._url("credenciales_importar"), {"archivo": _xlsx(filas)})
+
+    def test_confirmar_con_sesion_vieja_avisa_que_ya_se_aplico(self):
+        self._previsualizar([("Router", "admin", "c1")])
+        datos = dict(self.client.session[self.clave_sesion])
+        self.client.post(self._url("credenciales_importar_confirmar"), {"lote": datos["lote"]})
+        sesion = self.client.session
+        sesion[self.clave_sesion] = datos
+        sesion.save()
+        resp = self.client.post(self._url("credenciales_importar_confirmar"), {"lote": datos["lote"]}, follow=True)
+        self.assertContains(resp, "Esta importación ya se había aplicado")
+        self.assertEqual(Credencial.objects.count(), 1)
+        self.assertEqual(AccesoLog.objects.filter(accion="importacion_excel").count(), 1)
+
+    def test_lote_distinto_no_importa(self):
+        self._previsualizar([("Router", "admin", "c1")])
+        resp = self.client.post(self._url("credenciales_importar_confirmar"), {"lote": "otro"}, follow=True)
+        self.assertContains(resp, "La vista previa cambió")
+        self.assertEqual(Credencial.objects.count(), 0)
+
+    def test_sesion_guarda_solo_las_nuevas(self):
+        self._previsualizar([("A", "u", "c1"), ("", "u", "c2"), ("A", "u", "c3")])
+        datos = self.client.session[self.clave_sesion]
+        self.assertEqual(sorted(datos), ["archivo", "lote", "nuevas", "total"])
+        self.assertEqual((len(datos["nuevas"]), datos["total"]), (1, 3))
+
+    def test_preview_marca_url_a_notas_sin_mostrarla(self):
+        resp = self._previsualizar([("A", "u", "x", "intranet de contabilidad")])
+        self.assertContains(resp, "→ Notas")
+        self.assertNotContains(resp, "intranet de contabilidad")
+
+    def test_error_de_lectura_no_deja_la_celda_en_los_logs(self):
+        error = ValueError("could not convert string to float: 'Clave-Real-9!'")
+        with patch("passwords.importacion.leer_credenciales", side_effect=error):
+            with self.assertLogs("passwords.views", level="WARNING") as registro:
+                resp = self._previsualizar([("A", "u", "x")])
+        self.assertRedirects(resp, self._url("credenciales_importar"))
+        self.assertNotIn("Clave-Real-9!", "\n".join(registro.output))
+
+    def test_el_excel_subido_no_pasa_por_disco(self):
+        from passwords.importacion import MAX_BYTES
+        self.assertGreater(settings.FILE_UPLOAD_MAX_MEMORY_SIZE, MAX_BYTES)
+
+
+@skipUnless(connection.vendor == "postgresql", "select_for_update solo bloquea en PostgreSQL")
+class ImportacionConcurrenteTests(TransactionTestCase):
+    def test_dos_confirmaciones_simultaneas_no_duplican(self):
+        usuario = _user("superadmin")
+        vault = _vault()
+
+        def url(nombre):
+            return reverse(f"passwords:{nombre}", kwargs={"vault_id": vault.pk})
+
+        primero = Client()
+        primero.force_login(usuario)
+        primero.post(url("credenciales_importar"), {"archivo": _xlsx([(f"T{i}", "u", f"c{i}") for i in range(200)])})
+        lote = primero.session[f"importar_credenciales:{vault.pk}"]["lote"]
+        segundo = Client()
+        segundo.cookies = primero.cookies
+        barrera = threading.Barrier(2)
+
+        def confirmar(cliente):
+            try:
+                barrera.wait()
+                cliente.post(url("credenciales_importar_confirmar"), {"lote": lote})
+            finally:
+                connection.close()
+
+        hilos = [threading.Thread(target=confirmar, args=(c,)) for c in (primero, segundo)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join()
+        self.assertEqual(Credencial.objects.filter(vault=vault).count(), 200)

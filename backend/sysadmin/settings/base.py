@@ -115,6 +115,10 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 # Timeout por INACTIVIDAD (segundos). SAVE_EVERY_REQUEST renueva la expiración
 # en cada petición; sin él, el tiempo cuenta desde el login y no desde la última actividad.
 SESSION_COOKIE_AGE = int(os.environ.get('SESSION_COOKIE_AGE', '1800'))
+
+# Subidas de hasta 6 MB quedan en memoria: el Excel de contraseñas (máx. 5 MB)
+# nunca se escribe en un archivo temporal en disco.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'

@@ -584,7 +584,8 @@ BD: PostgreSQL 15 en contenedor
 
 - ✅ **Contraseñas › Importar desde Excel**, dentro de cada bóveda: plantilla `plantilla_importar_contrasenas.xlsx`, vista previa por fila (nuevas / ya existen / con error) y confirmación. Encabezados flexibles ("Clave", "Password"…), claves numéricas sin `.0`, URL sin esquema → `https://`, máx. 1.000 filas / 5 MB
 - ✅ Seguridad: la clave se cifra al leer el archivo; ni la sesión, ni el HTML, ni la bitácora (`importacion_excel`) la contienen. Solo `passwords: escritura` (superadmin)
-- ✅ Suite **496/496 OK** (27 tests nuevos)
+- ✅ Endurecida tras la revisión final: doble clic en Confirmar no duplica (bloqueo por bóveda + lote de la vista previa); un Excel con celdas con formato lejos de los datos o con varias hojas se lee en modo streaming; las claves que Excel alteró (fecha u hora, VERDADERO/FALSO, porcentaje, moneda, números de más de 15 cifras, #N/A) salen con error; aviso de columnas no reconocidas y de falta de Usuario; si las columnas parecen pegadas en otro orden no se importa nada; las filas de ejemplo de la plantilla no se importan; sin claves en logs ni en archivos temporales (`FILE_UPLOAD_MAX_MEMORY_SIZE` = 6 MB)
+- ✅ Suite **511 OK** (1 omitida: la prueba de concurrencia solo corre en PostgreSQL)
 
 ### 2026-10-22 — v1.12.1 · Correcciones tras salir a producción
 
