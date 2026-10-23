@@ -93,10 +93,11 @@
               <td>{{ fila.titulo|default:"—" }}</td>
               <td>{{ fila.usuario|default:"—" }}</td>
               <td>{% if fila.resultado == "nueva" %}<span class="text-muted" style="letter-spacing:2px;">••••••••</span>{% else %}—{% endif %}</td>
-              <td>{{ fila.url|default:"—" }}</td>
+              <td>{% if fila.url_a_notas %}<span class="text-muted">→ Notas (no es una dirección)</span>{% else %}{{ fila.url|default:"—" }}{% endif %}</td>
               <td>
                 {% if fila.resultado == "nueva" %}
                   <span class="badge bg-success">Nueva</span>
+                  {% if fila.detalle %}<div class="text-muted small">{{ fila.detalle }}</div>{% endif %}
                 {% elif fila.resultado == "error" %}
                   <span class="badge bg-danger">{{ fila.detalle }}</span>
                 {% else %}
@@ -122,8 +123,10 @@
            style="border-top:1px solid var(--sa-border,#e2e8f0);">
         <a href="{% url 'passwords:credenciales_importar' vault_id=vault.id %}" class="btn btn-outline-secondary">Subir otro archivo</a>
         {% if resumen.nuevas > 0 %}
-        <form method="post" action="{% url 'passwords:credenciales_importar_confirmar' vault_id=vault.id %}">
+        <form method="post" action="{% url 'passwords:credenciales_importar_confirmar' vault_id=vault.id %}"
+              onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Importando…';">
           {% csrf_token %}
+          <input type="hidden" name="lote" value="{{ lote }}">
           <button type="submit" class="btn btn-success px-4">
             <i class="bi bi-check2-all me-2"></i>Importar {{ resumen.nuevas }} contraseñas
           </button>
