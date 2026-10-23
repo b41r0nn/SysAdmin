@@ -6,6 +6,7 @@ app_name = "passwords"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("importar/plantilla/", views.plantilla_importar, name="importar_plantilla"),
     path("vaults/nuevo/", views.vault_crear, name="vault_crear"),
     path("vaults/<int:pk>/editar/", views.vault_editar, name="vault_editar"),
     path("vaults/<int:pk>/eliminar/", views.vault_eliminar, name="vault_eliminar"),

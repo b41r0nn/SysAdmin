@@ -6,6 +6,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from openpyxl import Workbook
 
+from . import importacion
 from .forms import CredencialForm, VaultForm
 from .models import AccesoLog, Credencial, Vault, ESTADOS_CREDENCIAL
 from accounts.permisos import puede_ver_secretos, requiere_permiso
@@ -308,3 +309,13 @@ def logs(request, vault_id):
         "filtro_accion": accion,
         "filtro_q": q,
     })
+
+
+@requiere_permiso("passwords", "escritura")
+def plantilla_importar(request):
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="plantilla_importar_contrasenas.xlsx"'
+    guardar_excel(importacion.plantilla_workbook(), response)
+    return response
