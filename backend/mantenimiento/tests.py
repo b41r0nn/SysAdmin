@@ -441,7 +441,7 @@ class ReporteFallaFotoTests(TestCase):
         tecnico = _user("tecnico")
         tecnico.email = "tecnico@test.com"
         tecnico.save(update_fields=["email"])
-        with patch("mantenimiento.views.encolar_email") as mock:
+        with patch("mantenimiento.views.reportes.encolar_email") as mock:
             self.client.post(
                 reverse("mantenimiento:reportar"),
                 {"activo": self.activo.pk, "prioridad": "media", "descripcion": "Falla."},
