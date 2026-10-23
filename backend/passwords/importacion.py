@@ -220,3 +220,67 @@ def resumen(filas):
         "errores": sum(1 for f in filas if f["resultado"] == "error"),
         "total": len(filas),
     }
+
+
+ENCABEZADOS_PLANTILLA = ["Título", "Usuario", "Contraseña", "URL", "Notas", "Estado", "Fecha de expiración"]
+EJEMPLOS_PLANTILLA = [
+    ["Correo Gerencia", "gerencia@empresa.com", "Ejemplo-Clave-1", "https://outlook.office.com",
+     "Cuenta principal", "Activa", ""],
+    ["Router oficina", "admin", "Ejemplo-Clave-2", "http://192.168.1.1", "", "Activa", "31/12/2027"],
+]
+INSTRUCCIONES_PLANTILLA = [
+    "INSTRUCCIONES DE USO",
+    "",
+    "1. Pegue sus contraseñas en la hoja 'Plantilla Contraseñas', debajo de los encabezados.",
+    "   Borre o reemplace las dos filas de ejemplo antes de subir el archivo.",
+    "2. Todas las columnas están en formato Texto para que Excel no cambie claves como 00123 o 1/2/24.",
+    "   Si pega desde otro Excel, use 'Pegar valores'.",
+    "3. Guarde como .xlsx y súbalo desde la bóveda: Importar desde Excel.",
+    "",
+    "COLUMNAS OBLIGATORIAS: Título y Contraseña.",
+    "COLUMNAS OPCIONALES: Usuario, URL, Notas, Estado, Fecha de expiración.",
+    "  - Estado: Activa, Expirada o Revocada (vacío = Activa).",
+    "  - Fecha de expiración: dd/mm/aaaa (ej. 31/12/2027) o aaaa-mm-dd.",
+    "  - URL: si no empieza por http(s):// se le agrega https://; si no es una dirección válida, va a Notas.",
+    "",
+    "IMPORTANTE:",
+    "  - Si en la bóveda ya existe una credencial con el mismo Título y Usuario, la fila se omite (no se sobrescribe).",
+    f"  - Máximo {MAX_FILAS} filas por archivo.",
+    "  - Nada se guarda hasta que confirme en la vista previa.",
+    "  - Cuando termine, borre este archivo de su PC y de la papelera: tiene las contraseñas en texto plano.",
+]
+
+
+def plantilla_workbook():
+    """Plantilla Excel para importar credenciales (columnas en formato Texto)."""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Plantilla Contraseñas"
+    borde = Border(*(Side(style="thin") for _ in range(4)))
+
+    for fila in range(1, MAX_FILAS + 2):
+        for columna in range(1, len(ENCABEZADOS_PLANTILLA) + 1):
+            ws.cell(row=fila, column=columna).number_format = "@"
+
+    for columna, texto in enumerate(ENCABEZADOS_PLANTILLA, 1):
+        celda = ws.cell(row=1, column=columna, value=texto)
+        celda.font = Font(bold=True, color="FFFFFF")
+        celda.fill = PatternFill(start_color="0156A6", end_color="0156A6", fill_type="solid")
+        celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        celda.border = borde
+        ws.column_dimensions[openpyxl.utils.get_column_letter(columna)].width = 26
+
+    for fila, ejemplo in enumerate(EJEMPLOS_PLANTILLA, 2):
+        for columna, valor in enumerate(ejemplo, 1):
+            celda = ws.cell(row=fila, column=columna, value=valor or None)
+            celda.border = borde
+
+    hoja = wb.create_sheet("Instrucciones")
+    for fila, linea in enumerate(INSTRUCCIONES_PLANTILLA, 1):
+        celda = hoja.cell(row=fila, column=1, value=linea)
+        if fila == 1:
+            celda.font = Font(bold=True, size=14, color="0156A6")
+    hoja.column_dimensions["A"].width = 110
+    return wb

@@ -427,3 +427,40 @@ class ImportacionLecturaTests(TestCase):
         from passwords.importacion import resumen
         filas = [{"resultado": r} for r in ("nueva", "nueva", "ya_existe", "repetida", "error")]
         self.assertEqual(resumen(filas), {"nuevas": 2, "ya_existen": 2, "errores": 1, "total": 5})
+
+
+# ─── Importación desde Excel: plantilla ──────────────────────────
+
+
+class PlantillaImportacionTests(TestCase):
+    def setUp(self):
+        self.client.force_login(_user("superadmin"))
+
+    def _descargar(self):
+        from openpyxl import load_workbook
+        resp = self.client.get(reverse("passwords:importar_plantilla"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("plantilla_importar_contrasenas.xlsx", resp["Content-Disposition"])
+        return resp, load_workbook(BytesIO(resp.content))
+
+    def test_hojas_encabezados_y_formato_texto(self):
+        _, wb = self._descargar()
+        self.assertEqual(wb.sheetnames, ["Plantilla Contraseñas", "Instrucciones"])
+        ws = wb["Plantilla Contraseñas"]
+        self.assertEqual([c.value for c in ws[1]], list(ENCABEZADOS))
+        self.assertEqual(ws["C2"].number_format, "@")
+        self.assertEqual(ws["C500"].number_format, "@")
+
+    def test_la_plantilla_se_puede_importar_tal_cual(self):
+        from passwords.importacion import leer_credenciales
+        resp, _ = self._descargar()
+        archivo = BytesIO(resp.content)
+        archivo.name = "plantilla.xlsx"
+        filas, avisos = leer_credenciales(archivo, _vault())
+        self.assertEqual(avisos, [])
+        self.assertEqual([f["resultado"] for f in filas], ["nueva", "nueva"])
+
+    def test_admin_con_lectura_no_descarga(self):
+        self.client.force_login(_user("admin"))
+        resp = self.client.get(reverse("passwords:importar_plantilla"))
+        self.assertRedirects(resp, reverse("core:dashboard"))
