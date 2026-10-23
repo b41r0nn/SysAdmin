@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from io import BytesIO, StringIO
 from unittest.mock import patch
@@ -464,3 +465,89 @@ class PlantillaImportacionTests(TestCase):
         self.client.force_login(_user("admin"))
         resp = self.client.get(reverse("passwords:importar_plantilla"))
         self.assertRedirects(resp, reverse("core:dashboard"))
+
+
+# ─── Importación desde Excel: vistas ─────────────────────────────
+
+
+class ImportacionVistasTests(TestCase):
+    CLAVE = "Clave-Secreta-XYZ"
+
+    def setUp(self):
+        self.client.force_login(_user("superadmin"))
+        self.vault = _vault()
+
+    def _url(self, nombre, vault=None):
+        return reverse(f"passwords:{nombre}", kwargs={"vault_id": (vault or self.vault).pk})
+
+    def _previsualizar(self, filas=None, vault=None, nombre="claves.xlsx"):
+        filas = filas or [("Router", "admin", self.CLAVE, "192.168.1.1")]
+        return self.client.post(self._url("credenciales_importar", vault), {"archivo": _xlsx(filas, nombre=nombre)})
+
+    def test_preview_no_guarda_nada_ni_muestra_la_clave(self):
+        resp = self._previsualizar()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Credencial.objects.count(), 0)
+        self.assertNotContains(resp, self.CLAVE)
+        self.assertContains(resp, "••••••••")
+        self.assertNotIn(self.CLAVE, json.dumps(dict(self.client.session)))
+
+    def test_confirmar_crea_credenciales_cifradas_y_registra_log(self):
+        self._previsualizar()
+        resp = self.client.post(self._url("credenciales_importar_confirmar"))
+        self.assertRedirects(resp, self._url("credenciales_lista"))
+        cred = Credencial.objects.get(vault=self.vault)
+        self.assertEqual(cred.get_secret(), self.CLAVE)
+        self.assertEqual(cred.url, "https://192.168.1.1")
+        log = AccesoLog.objects.get(vault=self.vault, accion="importacion_excel")
+        self.assertEqual(log.detalle, "claves.xlsx: 1 creadas, 0 omitidas")
+        self.assertNotIn(self.CLAVE, log.detalle)
+
+    def test_confirmar_sin_preview_avisa_que_expiro(self):
+        resp = self.client.post(self._url("credenciales_importar_confirmar"), follow=True)
+        self.assertContains(resp, "La vista previa expiró")
+        self.assertEqual(Credencial.objects.count(), 0)
+
+    def test_confirmar_dos_veces_no_duplica(self):
+        self._previsualizar()
+        self.client.post(self._url("credenciales_importar_confirmar"))
+        self.client.post(self._url("credenciales_importar_confirmar"))
+        self.assertEqual(Credencial.objects.count(), 1)
+
+    def test_no_sobrescribe_existentes(self):
+        vieja = Credencial(vault=self.vault, titulo="Router", usuario="admin")
+        vieja.set_secret("vieja")
+        vieja.save()
+        self._previsualizar()
+        self.client.post(self._url("credenciales_importar_confirmar"))
+        self.assertEqual(Credencial.objects.count(), 1)
+        vieja.refresh_from_db()
+        self.assertEqual(vieja.get_secret(), "vieja")
+
+    def test_confirmar_es_por_boveda(self):
+        otra = _vault("Otra")
+        self._previsualizar()
+        resp = self.client.post(self._url("credenciales_importar_confirmar", otra), follow=True)
+        self.assertContains(resp, "La vista previa expiró")
+        self.assertEqual(Credencial.objects.count(), 0)
+
+    def test_rechaza_archivo_que_no_es_xlsx(self):
+        resp = self._previsualizar(nombre="claves.csv")
+        self.assertRedirects(resp, self._url("credenciales_importar"))
+        self.assertNotIn(f"importar_credenciales:{self.vault.pk}", self.client.session)
+
+    def test_rechaza_archivo_muy_grande(self):
+        with patch("passwords.importacion.MAX_BYTES", 10):
+            resp = self._previsualizar()
+        self.assertRedirects(resp, self._url("credenciales_importar"))
+        self.assertNotIn(f"importar_credenciales:{self.vault.pk}", self.client.session)
+
+    def test_admin_con_lectura_no_puede_importar(self):
+        self.client.force_login(_user("admin"))
+        self.assertRedirects(self.client.get(self._url("credenciales_importar")), reverse("core:dashboard"))
+
+    def test_boton_importar_solo_con_escritura(self):
+        url = self._url("credenciales_importar")
+        self.assertContains(self.client.get(self._url("credenciales_lista")), url)
+        self.client.force_login(_user("admin"))
+        self.assertNotContains(self.client.get(self._url("credenciales_lista")), url)

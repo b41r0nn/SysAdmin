@@ -1,3 +1,6 @@
+import logging
+from datetime import date
+
 from cryptography.fernet import InvalidToken
 from django.contrib import messages
 from django.core.cache import cache
@@ -12,6 +15,8 @@ from .models import AccesoLog, Credencial, Vault, ESTADOS_CREDENCIAL
 from accounts.permisos import puede_ver_secretos, requiere_permiso
 from core.utils import guardar_excel
 
+
+logger = logging.getLogger(__name__)
 
 # Intentos fallidos del código de acceso antes de bloquear (por usuario y vault).
 MAX_INTENTOS_CODIGO = 5
@@ -319,3 +324,90 @@ def plantilla_importar(request):
     response["Content-Disposition"] = 'attachment; filename="plantilla_importar_contrasenas.xlsx"'
     guardar_excel(importacion.plantilla_workbook(), response)
     return response
+
+
+def _clave_sesion_importacion(vault):
+    return f"importar_credenciales:{vault.pk}"
+
+
+@requiere_permiso("passwords", "escritura")
+def credenciales_importar(request, vault_id):
+    vault = get_object_or_404(Vault, pk=vault_id)
+    if request.method != "POST":
+        return render(request, "passwords/importar.html", {"vault": vault})
+
+    volver = redirect("passwords:credenciales_importar", vault_id=vault.id)
+    archivo = request.FILES.get("archivo")
+    if not archivo:
+        messages.error(request, "Selecciona un archivo .xlsx.")
+        return volver
+    if not archivo.name.lower().endswith(".xlsx"):
+        messages.error(request, "El archivo debe ser .xlsx (Excel).")
+        return volver
+    if archivo.size > importacion.MAX_BYTES:
+        messages.error(request, "El archivo pasa de 5 MB.")
+        return volver
+    try:
+        filas, advertencias = importacion.leer_credenciales(archivo, vault)
+    except importacion.ArchivoInvalido as exc:
+        messages.error(request, str(exc))
+        return volver
+    except Exception:
+        logger.exception("No se pudo leer el Excel de credenciales")
+        messages.error(request, "No se pudo leer el archivo. ¿Es un .xlsx válido?")
+        return volver
+
+    # En la sesión solo quedan claves cifradas (ver importacion.leer_credenciales).
+    request.session[_clave_sesion_importacion(vault)] = {"archivo": archivo.name, "filas": filas}
+    for advertencia in advertencias:
+        messages.warning(request, advertencia)
+    return render(request, "passwords/importar_preview.html", {
+        "vault": vault,
+        "filas": filas,
+        "resumen": importacion.resumen(filas),
+        "nombre_archivo": archivo.name,
+    })
+
+
+@requiere_permiso("passwords", "escritura")
+def credenciales_importar_confirmar(request, vault_id):
+    vault = get_object_or_404(Vault, pk=vault_id)
+    if request.method != "POST":
+        return redirect("passwords:credenciales_importar", vault_id=vault.id)
+
+    datos = request.session.pop(_clave_sesion_importacion(vault), None)
+    if not datos:
+        messages.error(request, "La vista previa expiró. Vuelve a subir el archivo.")
+        return redirect("passwords:credenciales_importar", vault_id=vault.id)
+
+    existentes = {
+        importacion.clave_duplicado(titulo, usuario)
+        for titulo, usuario in Credencial.objects.filter(vault=vault).values_list("titulo", "usuario")
+    }
+    creadas = 0
+    for fila in datos["filas"]:
+        clave = importacion.clave_duplicado(fila["titulo"], fila["usuario"])
+        if fila["resultado"] != "nueva" or clave in existentes:
+            continue
+        Credencial.objects.create(
+            vault=vault,
+            titulo=fila["titulo"],
+            usuario=fila["usuario"],
+            url=fila["url"],
+            notas=fila["notas"],
+            estado=fila["estado"],
+            fecha_expiracion=date.fromisoformat(fila["fecha_expiracion"]) if fila["fecha_expiracion"] else None,
+            secreto_encriptado=fila["secreto_cifrado"],
+            creado_por=request.user,
+        )
+        existentes.add(clave)
+        creadas += 1
+
+    omitidas = len(datos["filas"]) - creadas
+    _log_action(
+        vault, request.user, "importacion_excel",
+        detalle=f"{datos['archivo']}: {creadas} creadas, {omitidas} omitidas",
+    )
+    messages.success(request, f"Importación terminada: {creadas} contraseñas creadas, {omitidas} omitidas.")
+    messages.warning(request, "Borra el Excel de tu PC y de la papelera: tiene las contraseñas en texto plano.")
+    return redirect("passwords:credenciales_lista", vault_id=vault.id)
