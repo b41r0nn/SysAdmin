@@ -98,7 +98,7 @@ def _fecha(valor):
     return None, f"Fecha de expiración no válida: «{texto}»"
 
 
-def _clave(titulo, usuario):
+def clave_duplicado(titulo, usuario):
     return (titulo.strip().lower(), usuario.strip().lower())
 
 
@@ -158,7 +158,7 @@ def leer_credenciales(archivo, vault):
         wb.close()
 
     existentes = {
-        _clave(t, u)
+        clave_duplicado(t, u)
         for t, u in Credencial.objects.filter(vault=vault).values_list("titulo", "usuario")
     }
     vistas = set()
@@ -198,7 +198,7 @@ def leer_credenciales(archivo, vault):
             error = "Falta la columna " + " y ".join(f'"{n}"' for n in faltantes)
         else:
             error = _validar(datos, valor_secreto, estado_crudo, fecha_cruda)
-        clave = _clave(datos["titulo"], datos["usuario"])
+        clave = clave_duplicado(datos["titulo"], datos["usuario"])
         if error:
             registro.update(resultado="error", detalle=error)
         elif clave in existentes:
