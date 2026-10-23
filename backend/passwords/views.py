@@ -1,9 +1,11 @@
 import logging
+import secrets
 from datetime import date
 
 from cryptography.fernet import InvalidToken
 from django.contrib import messages
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -352,13 +354,20 @@ def credenciales_importar(request, vault_id):
     except importacion.ArchivoInvalido as exc:
         messages.error(request, str(exc))
         return volver
-    except Exception:
-        logger.exception("No se pudo leer el Excel de credenciales")
+    except Exception as exc:
+        # Sin traceback: el mensaje de la excepción puede traer el valor de una celda (una clave).
+        logger.warning("No se pudo leer el Excel de credenciales (%s)", type(exc).__name__)
         messages.error(request, "No se pudo leer el archivo. ¿Es un .xlsx válido?")
         return volver
 
-    # En la sesión solo quedan claves cifradas (ver importacion.leer_credenciales).
-    request.session[_clave_sesion_importacion(vault)] = {"archivo": archivo.name, "filas": filas}
+    # En la sesión solo quedan las filas que se van a crear, con la clave cifrada.
+    lote = secrets.token_urlsafe(12)
+    request.session[_clave_sesion_importacion(vault)] = {
+        "archivo": archivo.name,
+        "lote": lote,
+        "total": len(filas),
+        "nuevas": [f for f in filas if f["resultado"] == "nueva"],
+    }
     for advertencia in advertencias:
         messages.warning(request, advertencia)
     return render(request, "passwords/importar_preview.html", {
@@ -366,6 +375,7 @@ def credenciales_importar(request, vault_id):
         "filas": filas,
         "resumen": importacion.resumen(filas),
         "nombre_archivo": archivo.name,
+        "lote": lote,
     })
 
 
@@ -375,39 +385,55 @@ def credenciales_importar_confirmar(request, vault_id):
     if request.method != "POST":
         return redirect("passwords:credenciales_importar", vault_id=vault.id)
 
-    datos = request.session.pop(_clave_sesion_importacion(vault), None)
+    clave_sesion = _clave_sesion_importacion(vault)
+    datos = request.session.get(clave_sesion)
     if not datos:
         messages.error(request, "La vista previa expiró. Vuelve a subir el archivo.")
         return redirect("passwords:credenciales_importar", vault_id=vault.id)
-
-    existentes = {
-        importacion.clave_duplicado(titulo, usuario)
-        for titulo, usuario in Credencial.objects.filter(vault=vault).values_list("titulo", "usuario")
-    }
-    creadas = 0
-    for fila in datos["filas"]:
-        clave = importacion.clave_duplicado(fila["titulo"], fila["usuario"])
-        if fila["resultado"] != "nueva" or clave in existentes:
-            continue
-        Credencial.objects.create(
-            vault=vault,
-            titulo=fila["titulo"],
-            usuario=fila["usuario"],
-            url=fila["url"],
-            notas=fila["notas"],
-            estado=fila["estado"],
-            fecha_expiracion=date.fromisoformat(fila["fecha_expiracion"]) if fila["fecha_expiracion"] else None,
-            secreto_encriptado=fila["secreto_cifrado"],
-            creado_por=request.user,
+    if request.POST.get("lote") != datos.get("lote"):
+        messages.error(
+            request,
+            "La vista previa cambió (¿la abriste en otra pestaña?). Revisa la más reciente y confirma de nuevo.",
         )
-        existentes.add(clave)
-        creadas += 1
+        return redirect("passwords:credenciales_importar", vault_id=vault.id)
+    del request.session[clave_sesion]
 
-    omitidas = len(datos["filas"]) - creadas
-    _log_action(
-        vault, request.user, "importacion_excel",
-        detalle=f"{datos['archivo']}: {creadas} creadas, {omitidas} omitidas",
-    )
+    with transaction.atomic():
+        # Bloquea la bóveda: dos confirmaciones simultáneas (doble clic) corren
+        # una tras otra y la segunda ve lo que ya creó la primera.
+        Vault.objects.select_for_update().get(pk=vault.pk)
+        existentes = {
+            importacion.clave_duplicado(titulo, usuario)
+            for titulo, usuario in Credencial.objects.filter(vault=vault).values_list("titulo", "usuario")
+        }
+        nuevas = []
+        for fila in datos["nuevas"]:
+            clave = importacion.clave_duplicado(fila["titulo"], fila["usuario"])
+            if clave in existentes:
+                continue
+            existentes.add(clave)
+            nuevas.append(Credencial(
+                vault=vault,
+                titulo=fila["titulo"],
+                usuario=fila["usuario"],
+                url=fila["url"],
+                notas=fila["notas"],
+                estado=fila["estado"],
+                fecha_expiracion=date.fromisoformat(fila["fecha_expiracion"]) if fila["fecha_expiracion"] else None,
+                secreto_encriptado=fila["secreto_cifrado"],
+                creado_por=request.user,
+            ))
+        if datos["nuevas"] and not nuevas:
+            messages.info(request, "Esta importación ya se había aplicado: no se creó nada nuevo.")
+            return redirect("passwords:credenciales_lista", vault_id=vault.id)
+
+        Credencial.objects.bulk_create(nuevas)
+        creadas = len(nuevas)
+        omitidas = datos["total"] - creadas
+        _log_action(
+            vault, request.user, "importacion_excel",
+            detalle=f"{datos['archivo']}: {creadas} creadas, {omitidas} omitidas",
+        )
     messages.success(request, f"Importación terminada: {creadas} contraseñas creadas, {omitidas} omitidas.")
     messages.warning(request, "Borra el Excel de tu PC y de la papelera: tiene las contraseñas en texto plano.")
     return redirect("passwords:credenciales_lista", vault_id=vault.id)
