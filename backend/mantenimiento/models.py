@@ -45,6 +45,10 @@ SECCIONES_SUGERIDAS = ["Hardware", "Limpieza", "Mantenimiento lógico"]
 FORMATO_ANTERIOR = 1
 FORMATO_ACTUAL = 2
 
+# Resultado de un punto del checklist de un preventivo.
+RESULTADOS_PUNTO = [("bien", "Bien"), ("falla", "Con falla"), ("na", "No aplica")]
+LIMITE_OBS_PUNTO = 150
+
 
 class PlanMantenimiento(models.Model):
     tipo_dispositivo = models.CharField(
@@ -191,8 +195,11 @@ class ChecklistItem(models.Model):
         blank=True,
         verbose_name="Orden (copia)",
     )
+    seccion = models.CharField(max_length=60, blank=True)
     descripcion = models.CharField(max_length=250)
     completado = models.BooleanField(default=False)
+    resultado = models.CharField(max_length=10, choices=RESULTADOS_PUNTO, blank=True)
+    observacion = models.CharField(max_length=LIMITE_OBS_PUNTO, blank=True)
     posicion = models.PositiveIntegerField(default=0)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 

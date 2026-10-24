@@ -272,3 +272,23 @@ class RepuestoForm(forms.ModelForm):
             "cantidad": forms.NumberInput(attrs={"class": "form-control"}),
             "costo_unitario": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
         }
+
+
+class NuevoMantenimientoForm(forms.Form):
+    """Primer paso de un mantenimiento: qué equipo y de qué tipo."""
+
+    activo = forms.ModelChoiceField(
+        queryset=Activo.objects.none(),
+        label="Equipo",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    tipo = forms.ChoiceField(
+        choices=[("preventivo", "Preventivo"), ("correctivo", "Correctivo")],
+        initial="preventivo",
+        label="Tipo",
+        widget=forms.RadioSelect,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["activo"].queryset = Activo.objects.exclude(estado="dado_de_baja").order_by("serial")

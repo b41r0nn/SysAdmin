@@ -13,6 +13,7 @@ from inventario.models import Activo
 from ..constants import PARTES_POR_TIPO
 from ..forms import FotoMantenimientoForm, OrdenMantenimientoForm, RepuestoForm
 from ..models import (
+    FORMATO_ACTUAL,
     ESTADOS_ORDEN,
     PRIORIDADES,
     TIPOS_MANTENIMIENTO,
@@ -23,6 +24,7 @@ from ..models import (
 )
 from ..services import snapshot_software_ocs
 from .planes import _actualizar_plan_por_orden, _copiar_checklist_plantilla
+from .ejecucion import contexto_checklist
 
 
 FotoFormSet = modelformset_factory(
@@ -103,7 +105,14 @@ def detalle_orden(request, pk):
         for slug, estado in (orden.estado_partes or {}).items()
     ]
 
+    contexto_extra = (
+        contexto_checklist(orden)
+        if orden.formato == FORMATO_ACTUAL and orden.tipo == "preventivo"
+        else {}
+    )
+
     return render(request, "mantenimiento/detalle_orden.html", {
+        **contexto_extra,
         "orden": orden,
         "repuestos": repuestos,
         "repuestos_total": repuestos_total.get("total") or 0,

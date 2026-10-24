@@ -20,6 +20,11 @@ from .planes import (  # noqa: F401
     lista_planes,
     toggle_plan,
 )
+from .ejecucion import (  # noqa: F401
+    iniciar_preventivo,
+    marcar_punto,
+    nuevo,
+)
 from .legado import (  # noqa: F401
     crear_item_checklist,
     estado_partes_partial,
