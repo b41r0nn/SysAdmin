@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo mantenimiento — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:lista_ordenes' %}" class="text-decoration-none">Ordenes</a>
+    </li>
+    <li class="breadcrumb-item active">Nuevo mantenimiento</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7 col-xl-6">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-tools"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Nuevo mantenimiento</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">Elige el equipo y el tipo.</p>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors|join:" " }}</div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label for="{{ form.activo.id_for_label }}" class="form-label fw-semibold">{{ form.activo.label }}</label>
+          {{ form.activo }}
+          {% for e in form.activo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="mb-4">
+          <span class="form-label fw-semibold d-block">{{ form.tipo.label }}</span>
+          {% for radio in form.tipo %}
+            <div class="form-check form-check-inline">
+              {{ radio.tag }}
+              <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+            </div>
+          {% endfor %}
+          {% for e in form.tipo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-play-circle"></i> Continuar
+          </button>
+          <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

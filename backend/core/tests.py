@@ -385,7 +385,7 @@ class SmokeVistasTests(TestCase):
         "reports:mantenimiento_excel",
         "mantenimiento:lista_ordenes", "mantenimiento:lista_planes", "mantenimiento:calendario",
         "mantenimiento:calendario_eventos", "mantenimiento:reportar", "mantenimiento:crear_plan",
-        "mantenimiento:crear_orden", "mantenimiento:hoja_de_vida_buscar",
+        "mantenimiento:crear_orden", "mantenimiento:nuevo", "mantenimiento:hoja_de_vida_buscar",
         "passwords:index", "passwords:vault_crear", "passwords:importar_plantilla",
         "yule:index", "yule:configuracion", "yule:equipos_lista", "yule:equipos_sin_match",
         "yule:historial",
