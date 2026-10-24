@@ -31,6 +31,11 @@ from .ejecucion import (  # noqa: F401
     nuevo,
     reabrir_orden,
 )
+from .plantillas import (  # noqa: F401
+    crear_plantilla,
+    editar_plantilla,
+    lista_plantillas,
+)
 from .legado import (  # noqa: F401
     crear_item_checklist,
     estado_partes_partial,

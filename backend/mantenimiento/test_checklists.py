@@ -188,3 +188,118 @@ class AyudasPruebasTests(TestCase):
         self.assertEqual((tecnico.rol, admin.rol), ("tecnico", "admin"))
         self.assertEqual(admin.get_full_name(), "Ana Técnica")
         self.assertTrue(tecnico.check_password("x"))
+
+
+class EditorChecklistsTests(TestCase):
+    """Editor de checklists por tipo (formset con prefijo "puntos")."""
+
+    def setUp(self):
+        self.tecnico = crear_usuario("tecnico")
+        self.client.force_login(self.tecnico)
+        self.plantilla = PlantillaChecklist.objects.get(tipo_dispositivo="escritorio")
+
+    def _datos(self, plantilla=None, tipo=None, frecuencia=12, cambios=None, quitar=(), nuevos=()):
+        """POST del formulario y de su formset de puntos."""
+        puntos = list(plantilla.puntos.all()) if plantilla else []
+        datos = {
+            "tipo_dispositivo": tipo or (plantilla.tipo_dispositivo if plantilla else ""),
+            "frecuencia_meses": frecuencia,
+            "puntos-TOTAL_FORMS": len(puntos) + len(nuevos),
+            "puntos-INITIAL_FORMS": len(puntos),
+            "puntos-MIN_NUM_FORMS": 0,
+            "puntos-MAX_NUM_FORMS": 1000,
+        }
+        for i, p in enumerate(puntos):
+            datos[f"puntos-{i}-id"] = p.pk
+            datos[f"puntos-{i}-plantilla"] = plantilla.pk
+            datos[f"puntos-{i}-seccion"] = p.seccion
+            datos[f"puntos-{i}-descripcion"] = (cambios or {}).get(p.pk, p.descripcion)
+            datos[f"puntos-{i}-posicion"] = p.posicion
+            if p.aplica_en_garantia:
+                datos[f"puntos-{i}-aplica_en_garantia"] = "on"
+            if p.activo:
+                datos[f"puntos-{i}-activo"] = "on"
+            if p.pk in quitar:
+                datos[f"puntos-{i}-DELETE"] = "on"
+        for j, (seccion, descripcion) in enumerate(nuevos, start=len(puntos)):
+            datos[f"puntos-{j}-seccion"] = seccion
+            datos[f"puntos-{j}-descripcion"] = descripcion
+            datos[f"puntos-{j}-posicion"] = j
+            datos[f"puntos-{j}-activo"] = "on"
+        return datos
+
+    def test_lista_muestra_los_dos_checklists(self):
+        resp = self.client.get(reverse("mantenimiento:lista_plantillas"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Portátil")
+        self.assertContains(resp, "Equipo Escritorio")
+
+    def test_editar_cambia_texto_y_frecuencia(self):
+        punto = self.plantilla.puntos.first()
+        datos = self._datos(self.plantilla, frecuencia=6, cambios={punto.pk: "Texto nuevo"})
+        resp = self.client.post(reverse("mantenimiento:editar_plantilla", args=[self.plantilla.pk]), datos)
+        self.assertRedirects(resp, reverse("mantenimiento:lista_plantillas"))
+        self.plantilla.refresh_from_db()
+        punto.refresh_from_db()
+        self.assertEqual(self.plantilla.frecuencia_meses, 6)
+        self.assertEqual(punto.descripcion, "Texto nuevo")
+
+    def test_quitar_punto(self):
+        punto = self.plantilla.puntos.first()
+        datos = self._datos(self.plantilla, quitar={punto.pk})
+        self.client.post(reverse("mantenimiento:editar_plantilla", args=[self.plantilla.pk]), datos)
+        self.assertFalse(PuntoPlantilla.objects.filter(pk=punto.pk).exists())
+        self.assertEqual(self.plantilla.puntos.count(), len(ESCRITORIO) - 1)
+
+    def test_agregar_punto(self):
+        datos = self._datos(self.plantilla, nuevos=[("Hardware", "Ventiladores")])
+        self.client.post(reverse("mantenimiento:editar_plantilla", args=[self.plantilla.pk]), datos)
+        self.assertTrue(self.plantilla.puntos.filter(descripcion="Ventiladores", seccion="Hardware").exists())
+
+    def test_editar_no_toca_ordenes_existentes(self):
+        from mantenimiento.ejecucion import iniciar_preventivo
+
+        activo = crear_pc(serial="SN-ED-1", tipo="escritorio")
+        orden = iniciar_preventivo(activo, self.tecnico)
+        antes = list(orden.checklist_items.values_list("descripcion", flat=True).order_by("posicion", "id"))
+        punto = self.plantilla.puntos.first()
+        datos = self._datos(self.plantilla, cambios={punto.pk: "Otro texto"}, quitar={self.plantilla.puntos.last().pk})
+        self.client.post(reverse("mantenimiento:editar_plantilla", args=[self.plantilla.pk]), datos)
+        despues = list(orden.checklist_items.values_list("descripcion", flat=True).order_by("posicion", "id"))
+        self.assertEqual(antes, despues)
+        self.assertEqual(len(despues), len(ESCRITORIO))
+
+    def test_crear_para_otro_tipo_lo_vuelve_programable(self):
+        from mantenimiento.programacion import activos_programables
+
+        diadema = crear_pc(serial="SN-DIA-1", tipo="Diadema")
+        self.assertNotIn(diadema, activos_programables())
+        datos = self._datos(tipo="Diadema", frecuencia=6, nuevos=[("Limpieza", "Limpieza externa")])
+        resp = self.client.post(reverse("mantenimiento:crear_plantilla"), datos)
+        nueva = PlantillaChecklist.objects.get(tipo_dispositivo="Diadema")
+        self.assertRedirects(resp, reverse("mantenimiento:editar_plantilla", args=[nueva.pk]))
+        self.assertEqual(nueva.frecuencia_meses, 6)
+        self.assertEqual(nueva.puntos.count(), 1)
+        self.assertIn(diadema, activos_programables())
+
+    def test_tipo_repetido_no_se_permite(self):
+        datos = self._datos(tipo="portatil")
+        resp = self.client.post(reverse("mantenimiento:crear_plantilla"), datos)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(PlantillaChecklist.objects.filter(tipo_dispositivo="portatil").count(), 1)
+        self.assertContains(resp, "Ya existe")
+
+    def test_requiere_escritura(self):
+        lector = crear_usuario("lectura")
+        self.client.force_login(lector)
+        self.assertEqual(self.client.get(reverse("mantenimiento:lista_plantillas")).status_code, 200)
+        url_editar = reverse("mantenimiento:editar_plantilla", args=[self.plantilla.pk])
+        for url in (reverse("mantenimiento:crear_plantilla"), url_editar):
+            with self.subTest(url=url):
+                self.assertRedirects(
+                    self.client.get(url), reverse("core:dashboard"), fetch_redirect_response=False
+                )
+        antes = self.plantilla.frecuencia_meses
+        self.client.post(url_editar, self._datos(self.plantilla, frecuencia=1))
+        self.plantilla.refresh_from_db()
+        self.assertEqual(self.plantilla.frecuencia_meses, antes)
