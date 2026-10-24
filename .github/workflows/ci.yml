@@ -34,6 +34,8 @@ jobs:
       SECRET_KEY: ci-secret-key-no-usar-en-produccion
       DEBUG: "False"
       SECURE_SSL_REDIRECT: "False"
+      # Las pruebas del acta de mantenimiento dejan aquí sus PDF de muestra.
+      ACTA_MUESTRAS_DIR: acta_muestras
 
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +45,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+
+      # WeasyPrint real (Pango + DejaVu, la fuente de producción): así corren
+      # las pruebas que confirman que el acta cabe en una hoja.
+      - name: Install WeasyPrint system libraries
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
 
       - name: Install dependencies
         run: |
@@ -81,6 +88,13 @@ jobs:
           pip install coverage
           coverage run --source=. --omit='*/tests.py,*/migrations/*,manage.py' manage.py test --noinput
           coverage report --fail-under=70
+
+      - name: Upload acta samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actas-muestra
+          path: backend/acta_muestras/*.pdf
 
   test-postgres:
     runs-on: ubuntu-latest

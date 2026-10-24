@@ -5,18 +5,22 @@ El cierre y la reapertura están en ``views/ejecucion.py``.
 
 from django import forms
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import DecimalField, F, Q, Sum
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from accounts.permisos import requiere_permiso
 from inventario.models import Activo
 
+from .. import acta
 from ..constants import PARTES_POR_TIPO
 from ..forms import FotoMantenimientoForm, OrdenMantenimientoForm, RepuestoForm
 from ..models import (
     FORMATO_ACTUAL,
     ESTADOS_ORDEN,
+    MAX_FOTOS_ACTA,
     PRIORIDADES,
     TIPOS_MANTENIMIENTO,
     FotoMantenimiento,
@@ -42,6 +46,21 @@ def _foto_formset(*args, **kwargs):
 
 def _parte_fields(form):
     return [field for field in form if field.name.startswith("parte_")]
+
+
+AVISO_CERRADA = "Un mantenimiento cerrado no se modifica. Reábrelo si necesitas cambiarlo."
+
+
+def _si_esta_cerrada(request, orden):
+    """Redirige al detalle con un aviso si la orden está cerrada; si no, None.
+
+    Las fotos y los repuestos de una orden cerrada no cambian: salen en el acta
+    que ya se pudo imprimir y firmar.
+    """
+    if orden.estado == "cerrada":
+        messages.warning(request, AVISO_CERRADA)
+        return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+    return None
 
 
 @requiere_permiso("mantenimiento", "lectura")
@@ -104,6 +123,8 @@ def detalle_orden(request, pk):
         total=Sum(F("costo_unitario") * F("cantidad"), output_field=DecimalField())
     )
     fotos = orden.fotos.all()
+    # Las fotos que lleva el acta; en una orden cerrada se muestran sin interruptor.
+    ids_fotos_acta = {f.pk for f in acta.fotos_acta(orden)} if orden.formato == FORMATO_ACTUAL else set()
 
     partes_labels = dict(PARTES_POR_TIPO.get(orden.activo.tipo_dispositivo, []))
     estado_partes_items = [
@@ -123,6 +144,8 @@ def detalle_orden(request, pk):
         "repuestos": repuestos,
         "repuestos_total": repuestos_total.get("total") or 0,
         "fotos": fotos,
+        "ids_fotos_acta": ids_fotos_acta,
+        "max_fotos_acta": MAX_FOTOS_ACTA,
         "estado_partes_items": estado_partes_items,
     })
 
@@ -242,6 +265,8 @@ def eliminar_orden(request, pk):
 @requiere_permiso("mantenimiento", "escritura")
 def crear_repuesto(request, orden_pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=orden_pk)
+    if bloqueo := _si_esta_cerrada(request, orden):
+        return bloqueo
     if request.method == "POST":
         form = RepuestoForm(request.POST)
         if form.is_valid():
@@ -264,11 +289,18 @@ def crear_repuesto(request, orden_pk):
 
 @requiere_permiso("mantenimiento", "escritura")
 def editar_repuesto(request, pk):
-    repuesto = get_object_or_404(Repuesto, pk=pk)
+    repuesto = get_object_or_404(Repuesto.objects.select_related("orden"), pk=pk)
+    orden = repuesto.orden
+    if bloqueo := _si_esta_cerrada(request, orden):
+        return bloqueo
     if request.method == "POST":
         form = RepuestoForm(request.POST, instance=repuesto)
         if form.is_valid():
-            repuesto = form.save()
+            # El repuesto no cambia de orden (el campo va oculto): así tampoco
+            # se cuela en una orden cerrada.
+            repuesto = form.save(commit=False)
+            repuesto.orden = orden
+            repuesto.save()
             messages.success(request, "Repuesto actualizado correctamente.")
             return redirect("mantenimiento:detalle_orden", pk=repuesto.orden_id)
         messages.error(request, "Corrige los errores del formulario.")
@@ -286,8 +318,10 @@ def editar_repuesto(request, pk):
 
 @requiere_permiso("mantenimiento", "escritura")
 def eliminar_repuesto(request, pk):
-    repuesto = get_object_or_404(Repuesto, pk=pk)
+    repuesto = get_object_or_404(Repuesto.objects.select_related("orden"), pk=pk)
     orden_id = repuesto.orden_id
+    if bloqueo := _si_esta_cerrada(request, repuesto.orden):
+        return bloqueo
     if request.method == "POST":
         repuesto.delete()
         messages.success(request, "Repuesto eliminado.")
@@ -298,6 +332,8 @@ def eliminar_repuesto(request, pk):
 @requiere_permiso("mantenimiento", "escritura")
 def crear_foto(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
+    if bloqueo := _si_esta_cerrada(request, orden):
+        return bloqueo
     if request.method == "POST":
         form = FotoMantenimientoForm(request.POST, request.FILES)
         if form.is_valid():
@@ -313,9 +349,31 @@ def crear_foto(request, pk):
 
 @requiere_permiso("mantenimiento", "escritura")
 def eliminar_foto(request, pk):
-    foto = get_object_or_404(FotoMantenimiento, pk=pk)
+    foto = get_object_or_404(FotoMantenimiento.objects.select_related("orden"), pk=pk)
     orden_pk = foto.orden_id
+    if bloqueo := _si_esta_cerrada(request, foto.orden):
+        return bloqueo
     if request.method == "POST":
         foto.delete()
         messages.success(request, "Foto eliminada.")
     return redirect("mantenimiento:detalle_orden", pk=orden_pk)
+
+
+@requiere_permiso("mantenimiento", "escritura")
+@require_POST
+def toggle_foto_acta(request, pk):
+    """Marca o desmarca una foto para el acta (hasta MAX_FOTOS_ACTA por orden)."""
+    foto = get_object_or_404(FotoMantenimiento.objects.select_related("orden"), pk=pk)
+    orden = foto.orden
+    if bloqueo := _si_esta_cerrada(request, orden):
+        return bloqueo
+    with transaction.atomic():
+        # Bloquea la orden: dos marcas a la vez no pasan del máximo.
+        OrdenMantenimiento.objects.select_for_update().filter(pk=orden.pk).first()
+        foto.refresh_from_db(fields=["en_acta"])
+        if not foto.en_acta and orden.fotos.filter(en_acta=True).count() >= MAX_FOTOS_ACTA:
+            messages.warning(request, f"Solo caben {MAX_FOTOS_ACTA} fotos en el acta.")
+        else:
+            foto.en_acta = not foto.en_acta
+            foto.save(update_fields=["en_acta"])
+    return redirect("mantenimiento:detalle_orden", pk=orden.pk)

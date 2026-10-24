@@ -57,6 +57,8 @@ ESTADOS_FINALES = [
 ]
 # Máximo de caracteres de observaciones, diagnóstico y solución: el acta es de una hoja.
 LIMITE_TEXTO_ACTA = 600
+# Fotos que caben en el acta.
+MAX_FOTOS_ACTA = 3
 
 
 class PlanMantenimiento(models.Model):
@@ -254,6 +256,9 @@ class FotoMantenimiento(models.Model):
     )
     foto = models.ImageField(upload_to="mantenimiento/fotos/", verbose_name="Foto")
     descripcion = models.CharField(max_length=200, blank=True)
+    # Elegida para el acta (hasta MAX_FOTOS_ACTA). Si no hay ninguna elegida,
+    # el acta lleva las primeras.
+    en_acta = models.BooleanField(default=False, verbose_name="En el acta")
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:

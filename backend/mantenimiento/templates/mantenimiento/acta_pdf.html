@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Acta de mantenimiento N° {{ numero }}</title>
+<style>
+  /* Una sola hoja carta. Las secciones van en tablas (no flex) para WeasyPrint.
+     La clase escala-N del body achica letra y fotos si el contenido no cabe. */
+  @page { size: letter; margin: 10mm 12mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "DejaVu Sans", sans-serif; color: #1e293b; background: #fff; line-height: 1.2; }
+  body.escala-0 { font-size: 8.5pt; }
+  body.escala-1 { font-size: 8pt; }
+  body.escala-2 { font-size: 7.4pt; }
+  body.escala-3 { font-size: 6.8pt; }
+  .escala-0 .foto { height: 34mm; }
+  .escala-1 .foto { height: 30mm; }
+  .escala-2 .foto { height: 26mm; }
+  .escala-3 .foto { height: 22mm; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 0.6pt solid #cbd5e1; padding: 0.22em 0.5em; vertical-align: middle; text-align: left; overflow-wrap: anywhere; }
+  th { background: #f1f5f9; color: #334155; font-size: 0.87em; }
+  .l { font-weight: bold; color: #334155; white-space: nowrap; background: #f8fafc; overflow-wrap: normal; }
+  .sec { background: #0156a6; color: #fff; font-weight: bold; font-size: 0.87em; letter-spacing: 0.06em; padding: 0.2em 0.6em; margin: 0.55em 0 0.25em; }
+  .grp td { background: #e8f0fa; color: #0156a6; font-weight: bold; font-size: 0.83em; letter-spacing: 0.05em; }
+  .n { width: 2.8em; text-align: center; color: #64748b; white-space: nowrap; overflow-wrap: normal; }
+  .r { width: 6.4em; text-align: center; }
+  .badge { display: inline-block; border-radius: 0.25em; padding: 0 0.45em; font-weight: bold; font-size: 0.83em; white-space: nowrap; }
+  .badge.ok { background: #dcfce7; color: #166534; }
+  .badge.falla { background: #fee2e2; color: #991b1b; }
+  .badge.na { background: #f1f5f9; color: #475569; }
+  .badge.aviso { background: #fef3c7; color: #92400e; }
+  /* Con repuestos largos la etiqueta se parte en renglones y les deja el ancho. */
+  td.estado-final { overflow-wrap: normal; }
+  .estado-final .badge { text-transform: uppercase; white-space: normal; }
+  .chk td { padding-top: 0.14em; padding-bottom: 0.14em; }
+  /* Escalas 2 y 3: además, menos aire en las celdas y entre secciones. Van
+     antes de las reglas de las tablas de acomodo, que quitan todo el relleno. */
+  .escala-2 td, .escala-2 th, .escala-3 td, .escala-3 th { padding-top: 0.1em; padding-bottom: 0.1em; }
+  .escala-2 .chk td, .escala-3 .chk td { padding-top: 0.06em; padding-bottom: 0.06em; }
+  .escala-2 .sec, .escala-3 .sec { margin: 0.4em 0 0.18em; }
+  .escala-2 .cuadro, .escala-3 .cuadro { padding: 0.25em 0.5em; }
+
+  /* Tablas que solo acomodan bloques lado a lado: sin bordes ni relleno. */
+  td.marco { border: none; padding: 0; vertical-align: top; }
+
+  .cab td { border: 0.6pt solid #94a3b8; }
+  .cab .logo { width: 25%; text-align: center; }
+  .cab .logo img { height: 9.5mm; }
+  .cab .tit { text-align: center; font-weight: bold; color: #0156a6; font-size: 1.22em; letter-spacing: 0.04em; }
+  .cab .meta { width: 22%; font-size: 0.83em; padding: 0.2em 0.6em; }
+
+  .qr { width: 8em; border: 0.6pt solid #cbd5e1; text-align: center; padding: 0.25em; margin-left: 0.6em; }
+  .qr img { width: 7em; height: 7em; display: block; margin: 0 auto; }
+  .qr div { font-size: 0.74em; color: #64748b; }
+
+  td.columna { width: 49%; }
+  td.hueco { width: 2%; border: none; }
+
+  td.celda-foto { width: 33.33%; border: none; padding: 0 0.35em; vertical-align: top; }
+  td.celda-foto:first-child { padding-left: 0; }
+  td.celda-foto:last-child { padding-right: 0; }
+  .foto { position: relative; overflow: hidden; border: 0.6pt solid #cbd5e1; background: #f1f5f9; }
+  .foto img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .foto span { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.88); font-size: 0.79em; padding: 0.15em 0.4em; color: #334155; }
+
+  .cuadro { border: 0.6pt solid #94a3b8; min-height: 4em; padding: 0.4em 0.6em; font-size: 0.91em; overflow-wrap: anywhere; }
+  .cuadro .linea-falla { color: #991b1b; }
+  .cuadro .vacio { color: #64748b; }
+  .texto { overflow-wrap: anywhere; }
+
+  .firmas { margin-top: 0.8em; }
+  .firmas td { border: none; padding: 0; text-align: center; vertical-align: top; }
+  td.firma { width: 44%; }
+  td.entre-firmas { width: 12%; }
+  .firma .esp { height: 4.2em; }
+  .firma .linea { border-top: 0.8pt solid #0f172a; margin-bottom: 0.2em; }
+  .firma .cargo { color: #475569; font-size: 0.83em; }
+  .pie { border-top: 0.6pt solid #e2e8f0; margin-top: 0.7em; padding-top: 0.25em; font-size: 0.74em; color: #94a3b8; text-align: center; }
+</style>
+</head>
+<body class="escala-{{ escala }}">
+
+<table class="cab">
+  <tr>
+    <td class="logo" rowspan="3"><img src="file://{{ logo_path }}" alt="{{ config.nombre_empresa }}"></td>
+    <td class="tit" rowspan="3">{{ datos.titulo }}</td>
+    <td class="meta">Código: {{ config.acta_mant_codigo|default:"—" }}</td>
+  </tr>
+  <tr><td class="meta">Versión: {{ config.acta_mant_version|default:"—" }}</td></tr>
+  <tr><td class="meta">Página 1 de 1</td></tr>
+</table>
+
+<div class="sec">1. DATOS DEL MANTENIMIENTO Y DEL EQUIPO</div>
+<table>
+  <tr>
+    <td class="marco">
+      <table>
+        <tr>
+          <td class="l">Acta N°</td><td>{{ numero }}</td>
+          <td class="l">Fecha</td><td>{{ orden.fecha_cierre|date:"d/m/Y" }}</td>
+          <td class="l">Tipo</td><td>{{ datos.tipo_acta }}</td>
+        </tr>
+        {% for fila in filas %}
+        <tr>
+          {% for par in fila %}<td class="l">{{ par.etiqueta }}</td><td{% if par.colspan > 1 %} colspan="{{ par.colspan }}"{% endif %}>{{ par.valor }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+    </td>
+    <td class="marco" style="width: 8.6em;">
+      <div class="qr"><img src="{{ qr }}" alt="QR"><div>Hoja de vida</div></div>
+    </td>
+  </tr>
+</table>
+
+<div class="sec">2. RESPONSABLE DEL EQUIPO</div>
+<table>
+  {% with r=datos.responsable %}
+  {% if r %}
+  <tr>
+    <td class="l">Nombre</td><td>{{ r.nombre|default:"—" }}</td>
+    <td class="l">C.C.</td><td>{{ r.documento|default:"—" }}</td>
+    <td class="l">Cargo</td><td>{{ r.cargo|default:"—" }}</td>
+    <td class="l">Área</td><td>{{ r.area|default:"—" }}</td>
+  </tr>
+  {% else %}
+  <tr><td>No asignado</td></tr>
+  {% endif %}
+  {% endwith %}
+</table>
+
+{% if es_correctivo %}
+<div class="sec">3. DIAGNÓSTICO Y SOLUCIÓN</div>
+<table>
+  <tr><td class="l" style="width: 1%;">Diagnóstico</td><td class="texto">{{ orden.diagnostico|default:"—"|linebreaksbr }}</td></tr>
+  <tr><td class="l">Solución</td><td class="texto">{{ orden.acciones|default:"—"|linebreaksbr }}</td></tr>
+</table>
+{% else %}
+<div class="sec">3. CHECKLIST · {{ resumen.total }} puntos · {{ resumen.bien }} bien · {{ resumen.falla }} con falla</div>
+<table>
+  <tr>
+    {% for columna in columnas %}
+    {% if not forloop.first %}<td class="hueco"></td>{% endif %}
+    <td class="marco columna">
+      {% if columna %}
+      <table class="chk">
+        <tr><th class="n">#</th><th>Punto revisado</th><th class="r">Resultado</th></tr>
+        {% for grupo in columna %}
+        {% if grupo.seccion %}<tr class="grp"><td colspan="3">{{ grupo.seccion|upper }}</td></tr>{% endif %}
+        {% for item in grupo.items %}
+        <tr>
+          <td class="n">{{ item.numero }}</td>
+          <td>{{ item.descripcion }}</td>
+          <td class="r">{% if item.resultado == "bien" %}<span class="badge ok">BIEN</span>{% elif item.resultado == "falla" %}<span class="badge falla">FALLA</span>{% elif item.resultado == "na" %}<span class="badge na">N/A</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </table>
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+</table>
+{% endif %}
+
+{% if fotos %}
+<div class="sec">4. EVIDENCIA FOTOGRÁFICA</div>
+<table>
+  <tr>
+    {% for foto in fotos %}
+    <td class="celda-foto"><div class="foto"><img src="file://{{ foto.path }}" alt="{{ foto.descripcion|default:'Foto' }}">{% if foto.descripcion %}<span>{{ foto.descripcion }}</span>{% endif %}</div></td>
+    {% endfor %}
+    {% if fotos|length < 3 %}<td class="celda-foto"></td>{% endif %}
+    {% if fotos|length < 2 %}<td class="celda-foto"></td>{% endif %}
+  </tr>
+</table>
+{% endif %}
+
+<div class="sec">{% if fotos %}5{% else %}4{% endif %}. REPUESTOS Y ESTADO FINAL</div>
+<table>
+  <tr>
+    <td class="l" style="width: 1%;">Repuestos</td>
+    <td class="texto">{% if repuestos %}{{ repuestos|join:", " }}{% else %}Ninguno{% endif %}</td>
+    <td class="l" style="width: 1%;">Estado final</td>
+    <td class="estado-final">{% if orden.estado_final %}<span class="badge {% if orden.estado_final == 'operativo' %}ok{% elif orden.estado_final == 'operativo_obs' %}aviso{% else %}falla{% endif %}">{{ orden.get_estado_final_display }}</span>{% else %}—{% endif %}</td>
+  </tr>
+</table>
+
+<div class="sec">{% if fotos %}6{% else %}5{% endif %}. OBSERVACIONES</div>
+<div class="cuadro">
+  {% for linea in observaciones %}
+  <div{% if forloop.counter <= resumen.falla %} class="linea-falla"{% endif %}>{{ linea|linebreaksbr }}</div>
+  {% empty %}
+  <div class="vacio">Sin observaciones.</div>
+  {% endfor %}
+</div>
+
+<table class="firmas">
+  <tr>
+    <td class="firma">
+      <div class="esp"></div>
+      <div class="linea"></div>
+      <strong>Técnico</strong> {{ datos.tecnico.nombre|default:"—" }}<br>
+      <span class="cargo">{{ datos.tecnico.cargo }}</span>
+    </td>
+    <td class="entre-firmas"></td>
+    <td class="firma">
+      <div class="esp"></div>
+      <div class="linea"></div>
+      {% with r=datos.responsable %}
+      {% if r %}
+      <strong>Usuario</strong> {{ r.nombre }}<br>
+      <span class="cargo">{% if r.cargo %}{{ r.cargo }}{% if r.documento %} · {% endif %}{% endif %}{% if r.documento %}C.C. {{ r.documento }}{% endif %}</span>
+      {% else %}
+      <strong>Usuario</strong> No asignado
+      {% endif %}
+      {% endwith %}
+    </td>
+  </tr>
+</table>
+
+<div class="pie">SysAdmin · {{ config.acta_mant_codigo|default:"—" }} v{{ config.acta_mant_version|default:"—" }} · Acta de mantenimiento N° {{ numero }} · {{ orden.fecha_cierre|date:"d/m/Y" }} · Página 1 de 1</div>
+
+</body>
+</html>

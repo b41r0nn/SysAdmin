@@ -10,6 +10,10 @@ from .ordenes import (  # noqa: F401
     eliminar_orden,
     eliminar_repuesto,
     lista_ordenes,
+    toggle_foto_acta,
+)
+from .actas import (  # noqa: F401
+    acta_pdf,
 )
 from .planes import (  # noqa: F401
     crear_plan,
