@@ -16,7 +16,7 @@ from inventario.models import Activo
 
 from .. import acta
 from ..constants import PARTES_POR_TIPO
-from ..forms import FotoMantenimientoForm, OrdenMantenimientoForm, RepuestoForm
+from ..forms import FotoMantenimientoForm, OrdenForm, RepuestoForm
 from ..models import (
     FORMATO_ACTUAL,
     ESTADOS_ORDEN,
@@ -25,11 +25,9 @@ from ..models import (
     TIPOS_MANTENIMIENTO,
     FotoMantenimiento,
     OrdenMantenimiento,
-    PlanMantenimiento,
     Repuesto,
 )
 from ..services import snapshot_software_ocs
-from .planes import _copiar_checklist_plantilla
 from .ejecucion import contexto_checklist
 
 
@@ -45,10 +43,11 @@ def _foto_formset(*args, **kwargs):
 
 
 def _parte_fields(form):
+    # Solo lo usa la vista heredada ``estado_partes_partial`` (se borra en la Tarea 11).
     return [field for field in form if field.name.startswith("parte_")]
 
 
-AVISO_CERRADA = "Un mantenimiento cerrado no se modifica. Reábrelo si necesitas cambiarlo."
+AVISO_CERRADA ="Un mantenimiento cerrado no se modifica. Reábrelo si necesitas cambiarlo."
 
 
 def _si_esta_cerrada(request, orden):
@@ -126,11 +125,14 @@ def detalle_orden(request, pk):
     # Las fotos que lleva el acta; en una orden cerrada se muestran sin interruptor.
     ids_fotos_acta = {f.pk for f in acta.fotos_acta(orden)} if orden.formato == FORMATO_ACTUAL else set()
 
-    partes_labels = dict(PARTES_POR_TIPO.get(orden.activo.tipo_dispositivo, []))
-    estado_partes_items = [
-        (partes_labels.get(slug, slug), estado)
-        for slug, estado in (orden.estado_partes or {}).items()
-    ]
+    # El estado de partes solo existe en las órdenes del formato anterior (solo lectura).
+    estado_partes_items = []
+    if orden.formato != FORMATO_ACTUAL:
+        partes_labels = dict(PARTES_POR_TIPO.get(orden.activo.tipo_dispositivo, []))
+        estado_partes_items = [
+            (partes_labels.get(slug, slug), estado)
+            for slug, estado in (orden.estado_partes or {}).items()
+        ]
 
     contexto_extra = (
         contexto_checklist(orden)
@@ -163,7 +165,7 @@ def crear_orden(request):
             fset_valid = fset.is_valid()
         else:
             fset_valid = True
-        form = OrdenMantenimientoForm(request.POST)
+        form = OrdenForm(request.POST)
         if form.is_valid() and fset_valid:
             # Snapshot automático de software desde OCS si el textarea quedó vacío
             if not form.cleaned_data.get("software_snapshot_text"):
@@ -171,11 +173,14 @@ def crear_orden(request):
                 if activo:
                     software = snapshot_software_ocs(activo)
                     if software:
-                        form.instance.software_snapshot = [
+                        form.cleaned_data["software_snapshot_text"] = [
                             s.get("name") for s in software if s.get("name")
                         ]
+            # Un correctivo nuevo: sin plan ni checklist, y solo se cierra por el cierre.
+            form.instance.tipo = "correctivo"
+            form.instance.estado = "abierta"
+            form.instance.formato = FORMATO_ACTUAL
             orden = form.save()
-            _copiar_checklist_plantilla(orden)
             if fset is not None:
                 for foto in fset.save(commit=False):
                     foto.orden = orden
@@ -186,10 +191,6 @@ def crear_orden(request):
     else:
         initial = {}
         activo_pk = request.GET.get("activo")
-        plan_pk = request.GET.get("plan")
-        if plan_pk:
-            plan = get_object_or_404(PlanMantenimiento, pk=plan_pk)
-            initial["plan"] = plan
         if activo_pk:
             activo = get_object_or_404(Activo, pk=activo_pk)
             software = snapshot_software_ocs(activo)
@@ -199,14 +200,13 @@ def crear_orden(request):
                     s["name"] for s in software if s.get("name")
                 ),
             })
-        form = OrdenMantenimientoForm(initial=initial)
+        form = OrdenForm(initial=initial)
         fset = _foto_formset(queryset=FotoMantenimiento.objects.none())
 
-    return render(request, "mantenimiento/form_orden.html", {
+    return render(request, "mantenimiento/form_correctivo.html", {
         "form": form,
         "fset": fset,
         "titulo": "Documentar mantenimiento",
-        "parte_fields": _parte_fields(form),
     })
 
 
@@ -227,7 +227,7 @@ def editar_orden(request, pk):
             fset_valid = fset.is_valid()
         else:
             fset_valid = True
-        form = OrdenMantenimientoForm(request.POST, instance=orden)
+        form = OrdenForm(request.POST, instance=orden)
         if form.is_valid() and fset_valid:
             orden = form.save()
             if fset is not None:
@@ -240,15 +240,14 @@ def editar_orden(request, pk):
             return redirect("mantenimiento:detalle_orden", pk=orden.pk)
         messages.error(request, "Corrige los errores del formulario.")
     else:
-        form = OrdenMantenimientoForm(instance=orden)
+        form = OrdenForm(instance=orden)
         fset = _foto_formset(queryset=orden.fotos.all())
 
-    return render(request, "mantenimiento/form_orden.html", {
+    return render(request, "mantenimiento/form_correctivo.html", {
         "form": form,
         "fset": fset,
         "titulo": "Editar mantenimiento",
         "orden": orden,
-        "parte_fields": _parte_fields(form),
     })
 
 

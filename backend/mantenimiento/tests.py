@@ -260,30 +260,22 @@ class ChecklistTests(TestCase):
             ChecklistItem.objects.create(plan=plan, descripcion=d, posicion=i)
         return plan
 
-    def test_crear_orden_copia_checklist_del_plan_sin_completar(self):
-        plan = self._plan_con_checklist(
-            ["Inspeccion visual", "Pruebas de encendido", "Limpieza de ventiladores"]
-        )
+    def test_crear_orden_ignora_el_plan_y_no_copia_checklist(self):
+        # El correctivo nuevo no lleva plan: aunque llegue uno, no se usa.
+        plan = self._plan_con_checklist(["Inspeccion visual", "Pruebas de encendido"])
         resp = self.client.post(
             reverse("mantenimiento:crear_orden"),
             {
                 "plan": plan.pk,
                 "activo": self.activo.pk,
-                "tipo": "preventivo",
-                "estado": "abierta",
                 "prioridad": "media",
                 "fecha_apertura": HOY,
             },
         )
         self.assertEqual(resp.status_code, 302)
-        orden = OrdenMantenimiento.objects.get(plan=plan)
-        items = orden.checklist_items.all().order_by("posicion")
-        self.assertEqual(items.count(), 3)
-        self.assertEqual(
-            list(items.values_list("descripcion", flat=True)),
-            ["Inspeccion visual", "Pruebas de encendido", "Limpieza de ventiladores"],
-        )
-        self.assertFalse(any(i.completado for i in items))
+        orden = OrdenMantenimiento.objects.get(activo=self.activo)
+        self.assertIsNone(orden.plan)
+        self.assertEqual(orden.checklist_items.count(), 0)
 
     def test_crear_orden_sin_plan_no_genera_items(self):
         resp = self.client.post(
@@ -629,52 +621,25 @@ class OrdenAccionesYPartesTests(TestCase):
             estado="disponible",
         )
 
-    def test_crear_orden_guarda_acciones_y_estado_partes(self):
+    def test_crear_orden_ignora_acciones_y_estado_partes(self):
+        # Los campos del formato anterior ya no se guardan en las órdenes nuevas.
         resp = self.client.post(
             reverse("mantenimiento:crear_orden"),
             {
                 "activo": self.activo_portatil.pk,
-                "tipo": "preventivo",
-                "estado": "abierta",
                 "prioridad": "media",
                 "fecha_apertura": HOY,
                 "accion_limpieza_general": "on",
-                "accion_mantenimiento_logico": "on",
                 "accion_cambio_parte": "on",
-                "accion_cambio_parte_detalle": "Teclado completo",
-                "parte_pantalla": "bien",
+                "accion_cambio_parte_detalle": "",
                 "parte_teclado": "mal",
-                "parte_bateria": "bien",
             },
         )
         self.assertEqual(resp.status_code, 302)
         orden = OrdenMantenimiento.objects.get(activo=self.activo_portatil)
-        self.assertTrue(orden.accion_limpieza_general)
-        self.assertTrue(orden.accion_mantenimiento_logico)
-        self.assertFalse(orden.accion_cambio_pasta_termica)
-        self.assertTrue(orden.accion_cambio_parte)
-        self.assertEqual(orden.accion_cambio_parte_detalle, "Teclado completo")
-        self.assertEqual(
-            orden.estado_partes,
-            {"pantalla": "bien", "teclado": "mal", "bateria": "bien"},
-        )
-
-    def test_cambio_parte_sin_detalle_devuelve_error(self):
-        resp = self.client.post(
-            reverse("mantenimiento:crear_orden"),
-            {
-                "activo": self.activo_portatil.pk,
-                "tipo": "correctivo",
-                "estado": "abierta",
-                "prioridad": "alta",
-                "fecha_apertura": HOY,
-                "accion_cambio_parte": "on",
-                "accion_cambio_parte_detalle": "",
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(OrdenMantenimiento.objects.count(), 0)
-        self.assertContains(resp, "Indicá qué parte se cambió")
+        self.assertFalse(orden.accion_limpieza_general)
+        self.assertFalse(orden.accion_cambio_parte)
+        self.assertEqual(orden.estado_partes, {})
 
     def test_partial_estado_partes_cambia_segun_tipo_activo(self):
         activo_monitor = Activo.objects.create(

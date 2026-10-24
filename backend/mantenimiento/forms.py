@@ -18,6 +18,7 @@ from .models import (
     PlantillaChecklist,
     PuntoPlantilla,
     Repuesto,
+    normalizar_saltos,
 )
 
 
@@ -25,6 +26,13 @@ ESTADO_PARTE_CHOICES = [
     ("bien", "Buen estado"),
     ("mal", "Mal estado"),
 ]
+
+
+class TextoActa(forms.CharField):
+    """Texto de hasta 600 caracteres; el salto de línea CRLF del navegador cuenta como uno."""
+
+    def to_python(self, value):
+        return super().to_python(normalizar_saltos(value) if isinstance(value, str) else value)
 
 
 def _partes_por_activo(activo):
@@ -257,6 +265,83 @@ class OrdenMantenimientoForm(forms.ModelForm):
         return instance
 
 
+class OrdenForm(forms.ModelForm):
+    """Correctivo (alta y edición). No tiene plan, estado de partes ni casillas de acciones.
+
+    Tampoco expone ``estado`` ni ``fecha_cierre``: un mantenimiento solo se
+    cierra por el flujo de cierre, que valida y congela el acta. Un preventivo
+    solo deja editar prioridad, fecha, costos y software: el equipo y los textos
+    del checklist no se tocan desde aquí.
+    """
+
+    diagnostico = TextoActa(
+        required=False,
+        max_length=LIMITE_TEXTO_ACTA,
+        label="Diagnóstico",
+        error_messages={"max_length": f"El diagnóstico no puede pasar de {LIMITE_TEXTO_ACTA} caracteres."},
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3, "maxlength": LIMITE_TEXTO_ACTA}),
+    )
+    acciones = TextoActa(
+        required=False,
+        max_length=LIMITE_TEXTO_ACTA,
+        label="Solución / acciones realizadas",
+        error_messages={"max_length": f"La solución no puede pasar de {LIMITE_TEXTO_ACTA} caracteres."},
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3, "maxlength": LIMITE_TEXTO_ACTA}),
+    )
+    software_snapshot_text = forms.CharField(
+        required=False,
+        label="Software instalado",
+        help_text="Una aplicación por línea (ej: Microsoft Office 365 v16.0)",
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 4, "placeholder": "Google Chrome\nAdobe Acrobat\n..."}),
+    )
+
+    class Meta:
+        model = OrdenMantenimiento
+        fields = [
+            "activo",
+            "prioridad",
+            "fecha_apertura",
+            "descripcion",
+            "diagnostico",
+            "acciones",
+            "costo_estimado",
+            "costo_real",
+        ]
+        widgets = {
+            "activo": forms.Select(attrs={"class": "form-select"}),
+            "prioridad": forms.Select(attrs={"class": "form-select"}),
+            "fecha_apertura": forms.DateInput(attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "costo_estimado": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "costo_real": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["activo"].queryset = Activo.objects.exclude(estado="dado_de_baja")
+        if self.instance and self.instance.pk and self.instance.software_snapshot:
+            self.fields["software_snapshot_text"].initial = "\n".join(
+                s if isinstance(s, str) else s.get("name", "") for s in self.instance.software_snapshot
+            )
+        if self.instance.tipo == "preventivo":
+            for nombre in ("activo", "descripcion", "diagnostico", "acciones"):
+                del self.fields[nombre]
+
+    def clean_software_snapshot_text(self):
+        texto = self.cleaned_data.get("software_snapshot_text", "")
+        return [linea.strip() for linea in texto.splitlines() if linea.strip()]
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        # Si el campo no llegó, se conserva el snapshot que ya tenía la orden.
+        texto = self.cleaned_data.get("software_snapshot_text")
+        if texto or "software_snapshot_text" in self.data or not instance.pk:
+            instance.software_snapshot = self.cleaned_data.get("software_snapshot_text", [])
+        if commit:
+            instance.save()
+        return instance
+
+
 class FotoMantenimientoForm(forms.ModelForm):
     class Meta:
         model = FotoMantenimiento
@@ -320,7 +405,7 @@ class CerrarOrdenForm(forms.Form):
         error_messages={"required": "Elige el estado final del equipo."},
         widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
     )
-    observaciones = forms.CharField(
+    observaciones = TextoActa(
         label="Observaciones",
         required=False,
         max_length=LIMITE_TEXTO_ACTA,
@@ -338,7 +423,7 @@ class CerrarOrdenForm(forms.Form):
             self.fields["estado_final"].initial = orden.estado_final
         self.fields["observaciones"].initial = orden.observaciones
         if orden.tipo == "correctivo":
-            self.fields["diagnostico"] = forms.CharField(
+            self.fields["diagnostico"] = TextoActa(
                 label="Diagnóstico",
                 max_length=LIMITE_TEXTO_ACTA,
                 initial=orden.diagnostico,
@@ -348,7 +433,7 @@ class CerrarOrdenForm(forms.Form):
                 },
                 widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             )
-            self.fields["acciones"] = forms.CharField(
+            self.fields["acciones"] = TextoActa(
                 label="Solución / acciones realizadas",
                 max_length=LIMITE_TEXTO_ACTA,
                 initial=orden.acciones,

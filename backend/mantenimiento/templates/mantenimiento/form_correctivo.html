@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — Mantenimiento{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:lista_ordenes' %}" class="text-decoration-none">Ordenes</a>
+    </li>
+    {% if orden %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="text-decoration-none">Orden #{{ orden.id }}</a>
+      </li>
+    {% endif %}
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-clipboard-check"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">{{ titulo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">Falla, diagnóstico, solución y costos.</p>
+        </div>
+      </div>
+
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger" style="font-size:.85rem;">
+        {% for err in form.non_field_errors %}{{ err }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          {% if form.activo %}
+          <div class="col-12 col-md-6">
+            <label class="form-label fw-semibold" for="{{ form.activo.id_for_label }}">Activo</label>
+            {{ form.activo }}
+            {% if form.activo.errors %}<div class="invalid-feedback d-block">{{ form.activo.errors|join:", " }}</div>{% endif %}
+          </div>
+          {% endif %}
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold" for="{{ form.prioridad.id_for_label }}">Prioridad</label>
+            {{ form.prioridad }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold" for="{{ form.fecha_apertura.id_for_label }}">Fecha de apertura</label>
+            {{ form.fecha_apertura }}
+            {% if form.fecha_apertura.errors %}<div class="invalid-feedback d-block">{{ form.fecha_apertura.errors|join:", " }}</div>{% endif %}
+          </div>
+          {% if form.descripcion %}
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.descripcion.id_for_label }}">Descripción de la falla</label>
+            {{ form.descripcion }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.diagnostico.id_for_label }}">Diagnóstico <small class="text-muted">(máx. 600 caracteres)</small></label>
+            {{ form.diagnostico }}
+            {% if form.diagnostico.errors %}<div class="invalid-feedback d-block">{{ form.diagnostico.errors|join:", " }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.acciones.id_for_label }}">{{ form.acciones.label }} <small class="text-muted">(máx. 600 caracteres)</small></label>
+            {{ form.acciones }}
+            {% if form.acciones.errors %}<div class="invalid-feedback d-block">{{ form.acciones.errors|join:", " }}</div>{% endif %}
+          </div>
+          {% endif %}
+
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.software_snapshot_text.id_for_label }}">
+              Software instalado
+              <small class="text-muted">(snapshot del equipo — una app por linea)</small>
+            </label>
+            {{ form.software_snapshot_text }}
+            {% if form.software_snapshot_text.errors %}<div class="invalid-feedback d-block">{{ form.software_snapshot_text.errors|join:", " }}</div>{% endif %}
+          </div>
+
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold" for="{{ form.costo_estimado.id_for_label }}">Costo estimado</label>
+            {{ form.costo_estimado }}
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label fw-semibold" for="{{ form.costo_real.id_for_label }}">Costo real</label>
+            {{ form.costo_real }}
+          </div>
+        </div>
+
+        {% if fset %}
+        <hr class="my-4">
+        <h6 class="fw-semibold text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">Fotos del mantenimiento</h6>
+        {{ fset.management_form }}
+        <div class="row g-3 mt-1">
+          {% for foto_form in fset %}
+          <div class="col-12 col-md-4">
+            <div class="border rounded p-3" style="background:var(--sa-bg-alt,#f8fafc);">
+              {% if foto_form.instance.pk and foto_form.instance.foto %}
+              <div class="mb-2">
+                <img src="{{ foto_form.instance.foto.url }}" alt="Foto" style="max-height:120px;max-width:100%;border-radius:6px;">
+                {% if foto_form.DELETE %}<div class="form-check mt-1" style="font-size:.8rem;">{{ foto_form.DELETE }} <label class="form-check-label text-danger">Eliminar</label></div>{% endif %}
+              </div>
+              {% endif %}
+              <div class="mb-2">{{ foto_form.foto }}</div>
+              <div>{{ foto_form.descripcion }}</div>
+              {% if foto_form.errors %}<div class="invalid-feedback d-block">{{ foto_form.errors|join:", " }}</div>{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle me-2"></i>Guardar
+          </button>
+          {% if orden %}
+          <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+          {% else %}
+          <a href="{% url 'mantenimiento:lista_ordenes' %}" class="btn btn-outline-secondary">Cancelar</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

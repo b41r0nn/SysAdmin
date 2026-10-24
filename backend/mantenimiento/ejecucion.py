@@ -13,6 +13,7 @@ from .models import (
     FORMATO_ACTUAL,
     LIMITE_OBS_PUNTO,
     LIMITE_TEXTO_ACTA,
+    normalizar_saltos,
     RESULTADOS_PUNTO,
     ChecklistItem,
     OrdenMantenimiento,
@@ -85,7 +86,7 @@ def marcar_punto(item, resultado, observacion=""):
         raise ValidationError("El mantenimiento ya está cerrado.")
     if resultado not in dict(RESULTADOS_PUNTO):
         raise ValidationError("Resultado no válido.")
-    observacion = (observacion or "").strip()
+    observacion = normalizar_saltos(observacion).strip()
     if len(observacion) > LIMITE_OBS_PUNTO:
         raise ValidationError(f"La observación no puede pasar de {LIMITE_OBS_PUNTO} caracteres.")
     if resultado == "falla" and not observacion:
@@ -225,6 +226,11 @@ def errores_para_cerrar(
     """
     if orden.estado == "cerrada":
         return ["El mantenimiento ya está cerrado."]
+    if orden.estado == "cancelada":
+        return ["Un mantenimiento cancelado no se puede cerrar."]
+    observaciones = normalizar_saltos(observaciones)
+    diagnostico = normalizar_saltos(diagnostico)
+    acciones = normalizar_saltos(acciones)
     hoy = hoy or timezone.localdate()
     errores = []
     if fecha_cierre is None:
@@ -287,12 +293,12 @@ def cerrar_orden(
         orden.estado = "cerrada"
         orden.fecha_cierre = fecha_cierre
         orden.estado_final = estado_final
-        orden.observaciones = (observaciones or "").strip()
+        orden.observaciones = normalizar_saltos(observaciones).strip()
         orden.tecnico = usuario
         campos = ["estado", "fecha_cierre", "estado_final", "observaciones", "tecnico", "datos_acta"]
         if orden.tipo == "correctivo":
-            orden.diagnostico = (diagnostico or "").strip()
-            orden.acciones = (acciones or "").strip()
+            orden.diagnostico = normalizar_saltos(diagnostico).strip()
+            orden.acciones = normalizar_saltos(acciones).strip()
             campos += ["diagnostico", "acciones"]
         orden.datos_acta = datos_para_acta(orden, usuario)
         orden.save(update_fields=[*campos, "fecha_actualizacion"])
