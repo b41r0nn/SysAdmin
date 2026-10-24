@@ -1,6 +1,7 @@
 import json
 
 from django import forms
+from django.forms import inlineformset_factory
 from django.urls import reverse
 from django.utils import timezone
 
@@ -14,6 +15,8 @@ from .models import (
     FotoMantenimiento,
     OrdenMantenimiento,
     PlanMantenimiento,
+    PlantillaChecklist,
+    PuntoPlantilla,
     Repuesto,
 )
 
@@ -401,3 +404,46 @@ class ProgramarForm(forms.Form):
         error_messages={"invalid": "Fecha no válida."},
         widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}, format="%Y-%m-%d"),
     )
+
+
+class PlantillaChecklistForm(forms.ModelForm):
+    class Meta:
+        model = PlantillaChecklist
+        fields = ["tipo_dispositivo", "frecuencia_meses"]
+        widgets = {
+            "frecuencia_meses": forms.NumberInput(attrs={"class": "form-control", "min": 1}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        campo = self.fields["tipo_dispositivo"]
+        existente = bool(self.instance and self.instance.pk)
+        actual = self.instance.tipo_dispositivo if existente else ""
+        campo.widget = forms.Select(attrs={"class": "form-select"})
+        campo.choices = [("", "---------")] + _opciones_categorias(actual)
+        if existente:
+            # El tipo identifica al checklist: no se cambia después de creado.
+            campo.disabled = True
+
+    def clean_tipo_dispositivo(self):
+        tipo = self.cleaned_data["tipo_dispositivo"]
+        repetidos = PlantillaChecklist.objects.filter(tipo_dispositivo=tipo).exclude(pk=self.instance.pk)
+        if repetidos.exists():
+            raise forms.ValidationError("Ya existe un checklist para ese tipo de equipo.")
+        return tipo
+
+
+PuntoPlantillaFormSet = inlineformset_factory(
+    PlantillaChecklist,
+    PuntoPlantilla,
+    fields=["seccion", "descripcion", "posicion", "aplica_en_garantia", "activo"],
+    widgets={
+        "seccion": forms.TextInput(attrs={"class": "form-control", "list": "secciones-sugeridas"}),
+        "descripcion": forms.TextInput(attrs={"class": "form-control"}),
+        "posicion": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+        "aplica_en_garantia": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    },
+    extra=3,
+    can_delete=True,
+)

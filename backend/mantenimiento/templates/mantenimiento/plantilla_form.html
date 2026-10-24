@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — Mantenimiento{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:lista_plantillas' %}" class="text-decoration-none">Checklists</a>
+    </li>
+    <li class="breadcrumb-item active">{{ titulo }}</li>
+  </ol>
+</nav>
+
+<div class="sa-card p-4">
+  <h5 class="fw-bold mb-1">{{ titulo }}</h5>
+  <p class="text-muted" style="font-size:.85rem;">
+    Cambiar el checklist no modifica los mantenimientos que ya se iniciaron.
+    Los puntos se ordenan por la posición (menor primero).
+  </p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.tipo_dispositivo.id_for_label }}">Tipo de equipo</label>
+        {{ form.tipo_dispositivo }}
+        {% if form.tipo_dispositivo.errors %}<div class="invalid-feedback d-block">{{ form.tipo_dispositivo.errors|join:", " }}</div>{% endif %}
+        {% if not plantilla %}<div class="form-text">Al crearlo, los equipos de este tipo entran en la programación.</div>{% endif %}
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label fw-semibold" for="{{ form.frecuencia_meses.id_for_label }}">Frecuencia (meses)</label>
+        {{ form.frecuencia_meses }}
+        {% if form.frecuencia_meses.errors %}<div class="invalid-feedback d-block">{{ form.frecuencia_meses.errors|join:", " }}</div>{% endif %}
+      </div>
+    </div>
+
+    <h6 class="fw-semibold mb-2" style="font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;">Puntos</h6>
+    {{ fset.management_form }}
+    {{ fset.non_form_errors }}
+    <datalist id="secciones-sugeridas">
+      {% for s in secciones %}<option value="{{ s }}">{% endfor %}
+    </datalist>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Sección</th><th>Descripción</th><th style="width:7rem">Posición</th>
+            <th>Aplica en garantía</th><th>Activo</th><th>Quitar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in fset %}
+          <tr>
+            <td>
+              {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+              {{ f.seccion }}
+              {% if f.seccion.errors %}<div class="invalid-feedback d-block">{{ f.seccion.errors|join:", " }}</div>{% endif %}
+            </td>
+            <td>
+              {{ f.descripcion }}
+              {% if f.descripcion.errors %}<div class="invalid-feedback d-block">{{ f.descripcion.errors|join:", " }}</div>{% endif %}
+            </td>
+            <td>
+              {{ f.posicion }}
+              {% if f.posicion.errors %}<div class="invalid-feedback d-block">{{ f.posicion.errors|join:", " }}</div>{% endif %}
+            </td>
+            <td class="text-center">{{ f.aplica_en_garantia }}</td>
+            <td class="text-center">{{ f.activo }}</td>
+            <td class="text-center">{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted" style="font-size:.8rem;">Las filas vacías del final se ignoran; guarda para obtener más.</p>
+
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check2-circle me-2"></i>Guardar</button>
+      <a href="{% url 'mantenimiento:lista_plantillas' %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
