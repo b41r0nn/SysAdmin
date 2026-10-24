@@ -347,6 +347,19 @@
   <a href="{% url 'mantenimiento:acta_pdf' orden.pk %}" class="btn btn-primary" target="_blank">
     <i class="bi bi-file-earmark-pdf"></i> Descargar acta
   </a>
+  {% if puede_escribir %}
+  <a href="{% url 'mantenimiento:subir_acta_firmada' orden.pk %}" class="btn btn-outline-primary">
+    <i class="bi bi-upload"></i> Subir acta firmada
+  </a>
+  {% endif %}
+  {% if orden.acta_firmada %}
+  <a href="{{ orden.acta_firmada.url }}" class="btn btn-outline-success" target="_blank">
+    <i class="bi bi-file-earmark-check"></i> Ver acta firmada
+  </a>
+  {% if orden.acta_firmada_desactualizada %}
+  <span class="badge text-bg-warning align-self-center">De una versión anterior</span>
+  {% endif %}
+  {% endif %}
   {% endif %}
   <a href="{% url 'mantenimiento:hoja_de_vida' orden.activo.pk %}" class="btn btn-outline-primary">
     <i class="bi bi-person-lines-fill"></i> Hoja de vida del equipo

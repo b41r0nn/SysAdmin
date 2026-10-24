@@ -30,6 +30,7 @@ urlpatterns = [
     path("ordenes/<int:pk>/eliminar/", views.eliminar_orden, name="eliminar_orden"),
     path("ordenes/<int:pk>/pdf/", views.orden_pdf, name="orden_pdf"),
     path("ordenes/<int:pk>/acta/", views.acta_pdf, name="acta_pdf"),
+    path("ordenes/<int:pk>/acta/subir/", views.subir_acta_firmada, name="subir_acta_firmada"),
     path("ordenes/<int:pk>/fotos/nueva/", views.crear_foto, name="crear_foto"),
     path("fotos/<int:pk>/eliminar/", views.eliminar_foto, name="eliminar_foto"),
     path("fotos/<int:pk>/acta/", views.toggle_foto_acta, name="toggle_foto_acta"),

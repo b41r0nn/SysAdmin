@@ -12,7 +12,7 @@ from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Activo
 from inventario.services import acta_pdf_bytes
 from licencias.models import DIAS_AVISO_VENCIMIENTO, LicenciaSoftware
-from mantenimiento.models import PlanMantenimiento
+from mantenimiento.models import OrdenMantenimiento, PlanMantenimiento
 from notificaciones.models import Notificacion, NotificacionEmail
 from yule.models import EquipoOCS
 
@@ -173,8 +173,27 @@ def _detectar_licencias(user):
             )
 
 
+def _detectar_actas_mantenimiento(user):
+    """Avisa de los mantenimientos cerrados (formato 2) sin acta firmada escaneada o con una desactualizada."""
+    ordenes = (
+        OrdenMantenimiento.objects.filter(estado="cerrada", formato=2)
+        .filter(Q(acta_firmada="") | Q(acta_firmada__isnull=True) | Q(acta_firmada_desactualizada=True))
+        .select_related("activo")
+    )
+    for orden in ordenes:
+        _crear(
+            user,
+            "mantenimiento",
+            f"Acta de mantenimiento sin firmar · N° {orden.pk:04d}",
+            f"El acta del equipo {orden.activo.serial} aún no tiene la firma escaneada.",
+            link=reverse("mantenimiento:detalle_orden", args=[orden.pk]),
+            objetokey=f"acta_mant:{orden.pk}",
+        )
+
+
 def generar_mantenimiento(user):
     if _puede_ver(user, "mantenimiento"):
+        _detectar_actas_mantenimiento(user)
         return _detectar_mantenimiento(user)
     return 0
 

@@ -371,6 +371,28 @@ class CerrarOrdenForm(forms.Form):
         return {n: self.cleaned_data[n] for n in nombres}
 
 
+EXTENSIONES_ACTA = {".pdf", ".jpg", ".jpeg", ".png"}
+LIMITE_ACTA_BYTES = 10 * 1024 * 1024
+
+
+class SubirActaFirmadaForm(forms.Form):
+    """El acta firmada escaneada: PDF, JPG o PNG de hasta 10 MB."""
+
+    archivo = forms.FileField(
+        label="Acta firmada escaneada",
+        widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": ".pdf,.jpg,.jpeg,.png"}),
+    )
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data["archivo"]
+        nombre = archivo.name.lower()
+        if "." not in nombre or "." + nombre.rsplit(".", 1)[1] not in EXTENSIONES_ACTA:
+            raise forms.ValidationError("Sube un PDF, JPG o PNG.")
+        if archivo.size > LIMITE_ACTA_BYTES:
+            raise forms.ValidationError("El archivo pasa de 10 MB.")
+        return archivo
+
+
 class ProgramarForm(forms.Form):
     """Fecha en que se acordó hacerle el preventivo a un equipo (vacía: sin fecha)."""
 

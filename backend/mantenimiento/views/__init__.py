@@ -14,6 +14,7 @@ from .ordenes import (  # noqa: F401
 )
 from .actas import (  # noqa: F401
     acta_pdf,
+    subir_acta_firmada,
 )
 from .planes import (  # noqa: F401
     crear_plan,
