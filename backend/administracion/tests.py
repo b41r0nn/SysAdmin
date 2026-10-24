@@ -61,6 +61,25 @@ class ConfiguracionSistemaTests(TestCase):
         self.assertEqual(config.nit, "900123456")
         self.assertEqual(config.email_contacto, "sistemas@redihos.test")
 
+    def test_vista_configuracion_guarda_codigo_y_version_del_acta(self):
+        self.client.force_login(crear_usuario("superadmin", "sa_cfg3"))
+        response = self.client.get(reverse("administracion:configuracion"))
+        self.assertContains(response, "Acta de mantenimiento")
+        self.assertContains(response, 'name="acta_mant_codigo"')
+        self.assertContains(response, 'name="acta_mant_version"')
+
+        response = self.client.post(
+            reverse("administracion:configuracion"),
+            {
+                "nombre_empresa": "REDIHOS TEST S.A.S",
+                "acta_mant_codigo": "FT-TI-002",
+                "acta_mant_version": "01",
+            },
+        )
+        self.assertRedirects(response, reverse("administracion:configuracion"))
+        config = ConfiguracionSistema.get_config()
+        self.assertEqual((config.acta_mant_codigo, config.acta_mant_version), ("FT-TI-002", "01"))
+
     def test_no_autenticado_redirige_a_login(self):
         response = self.client.get(reverse("administracion:configuracion"))
         self.assertEqual(response.status_code, 302)

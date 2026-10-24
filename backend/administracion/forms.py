@@ -31,6 +31,8 @@ class ConfiguracionForm(forms.ModelForm):
             "smtp_usuario",
             "smtp_usa_tls",
             "smtp_usa_ssl",
+            "acta_mant_codigo",
+            "acta_mant_version",
         ]
         widgets = {
             "nombre_empresa": forms.TextInput(attrs={"class": "form-control"}),
@@ -50,6 +52,8 @@ class ConfiguracionForm(forms.ModelForm):
             }),
             "smtp_usa_tls": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "smtp_usa_ssl": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "acta_mant_codigo": forms.TextInput(attrs={"class": "form-control", "placeholder": "FT-TI-002"}),
+            "acta_mant_version": forms.TextInput(attrs={"class": "form-control", "placeholder": "01"}),
         }
 
     def __init__(self, *args, **kwargs):

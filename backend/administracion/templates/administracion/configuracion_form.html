@@ -117,6 +117,29 @@
           </div>
         </fieldset>
 
+        <fieldset class="sa-fieldset mt-4">
+          <legend>Acta de mantenimiento</legend>
+          <p class="text-muted mb-3" style="font-size:.8rem;">
+            Salen en el encabezado y en el pie del acta. Si están vacíos, el acta muestra "—".
+          </p>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.acta_mant_codigo.id_for_label }}">Código</label>
+              {{ form.acta_mant_codigo }}
+              {% if form.acta_mant_codigo.errors %}
+                <div class="invalid-feedback d-block">{{ form.acta_mant_codigo.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.acta_mant_version.id_for_label }}">Versión</label>
+              {{ form.acta_mant_version }}
+              {% if form.acta_mant_version.errors %}
+                <div class="invalid-feedback d-block">{{ form.acta_mant_version.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </fieldset>
+
         <div class="d-flex gap-2 justify-content-end pt-3"
              style="border-top:1px solid var(--sa-border,#e2e8f0);">
           <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary">Cancelar</a>

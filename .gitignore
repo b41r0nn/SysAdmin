@@ -27,6 +27,9 @@ staticfiles/
 .ruff_cache/
 .coverage
 
+# PDF de muestra de las pruebas del acta (ACTA_MUESTRAS_DIR)
+backend/acta_muestras/
+
 # OS/IDE
 .DS_Store
 Thumbs.db
