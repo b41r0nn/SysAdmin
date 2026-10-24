@@ -49,6 +49,15 @@ FORMATO_ACTUAL = 2
 RESULTADOS_PUNTO = [("bien", "Bien"), ("falla", "Con falla"), ("na", "No aplica")]
 LIMITE_OBS_PUNTO = 150
 
+# Estado en que queda el equipo al cerrar el mantenimiento.
+ESTADOS_FINALES = [
+    ("operativo", "Operativo"),
+    ("operativo_obs", "Operativo con observaciones"),
+    ("fuera_servicio", "Fuera de servicio"),
+]
+# Máximo de caracteres de observaciones, diagnóstico y solución: el acta es de una hoja.
+LIMITE_TEXTO_ACTA = 600
+
 
 class PlanMantenimiento(models.Model):
     tipo_dispositivo = models.CharField(
@@ -140,6 +149,30 @@ class OrdenMantenimiento(models.Model):
         help_text="Preventivo hecho mientras el equipo estaba en garantía: no cuenta como preventivo completo.",
     )
     formato = models.PositiveSmallIntegerField(default=FORMATO_ACTUAL, verbose_name="Formato")
+    tecnico = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="mantenimientos_cerrados",
+        null=True,
+        blank=True,
+        verbose_name="Técnico",
+        help_text="La cuenta que cerró el mantenimiento.",
+    )
+    estado_final = models.CharField(
+        max_length=30, choices=ESTADOS_FINALES, blank=True, verbose_name="Estado final del equipo"
+    )
+    observaciones = models.TextField(blank=True)
+    # Lo que imprime el acta y no es parte de la orden (equipo, responsable,
+    # técnico, garantía, próximo), congelado al cerrar. Vacío si no está cerrada.
+    datos_acta = models.JSONField(default=dict, blank=True, verbose_name="Datos del acta")
+    acta_firmada = models.FileField(
+        upload_to="mantenimiento/actas/", null=True, blank=True, verbose_name="Acta firmada"
+    )
+    acta_firmada_desactualizada = models.BooleanField(
+        default=False,
+        verbose_name="Acta firmada de una versión anterior",
+        help_text="Se reabrió el mantenimiento después de subir el acta firmada.",
+    )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 

@@ -2,11 +2,14 @@ import json
 
 from django import forms
 from django.urls import reverse
+from django.utils import timezone
 
 from inventario.models import Activo, CatalogoModelo, TIPOS
 
 from .constants import PARTES_POR_TIPO
 from .models import (
+    ESTADOS_FINALES,
+    LIMITE_TEXTO_ACTA,
     ChecklistItem,
     FotoMantenimiento,
     OrdenMantenimiento,
@@ -292,6 +295,80 @@ class NuevoMantenimientoForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["activo"].queryset = Activo.objects.exclude(estado="dado_de_baja").order_by("serial")
+
+
+class CerrarOrdenForm(forms.Form):
+    """Cierre de un mantenimiento.
+
+    Las reglas de negocio (checklist completo, fecha no futura…) las valida
+    ``ejecucion.errores_para_cerrar``; aquí solo se leen los datos. Si la cuenta
+    que cierra no tiene nombre (``pedir_datos_tecnico``), se piden nombres,
+    apellidos y cargo, que la vista guarda en la cuenta.
+    """
+
+    fecha_cierre = forms.DateField(
+        label="Fecha de cierre",
+        error_messages={"required": "Indica la fecha de cierre.", "invalid": "Fecha no válida."},
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
+    )
+    estado_final = forms.ChoiceField(
+        label="Estado final del equipo",
+        choices=ESTADOS_FINALES,
+        error_messages={"required": "Elige el estado final del equipo."},
+        widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
+    )
+    observaciones = forms.CharField(
+        label="Observaciones",
+        required=False,
+        max_length=LIMITE_TEXTO_ACTA,
+        error_messages={"max_length": f"Las observaciones no pueden pasar de {LIMITE_TEXTO_ACTA} caracteres."},
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+    )
+
+    def __init__(self, *args, orden, pedir_datos_tecnico: bool, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.orden = orden
+        self.pedir_datos_tecnico = pedir_datos_tecnico
+        self.fields["fecha_cierre"].initial = timezone.localdate()
+        # Al cerrar de nuevo una orden reabierta, se parte de lo que tenía.
+        if orden.estado_final:
+            self.fields["estado_final"].initial = orden.estado_final
+        self.fields["observaciones"].initial = orden.observaciones
+        if orden.tipo == "correctivo":
+            self.fields["diagnostico"] = forms.CharField(
+                label="Diagnóstico",
+                max_length=LIMITE_TEXTO_ACTA,
+                initial=orden.diagnostico,
+                error_messages={
+                    "required": "Escribe el diagnóstico.",
+                    "max_length": f"El diagnóstico no puede pasar de {LIMITE_TEXTO_ACTA} caracteres.",
+                },
+                widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            )
+            self.fields["acciones"] = forms.CharField(
+                label="Solución / acciones realizadas",
+                max_length=LIMITE_TEXTO_ACTA,
+                initial=orden.acciones,
+                error_messages={
+                    "required": "Escribe la solución o las acciones realizadas.",
+                    "max_length": f"La solución no puede pasar de {LIMITE_TEXTO_ACTA} caracteres.",
+                },
+                widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            )
+        if pedir_datos_tecnico:
+            for nombre, etiqueta in (("first_name", "Nombres"), ("last_name", "Apellidos"), ("cargo", "Cargo")):
+                self.fields[nombre] = forms.CharField(
+                    label=etiqueta,
+                    max_length=150,
+                    widget=forms.TextInput(attrs={"class": "form-control"}),
+                )
+
+    def datos_cierre(self):
+        """Argumentos de ``ejecucion.cerrar_orden`` sacados de ``cleaned_data``."""
+        nombres = ["fecha_cierre", "estado_final", "observaciones"]
+        if self.orden.tipo == "correctivo":
+            nombres += ["diagnostico", "acciones"]
+        return {n: self.cleaned_data[n] for n in nombres}
 
 
 class ProgramarForm(forms.Form):

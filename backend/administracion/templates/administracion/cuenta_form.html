@@ -36,6 +36,30 @@
             <div class="text-danger mt-1" style="font-size:.82rem;">{{ form.username.errors|join:", " }}</div>
           {% endif %}
         </div>
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-6">
+            <label for="{{ form.first_name.id_for_label }}" class="form-label fw-semibold">{{ form.first_name.label }}</label>
+            {{ form.first_name }}
+            {% if form.first_name.errors %}
+              <div class="text-danger mt-1" style="font-size:.82rem;">{{ form.first_name.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-6">
+            <label for="{{ form.last_name.id_for_label }}" class="form-label fw-semibold">{{ form.last_name.label }}</label>
+            {{ form.last_name }}
+            {% if form.last_name.errors %}
+              <div class="text-danger mt-1" style="font-size:.82rem;">{{ form.last_name.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="{{ form.cargo.id_for_label }}" class="form-label fw-semibold">{{ form.cargo.label }}</label>
+          {{ form.cargo }}
+          <div class="form-text">El nombre y el cargo salen en las actas que firma esta cuenta.</div>
+          {% if form.cargo.errors %}
+            <div class="text-danger mt-1" style="font-size:.82rem;">{{ form.cargo.errors|join:", " }}</div>
+          {% endif %}
+        </div>
         <div class="mb-3">
           <label class="form-label fw-semibold">Correo electrónico</label>
           {{ form.email }}

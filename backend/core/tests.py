@@ -409,7 +409,12 @@ class SmokeVistasTests(TestCase):
             serial="SN-SMOKE", tipo_dispositivo="escritorio", marca="HP",
             modelo="X", estado="disponible",
         )
+        from mantenimiento.models import OrdenMantenimiento
+
+        orden = OrdenMantenimiento.objects.create(activo=activo, tipo="correctivo", estado="abierta")
         rutas = [(r, []) for r in self.RUTAS] + [
+            ("mantenimiento:detalle_orden", [orden.pk]),
+            ("mantenimiento:cerrar_orden", [orden.pk]),
             ("inventario:detalle", [activo.pk]),
             ("inventario:software", [activo.pk]),
             ("inventario:editar", [activo.pk]),

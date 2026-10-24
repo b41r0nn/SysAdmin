@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% load permisos_extras %}
 
 {% block title %}Orden de mantenimiento — SysAdmin{% endblock %}
 
 {% block content %}
+{% tiene_permiso 'mantenimiento' 'escritura' as puede_escribir %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item">
@@ -48,7 +50,7 @@
         <i class="bi bi-person"></i>
       </div>
       <div class="stat-content">
-        <div class="stat-value">{{ orden.tecnico_asignado|default:"—" }}</div>
+        <div class="stat-value">{% firstof orden.tecnico.get_full_name orden.tecnico_asignado "—" %}</div>
         <div class="stat-label">Tecnico</div>
       </div>
     </div>
@@ -78,6 +80,35 @@
     </div>
   </div>
 </div>
+
+{% if orden.estado == "cerrada" %}
+<div class="sa-card p-4 mb-4">
+  <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+    Cierre
+  </h6>
+  <div class="row g-3" style="font-size:.9rem;">
+    <div class="col-12 col-md-4">
+      <small class="text-muted d-block">Estado final del equipo</small>
+      {% if orden.estado_final %}
+        <span class="badge {% if orden.estado_final == 'operativo' %}text-bg-success{% elif orden.estado_final == 'operativo_obs' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ orden.get_estado_final_display }}</span>
+      {% else %}—{% endif %}
+    </div>
+    <div class="col-12 col-md-4">
+      <small class="text-muted d-block">Fecha de cierre</small>
+      {{ orden.fecha_cierre|date:"d/m/Y"|default:"—" }}
+    </div>
+    <div class="col-12 col-md-4">
+      <small class="text-muted d-block">Técnico</small>
+      {% firstof orden.tecnico.get_full_name orden.tecnico_asignado "—" %}
+      {% if orden.tecnico.cargo %}<div class="text-muted small">{{ orden.tecnico.cargo }}</div>{% endif %}
+    </div>
+    <div class="col-12">
+      <small class="text-muted d-block">Observaciones</small>
+      <p class="mb-0" style="white-space:pre-line;">{{ orden.observaciones|default:"—" }}</p>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="sa-card p-4 mb-4">
   <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
@@ -287,15 +318,26 @@
   <a href="{% url 'mantenimiento:hoja_de_vida' orden.activo.pk %}" class="btn btn-outline-primary">
     <i class="bi bi-person-lines-fill"></i> Hoja de vida del equipo
   </a>
-  <form method="post" action="{% url 'mantenimiento:cerrar_orden' orden.pk %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary">
-      <i class="bi bi-check-circle"></i> Cambiar estado
-    </button>
-  </form>
-  <a href="{% url 'mantenimiento:editar_orden' orden.pk %}" class="btn btn-outline-secondary">
-    <i class="bi bi-pencil-square"></i> Editar
-  </a>
+  {% if orden.estado == "cerrada" %}
+    {% if puede_escribir %}
+    <form method="post" action="{% url 'mantenimiento:reabrir_orden' orden.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-warning"
+              onclick="return confirm('¿Reabrir este mantenimiento? El acta deja de estar lista hasta que se cierre de nuevo.')">
+        <i class="bi bi-unlock"></i> Reabrir
+      </button>
+    </form>
+    {% endif %}
+  {% else %}
+    {% if puede_escribir %}
+    <a href="{% url 'mantenimiento:cerrar_orden' orden.pk %}" class="btn btn-primary">
+      <i class="bi bi-check-circle"></i> Cerrar
+    </a>
+    {% endif %}
+    <a href="{% url 'mantenimiento:editar_orden' orden.pk %}" class="btn btn-outline-secondary">
+      <i class="bi bi-pencil-square"></i> Editar
+    </a>
+  {% endif %}
   <form method="post" action="{% url 'mantenimiento:eliminar_orden' orden.pk %}">
     {% csrf_token %}
     <button class="btn btn-danger" type="submit"

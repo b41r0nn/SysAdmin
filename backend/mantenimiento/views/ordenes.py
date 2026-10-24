@@ -1,11 +1,13 @@
-"""Órdenes de mantenimiento: lista, detalle, alta, edición, cierre y baja, con sus repuestos y fotos."""
+"""Órdenes de mantenimiento: lista, detalle, alta, edición y baja, con sus repuestos y fotos.
+
+El cierre y la reapertura están en ``views/ejecucion.py``.
+"""
 
 from django import forms
 from django.contrib import messages
 from django.db.models import DecimalField, F, Q, Sum
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 
 from accounts.permisos import requiere_permiso
 from inventario.models import Activo
@@ -23,7 +25,7 @@ from ..models import (
     Repuesto,
 )
 from ..services import snapshot_software_ocs
-from .planes import _actualizar_plan_por_orden, _copiar_checklist_plantilla
+from .planes import _copiar_checklist_plantilla
 from .ejecucion import contexto_checklist
 
 
@@ -188,6 +190,9 @@ def crear_orden(request):
 @requiere_permiso("mantenimiento", "escritura")
 def editar_orden(request, pk):
     orden = get_object_or_404(OrdenMantenimiento, pk=pk)
+    if orden.estado == "cerrada":
+        messages.warning(request, "Un mantenimiento cerrado no se edita. Reábrelo para hacer cambios.")
+        return redirect("mantenimiento:detalle_orden", pk=orden.pk)
     if request.method == "POST":
         hay_fotos = "fotos-TOTAL_FORMS" in request.POST
         fset = (
@@ -222,21 +227,6 @@ def editar_orden(request, pk):
         "orden": orden,
         "parte_fields": _parte_fields(form),
     })
-
-
-@requiere_permiso("mantenimiento", "escritura")
-def cerrar_orden(request, pk):
-    orden = get_object_or_404(OrdenMantenimiento, pk=pk)
-    if request.method == "POST":
-        if orden.estado == "cerrada":
-            messages.warning(request, "La orden ya se encuentra cerrada.")
-        else:
-            orden.estado = "cerrada"
-            orden.fecha_cierre = orden.fecha_cierre or timezone.now().date()
-            orden.save(update_fields=["estado", "fecha_cierre", "fecha_actualizacion"])
-            _actualizar_plan_por_orden(orden)
-            messages.success(request, "Orden de mantenimiento cerrada.")
-    return redirect("mantenimiento:detalle_orden", pk=orden.pk)
 
 
 @requiere_permiso("mantenimiento", "escritura")

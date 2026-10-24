@@ -163,7 +163,19 @@ class OrdenesCRUDTests(TestCase):
 
     def test_cerrar_orden(self):
         o = _orden(self.activo, estado="abierta")
-        resp = self.client.post(reverse("mantenimiento:cerrar_orden", args=[o.pk]))
+        resp = self.client.post(
+            reverse("mantenimiento:cerrar_orden", args=[o.pk]),
+            {
+                "fecha_cierre": HOY.isoformat(),
+                "estado_final": "operativo",
+                "diagnostico": "No enciende",
+                "acciones": "Se cambió la fuente",
+                # La cuenta de prueba no tiene nombre: el cierre se lo pide.
+                "first_name": "Ana",
+                "last_name": "Técnica",
+                "cargo": "Analista de Sistemas",
+            },
+        )
         self.assertEqual(resp.status_code, 302)
         o.refresh_from_db()
         self.assertEqual(o.estado, "cerrada")
@@ -175,6 +187,8 @@ class OrdenesCRUDTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         o.refresh_from_db()
         self.assertEqual(o.estado, "cerrada")
+        mensajes = [str(m) for m in resp.wsgi_request._messages]
+        self.assertIn("El mantenimiento ya está cerrado.", mensajes)
 
     def test_eliminar_orden(self):
         o = _orden(self.activo)
