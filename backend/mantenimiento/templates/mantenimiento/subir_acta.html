@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Subir acta firmada — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:inicio' %}" class="text-decoration-none">Mantenimiento</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="text-decoration-none">Orden #{{ orden.id }}</a>
+    </li>
+    <li class="breadcrumb-item active">Subir acta firmada</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8 col-xl-6">
+    <div class="sa-card p-4">
+      <h5 class="fw-bold mb-1">Subir acta firmada</h5>
+      <p class="text-muted" style="font-size:.85rem;">
+        Equipo {{ orden.activo.serial }} · acta N° {{ orden.pk|stringformat:"04d" }}. PDF, JPG o PNG de hasta 10 MB.
+      </p>
+      {% if orden.acta_firmada %}
+      <div class="alert alert-info py-2" style="font-size:.85rem;">
+        Ya hay un acta firmada guardada{% if orden.acta_firmada_desactualizada %} (de una versión anterior){% endif %}. Si subes otra, la reemplaza.
+      </div>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="mb-3">
+          <label for="{{ form.archivo.id_for_label }}" class="form-label">{{ form.archivo.label }}</label>
+          {{ form.archivo }}
+          {% for e in form.archivo.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-upload"></i> Guardar</button>
+          <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

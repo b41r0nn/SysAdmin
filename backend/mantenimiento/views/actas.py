@@ -4,11 +4,12 @@ import re
 
 from django.contrib import messages
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.permisos import requiere_permiso
 
 from .. import acta as servicio
+from ..forms import SubirActaFirmadaForm
 from ..models import FORMATO_ACTUAL, OrdenMantenimiento
 
 
@@ -31,3 +32,23 @@ def acta_pdf(request, pk):
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="acta_mantenimiento_{orden.pk:04d}_{serial}.pdf"'
     return response
+
+
+@requiere_permiso("mantenimiento", "escritura")
+def subir_acta_firmada(request, pk):
+    orden = get_object_or_404(OrdenMantenimiento.objects.select_related("activo"), pk=pk)
+    if orden.formato != FORMATO_ACTUAL or orden.estado != "cerrada":
+        messages.warning(request, "El acta firmada se sube cuando el mantenimiento está cerrado.")
+        return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+
+    form = SubirActaFirmadaForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        # Si ya había un archivo, se descarta para no dejar huérfanos en disco.
+        if orden.acta_firmada:
+            orden.acta_firmada.delete(save=False)
+        orden.acta_firmada = form.cleaned_data["archivo"]
+        orden.acta_firmada_desactualizada = False
+        orden.save(update_fields=["acta_firmada", "acta_firmada_desactualizada"])
+        messages.success(request, "Acta firmada guardada.")
+        return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+    return render(request, "mantenimiento/subir_acta.html", {"orden": orden, "form": form})

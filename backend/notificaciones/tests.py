@@ -632,3 +632,48 @@ class CampanaThrottleTests(TestCase):
             self.client.get(reverse("notificaciones:cantidad"))
             self.client.get(reverse("notificaciones:cantidad"))
         self.assertEqual(gen.call_count, 1)
+
+
+class DetectarActasMantenimientoTests(TestCase):
+    def _orden(self, serial="SN-AM-1", **kw):
+        from mantenimiento.models import OrdenMantenimiento
+
+        return OrdenMantenimiento.objects.create(
+            activo=_activo(serial),
+            tipo="preventivo",
+            estado="cerrada",
+            formato=2,
+            fecha_cierre=HOY,
+            **kw,
+        )
+
+    def test_aviso_acta_mantenimiento_sin_firmar(self):
+        from notificaciones.services import _detectar_actas_mantenimiento
+
+        u = _user("tecnico")
+        orden = self._orden()
+        _detectar_actas_mantenimiento(u)
+        n = Notificacion.objects.get(usuario=u, tipo="mantenimiento", objetokey=f"acta_mant:{orden.pk}")
+        self.assertEqual(n.titulo, f"Acta de mantenimiento sin firmar · N° {orden.pk:04d}")
+        self.assertEqual(n.mensaje, "El acta del equipo SN-AM-1 aún no tiene la firma escaneada.")
+        self.assertEqual(n.link, reverse("mantenimiento:detalle_orden", args=[orden.pk]))
+
+    def test_sin_aviso_si_ya_tiene_firmada(self):
+        from notificaciones.services import _detectar_actas_mantenimiento
+
+        u = _user("tecnico")
+        self._orden(acta_firmada="mantenimiento/actas/x.pdf")
+        _detectar_actas_mantenimiento(u)
+        self.assertFalse(Notificacion.objects.filter(usuario=u, objetokey__startswith="acta_mant:").exists())
+
+    def test_aviso_si_esta_desactualizada(self):
+        from notificaciones.services import _detectar_actas_mantenimiento, generar_mantenimiento
+
+        u = _user("tecnico")
+        orden = self._orden(acta_firmada="mantenimiento/actas/x.pdf", acta_firmada_desactualizada=True)
+        generar_mantenimiento(u)
+        self.assertTrue(
+            Notificacion.objects.filter(usuario=u, objetokey=f"acta_mant:{orden.pk}").exists()
+        )
+        _detectar_actas_mantenimiento(u)
+        self.assertEqual(Notificacion.objects.filter(usuario=u, objetokey=f"acta_mant:{orden.pk}").count(), 1)
