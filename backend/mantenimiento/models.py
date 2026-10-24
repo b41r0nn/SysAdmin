@@ -57,6 +57,20 @@ ESTADOS_FINALES = [
 ]
 # Máximo de caracteres de observaciones, diagnóstico y solución: el acta es de una hoja.
 LIMITE_TEXTO_ACTA = 600
+
+
+CRLF, CR, LF = "\r\n", "\r", "\n"
+
+
+def normalizar_saltos(texto):
+    """Cuenta cada salto de línea como un carácter.
+
+    El navegador cuenta un salto como 1 carácter pero lo envía como CRLF (2 para
+    Django), así que se normaliza antes de comprobar los límites.
+    """
+    return (texto or "").replace(CRLF, LF).replace(CR, LF)
+
+
 # Fotos que caben en el acta.
 MAX_FOTOS_ACTA = 3
 
