@@ -71,7 +71,14 @@
   .cuadro .vacio { color: #64748b; }
   .texto { overflow-wrap: anywhere; }
 
-  .firmas { margin-top: 0.8em; }
+  /* Firmas y pie pegados al fondo de la hoja, como en el boceto (sin flex).
+     Salen del flujo con position: fixed; en el flujo queda .reserva, un poco
+     más alta que ellos, así el contenido nunca los tapa y, si no cabe todo,
+     igual sale una segunda página (y se prueba la escala siguiente).
+     Medido con WeasyPrint: firmas + pie ocupan 8.6em, y 11em si nombre y
+     cargo se parten en dos renglones en las dos firmas. */
+  .pie-hoja { position: fixed; left: 0; right: 0; bottom: 0; }
+  .reserva { height: 11.6em; }
   .firmas td { border: none; padding: 0; text-align: center; vertical-align: top; }
   td.firma { width: 44%; }
   td.entre-firmas { width: 12%; }
@@ -198,6 +205,8 @@
   {% endfor %}
 </div>
 
+<div class="reserva"></div>
+<div class="pie-hoja">
 <table class="firmas">
   <tr>
     <td class="firma">
@@ -223,6 +232,7 @@
 </table>
 
 <div class="pie">SysAdmin · {{ config.acta_mant_codigo|default:"—" }} v{{ config.acta_mant_version|default:"—" }} · Acta de mantenimiento N° {{ numero }} · {{ orden.fecha_cierre|date:"d/m/Y" }} · Página 1 de 1</div>
+</div>
 
 </body>
 </html>

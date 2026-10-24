@@ -452,6 +452,35 @@ def _guardar_muestra(nombre, pdf):
             archivo.write(pdf)
 
 
+MM_POR_PX = 25.4 / 96
+ALTO_CARTA_MM = 279.4
+MARGEN_MM = 10
+
+
+def _caja(caja, clase):
+    """Primera caja de WeasyPrint del elemento con ``clase``, o None.
+
+    Recorre el árbol a mano porque ``descendants()`` no entra en las cajas con
+    ``position: fixed`` (WeasyPrint las envuelve en un ``AbsolutePlaceholder``
+    que guarda la caja real en ``_box``). WeasyPrint va fijo en 70.0.
+    """
+    caja = getattr(caja, "_box", caja)
+    elemento = getattr(caja, "element", None)
+    if elemento is not None and clase in (elemento.get("class") or "").split():
+        return caja
+    for hija in getattr(caja, "children", None) or ():
+        encontrada = _caja(hija, clase)
+        if encontrada is not None:
+            return encontrada
+    return None
+
+
+def _extremos_mm(pagina, clase):
+    """(arriba, abajo) del elemento con ``clase`` en la página, en mm desde el borde."""
+    caja = _caja(pagina._page_box, clase)
+    return caja.position_y * MM_POR_PX, (caja.position_y + caja.margin_height()) * MM_POR_PX
+
+
 @skipUnless(_weasyprint_real(), "WeasyPrint real no disponible (Windows sin GTK)")
 class ActaUnaHojaTests(MediaTemporal, TestCase):
     def setUp(self):
@@ -468,6 +497,42 @@ class ActaUnaHojaTests(MediaTemporal, TestCase):
     def _fotos(self, orden):
         for i, descripcion in enumerate(("Antes · interior", "Después · interior", "Bisagra izquierda")):
             _foto(orden, minutos=i, descripcion=descripcion, ancho=1600, alto=1200)
+
+    def _documento(self, orden, escala):
+        import weasyprint
+
+        html = render_to_string("mantenimiento/acta_pdf.html", contexto_acta(orden, self.request, escala=escala))
+        return weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).render()
+
+    def _comprobar_firmas_al_pie(self, documento):
+        """Una hoja; firmas en el tercio inferior, sin tapar las observaciones; pie pegado al margen de abajo."""
+        self.assertEqual(len(documento.pages), 1)
+        pagina = documento.pages[0]
+        firmas_arriba, _ = _extremos_mm(pagina, "firmas")
+        _, cuadro_abajo = _extremos_mm(pagina, "cuadro")
+        _, pie_abajo = _extremos_mm(pagina, "pie")
+        fondo_util = ALTO_CARTA_MM - MARGEN_MM
+        self.assertGreaterEqual(firmas_arriba, ALTO_CARTA_MM * 2 / 3, "las firmas no quedaron en el tercio inferior")
+        self.assertGreaterEqual(firmas_arriba, cuadro_abajo, "las firmas tapan las observaciones")
+        self.assertLessEqual(pie_abajo, fondo_util + 0.5, "el pie se sale de la hoja")
+        self.assertGreaterEqual(pie_abajo, fondo_util - 2, "el pie no quedó pegado al fondo de la hoja")
+
+    def _orden_maxima(self, tecnico, responsable):
+        """12 fallas de 150, observaciones de 600, 3 fotos y 5 repuestos de 150, con datos largos."""
+        pc = crear_pc("5CD1234XYZ-0987654321", nombre_equipo="REDIHOS-PT12-CONTABILIDAD",
+                      procesador="Intel(R) Core(TM) i7-1185G7 @ 3.00GHz", ram="32 GB DDR4 3200 MHz",
+                      disco_capacidad="1 TB", tipo_disco="SSD NVMe", sistema_operativo="Windows 11 Pro 23H2",
+                      ip_equipo="192.168.100.157", ubicacion_fisica="Sede principal, piso 3, oficina de contabilidad",
+                      marca="Hewlett-Packard", modelo="EliteBook 840 G8 Notebook PC")
+        asignar(pc, documento="1020304050", area="Contabilidad y finanzas", **responsable)
+        orden = iniciar_preventivo(pc, tecnico, HOY)
+        self._fotos(orden)
+        for i in range(5):
+            Repuesto.objects.create(orden=orden, nombre=_texto(150, f"Repuesto {i + 1} de referencia larga del fabricante con código. "), cantidad=10)
+        fallas = {item.descripcion: _texto(150) for item in orden.checklist_items.all()}
+        self.assertEqual(len(fallas), 12)
+        return _cerrar_preventivo(orden, tecnico, fallas=fallas, observaciones=_texto(600),
+                                  estado_final="operativo_obs")
 
     def test_contenido_tipico_sale_en_escala_0(self):
         tecnico = crear_usuario(first_name="Bairon", last_name="Calle", cargo="Analista de Sistemas")
@@ -487,31 +552,34 @@ class ActaUnaHojaTests(MediaTemporal, TestCase):
         _guardar_muestra("acta_tipica.pdf", pdf)
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertEqual(escala, 0)
+        self._comprobar_firmas_al_pie(self._documento(orden, escala))
 
     def test_contenido_maximo_cabe_en_una_hoja(self):
-        import weasyprint
-
         tecnico = crear_usuario(first_name="María Fernanda", last_name="Restrepo Villalobos",
                                 cargo="Coordinadora de Infraestructura Tecnológica")
-        pc = crear_pc("5CD1234XYZ-0987654321", nombre_equipo="REDIHOS-PT12-CONTABILIDAD",
-                      procesador="Intel(R) Core(TM) i7-1185G7 @ 3.00GHz", ram="32 GB DDR4 3200 MHz",
-                      disco_capacidad="1 TB", tipo_disco="SSD NVMe", sistema_operativo="Windows 11 Pro 23H2",
-                      ip_equipo="192.168.100.157", ubicacion_fisica="Sede principal, piso 3, oficina de contabilidad",
-                      marca="Hewlett-Packard", modelo="EliteBook 840 G8 Notebook PC")
-        asignar(pc, nombre="María Alejandra Castañeda Villarreal", documento="1020304050",
-                cargo="Auxiliar contable de cuentas por pagar", area="Contabilidad y finanzas")
-        orden = iniciar_preventivo(pc, tecnico, HOY)
-        self._fotos(orden)
-        for i in range(5):
-            Repuesto.objects.create(orden=orden, nombre=_texto(150, f"Repuesto {i + 1} de referencia larga del fabricante con código. "), cantidad=10)
-        fallas = {item.descripcion: _texto(150) for item in orden.checklist_items.all()}
-        orden = _cerrar_preventivo(orden, tecnico, fallas=fallas, observaciones=_texto(600),
-                                   estado_final="operativo_obs")
-        self.assertEqual(len(fallas), 12)
-
+        orden = self._orden_maxima(tecnico, {"nombre": "María Alejandra Castañeda Villarreal",
+                                             "cargo": "Auxiliar contable de cuentas por pagar"})
         pdf, escala = renderizar_acta(orden, self.request)
         _guardar_muestra("acta_maxima.pdf", pdf)
         self.assertTrue(pdf.startswith(b"%PDF"))
-        html = render_to_string("mantenimiento/acta_pdf.html", contexto_acta(orden, self.request, escala=escala))
-        documento = weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).render()
-        self.assertEqual(len(documento.pages), 1, f"escala {escala}")
+        self._comprobar_firmas_al_pie(self._documento(orden, escala))
+
+    def test_nombres_de_dos_renglones_no_tapan_las_observaciones(self):
+        # Nombre y cargo se parten en dos renglones en las dos firmas: el bloque
+        # fijo de firmas crece hacia arriba y no debe pisar el contenido.
+        tecnico = crear_usuario(first_name="María Fernanda de los Ángeles", last_name="Restrepo Villalobos de la Torre",
+                                cargo="Coordinadora de Infraestructura Tecnológica y Seguridad de la Información")
+        orden = self._orden_maxima(tecnico, {
+            "nombre": "María Alejandra del Socorro Castañeda Villarreal de Montoya",
+            "cargo": "Auxiliar contable de cuentas por pagar y conciliaciones bancarias",
+        })
+        _pdf, escala = renderizar_acta(orden, self.request)
+        self._comprobar_firmas_al_pie(self._documento(orden, escala))
+        # En escala 0 (2 páginas con este contenido) los renglones dobles sí se ven:
+        # el bloque sigue cabiendo en la reserva.
+        documento = self._documento(orden, 0)
+        pagina = documento.pages[-1]
+        reserva_arriba, reserva_abajo = _extremos_mm(pagina, "reserva")
+        firmas_arriba, _ = _extremos_mm(pagina, "firmas")
+        _, pie_abajo = _extremos_mm(pagina, "pie")
+        self.assertLessEqual(pie_abajo - firmas_arriba, reserva_abajo - reserva_arriba)
