@@ -40,6 +40,11 @@ CRITICIDADES = [
 # sugerencia: la sección de un punto es texto libre.
 SECCIONES_SUGERIDAS = ["Hardware", "Limpieza", "Mantenimiento lógico"]
 
+# Formato de una orden: 1 es el de antes del rediseño (checklist fijo y estado
+# de partes); 2 es el actual (checklist copiado de la plantilla).
+FORMATO_ANTERIOR = 1
+FORMATO_ACTUAL = 2
+
 
 class PlanMantenimiento(models.Model):
     tipo_dispositivo = models.CharField(
@@ -125,6 +130,12 @@ class OrdenMantenimiento(models.Model):
         blank=True,
         verbose_name="Software instalado (snapshot OCS)",
     )
+    en_garantia = models.BooleanField(
+        default=False,
+        verbose_name="En garantía",
+        help_text="Preventivo hecho mientras el equipo estaba en garantía: no cuenta como preventivo completo.",
+    )
+    formato = models.PositiveSmallIntegerField(default=FORMATO_ACTUAL, verbose_name="Formato")
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -269,3 +280,26 @@ class PuntoPlantilla(models.Model):
 
     def __str__(self):
         return f"{self.seccion} · {self.descripcion}"
+
+
+class ProgramacionMantenimiento(models.Model):
+    """Fecha en que se acordó hacerle el preventivo a un equipo.
+
+    Es opcional: sin fila (o con la fecha vacía) el equipo se rige por la regla
+    de "le toca desde" de ``mantenimiento.programacion``.
+    """
+
+    activo = models.OneToOneField(
+        "inventario.Activo",
+        on_delete=models.CASCADE,
+        related_name="programacion_mantenimiento",
+    )
+    fecha_programada = models.DateField(null=True, blank=True, verbose_name="Fecha programada")
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Programación de mantenimiento"
+        verbose_name_plural = "Programaciones de mantenimiento"
+
+    def __str__(self):
+        return f"Programación · {self.activo.serial}"
