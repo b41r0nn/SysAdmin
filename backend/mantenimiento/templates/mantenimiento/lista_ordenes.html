@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Mantenimiento — Ordenes{% endblock %}
+{% block title %}Mantenimiento — Historial{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Ordenes de mantenimiento</h1>
+    <h1 class="page-title">Historial</h1>
     <p class="page-subtitle">Seguimiento operativo y costos.</p>
   </div>
   <div class="d-flex gap-2">
-    <a href="{% url 'mantenimiento:lista_planes' %}" class="btn btn-outline-secondary">
-      <i class="bi bi-calendar2-week"></i> Planes
+    <a href="{% url 'mantenimiento:inicio' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Pantalla principal
     </a>
     <a href="{% url 'mantenimiento:reporte_mantenimientos_pdf' %}" class="btn btn-outline-secondary" target="_blank">
       <i class="bi bi-file-earmark-pdf"></i> Reporte mantenimientos
@@ -82,6 +82,7 @@
         hx-trigger="input delay:350ms from:#q_orden, change from:#tipo_orden, change from:#estado_orden, change from:#prioridad_orden"
         hx-push-url="true"
         class="row g-2 align-items-end">
+    {% if fallas %}<input type="hidden" name="fallas" value="1">{% endif %}
 
     <div class="col-12 col-md-4">
       <label class="form-label">Buscar</label>

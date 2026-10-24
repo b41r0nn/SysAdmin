@@ -41,3 +41,7 @@ from .reportes import (  # noqa: F401
     reporte_mantenimientos_pdf,
     reportar,
 )
+from .tablero import (  # noqa: F401
+    inicio,
+    programar,
+)
