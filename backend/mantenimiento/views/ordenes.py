@@ -50,7 +50,10 @@ def lista_ordenes(request):
     estado = request.GET.get("estado", "").strip()
     prioridad = request.GET.get("prioridad", "").strip()
     q = request.GET.get("q", "").strip()
+    fallas = request.GET.get("fallas") == "1"
 
+    if fallas:
+        qs = qs.filter(tipo="correctivo", estado__in=["reportada", "abierta", "en_proceso"])
     if tipo:
         qs = qs.filter(tipo=tipo)
     if estado:
@@ -78,6 +81,7 @@ def lista_ordenes(request):
         "filtro_estado": estado,
         "filtro_prioridad": prioridad,
         "filtro_q": q,
+        "fallas": fallas,
         "stats": stats,
         "tipos": TIPOS_MANTENIMIENTO,
         "estados": ESTADOS_ORDEN,

@@ -1,0 +1,58 @@
+{% load permisos_extras %}
+{% tiene_permiso 'mantenimiento' 'escritura' as puede_escribir %}
+<tr>
+  <td>
+    <div class="fw-semibold">{{ s.activo.get_tipo_dispositivo_display }} {{ s.activo.marca }} {{ s.activo.modelo }}</div>
+    <div class="text-muted small">{{ s.activo.serial }}{% if s.activo.numero_interno %} · N° {{ s.activo.numero_interno }}{% endif %}</div>
+  </td>
+  <td>
+    {% if responsable %}
+      {{ responsable.nombre_completo }}
+      {% if responsable.area %}<div class="text-muted small">{{ responsable.area }}</div>{% endif %}
+    {% else %}
+      <span class="text-muted">No asignado</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if s.ultimo %}
+      {{ s.ultimo.fecha_cierre|date:"d/m/Y"|default:"—" }}
+      <div class="text-muted small">{{ s.ultimo.get_tipo_display }}</div>
+    {% else %}
+      <span class="text-muted">Nunca</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if s.estado == "le_toca" %}
+      <span class="badge rounded-pill text-bg-warning">Le toca desde {{ s.le_toca_desde|date:"d/m/Y" }}</span>
+    {% elif s.estado == "programado" %}
+      <span class="badge rounded-pill text-bg-primary">Programado {{ s.fecha_programada|date:"d/m/Y" }}</span>
+      <div class="text-muted small mt-1">Le toca desde {{ s.le_toca_desde|date:"d/m/Y" }}</div>
+    {% elif s.estado == "en_garantia" %}
+      <span class="badge rounded-pill" style="background:#ede9fe;color:#5b21b6;">En garantía hasta {{ s.vencimiento_garantia|date:"d/m/Y" }}</span>
+    {% else %}
+      <span class="badge rounded-pill text-bg-light border">Le toca el {{ s.le_toca_desde|date:"d/m/Y" }}</span>
+    {% endif %}
+  </td>
+  {% if puede_escribir %}
+  <td>
+    <div class="d-flex gap-2 justify-content-end align-items-start flex-wrap">
+      <details>
+        <summary class="btn btn-sm btn-outline-secondary">{% if s.fecha_programada %}Cambiar fecha{% else %}Programar{% endif %}</summary>
+        <form method="post" action="{% url 'mantenimiento:programar' s.activo.pk %}"
+              hx-post="{% url 'mantenimiento:programar' s.activo.pk %}" hx-target="#programacion" hx-swap="innerHTML"
+              class="d-flex gap-1 align-items-center mt-2">
+          {% csrf_token %}
+          <input type="hidden" name="tab" value="{{ tab }}">
+          <input type="date" name="fecha_programada" class="form-control form-control-sm" value="{{ s.fecha_programada|date:'Y-m-d' }}" aria-label="Fecha">
+          <button type="submit" class="btn btn-sm btn-primary">Guardar</button>
+        </form>
+      </details>
+      <form method="post" action="{% url 'mantenimiento:iniciar_preventivo' s.activo.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="volver" value="{% url 'mantenimiento:inicio' %}?tab={{ tab }}">
+        <button type="submit" class="btn btn-sm btn-primary">Iniciar</button>
+      </form>
+    </div>
+  </td>
+  {% endif %}
+</tr>

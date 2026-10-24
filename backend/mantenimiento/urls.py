@@ -5,7 +5,9 @@ from . import views
 app_name = "mantenimiento"
 
 urlpatterns = [
-    path("", views.lista_ordenes, name="lista_ordenes"),
+    path("", views.inicio, name="inicio"),
+    path("historial/", views.lista_ordenes, name="lista_ordenes"),
+    path("programar/<int:activo_pk>/", views.programar, name="programar"),
     path("planes/", views.lista_planes, name="lista_planes"),
     path("calendario/", views.calendario, name="calendario"),
     path("calendario/eventos/", views.calendario_eventos, name="calendario_eventos"),

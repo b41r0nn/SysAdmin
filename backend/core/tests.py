@@ -383,7 +383,7 @@ class SmokeVistasTests(TestCase):
         "reports:index", "reports:activos_por_usuario", "reports:inventario_excel",
         "reports:movimientos_excel", "reports:usuarios_excel", "reports:costos_excel",
         "reports:mantenimiento_excel",
-        "mantenimiento:lista_ordenes", "mantenimiento:lista_planes", "mantenimiento:calendario",
+        "mantenimiento:inicio", "mantenimiento:lista_ordenes", "mantenimiento:lista_planes", "mantenimiento:calendario",
         "mantenimiento:calendario_eventos", "mantenimiento:reportar", "mantenimiento:crear_plan",
         "mantenimiento:crear_orden", "mantenimiento:nuevo", "mantenimiento:hoja_de_vida_buscar",
         "passwords:index", "passwords:vault_crear", "passwords:importar_plantilla",

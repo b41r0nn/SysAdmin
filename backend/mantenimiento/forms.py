@@ -292,3 +292,13 @@ class NuevoMantenimientoForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["activo"].queryset = Activo.objects.exclude(estado="dado_de_baja").order_by("serial")
+
+
+class ProgramarForm(forms.Form):
+    """Fecha en que se acordó hacerle el preventivo a un equipo (vacía: sin fecha)."""
+
+    fecha_programada = forms.DateField(
+        required=False,
+        error_messages={"invalid": "Fecha no válida."},
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}, format="%Y-%m-%d"),
+    )
