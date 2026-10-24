@@ -26,6 +26,7 @@ urlpatterns = [
     path("ordenes/<int:pk>/", views.detalle_orden, name="detalle_orden"),
     path("ordenes/<int:pk>/editar/", views.editar_orden, name="editar_orden"),
     path("ordenes/<int:pk>/cerrar/", views.cerrar_orden, name="cerrar_orden"),
+    path("ordenes/<int:pk>/reabrir/", views.reabrir_orden, name="reabrir_orden"),
     path("ordenes/<int:pk>/eliminar/", views.eliminar_orden, name="eliminar_orden"),
     path("ordenes/<int:pk>/pdf/", views.orden_pdf, name="orden_pdf"),
     path("ordenes/<int:pk>/fotos/nueva/", views.crear_foto, name="crear_foto"),

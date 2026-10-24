@@ -43,6 +43,7 @@ MEDIA_PERMISOS = (
     ("inventario/fotos/", "inventario"),
     ("inventario/actas/", "inventario"),
     ("mantenimiento/fotos/", "mantenimiento"),
+    ("mantenimiento/actas/", "mantenimiento"),
     ("documentos/", "documentos"),
 )
 

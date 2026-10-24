@@ -1,7 +1,8 @@
-"""Ejecución de un preventivo: alta del mantenimiento y marcado del checklist."""
+"""Ejecución de un mantenimiento: alta, marcado del checklist, cierre y reapertura."""
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -11,8 +12,8 @@ from accounts.permisos import requiere_permiso
 from inventario.models import Activo
 
 from .. import ejecucion as servicio
-from ..forms import NuevoMantenimientoForm
-from ..models import ChecklistItem
+from ..forms import CerrarOrdenForm, NuevoMantenimientoForm
+from ..models import FORMATO_ACTUAL, ChecklistItem, OrdenMantenimiento
 
 
 def contexto_checklist(orden, error=None, error_item=None, obs_tecleada=""):
@@ -97,3 +98,59 @@ def marcar_punto(request, pk):
     if error:
         messages.error(request, error)
     return redirect("mantenimiento:detalle_orden", pk=item.orden_id)
+
+
+@requiere_permiso("mantenimiento", "escritura")
+def cerrar_orden(request, pk):
+    orden = get_object_or_404(OrdenMantenimiento.objects.select_related("activo"), pk=pk)
+    if orden.estado == "cerrada":
+        messages.warning(request, "El mantenimiento ya está cerrado.")
+        return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+
+    # Las cuentas sin nombre lo dan una sola vez, al cerrar: el técnico firma el acta.
+    pedir_datos_tecnico = not request.user.get_full_name().strip()
+    if request.method == "POST":
+        form = CerrarOrdenForm(request.POST, orden=orden, pedir_datos_tecnico=pedir_datos_tecnico)
+        if form.is_valid():
+            try:
+                # Si no se puede cerrar, tampoco quedan guardados el nombre y el cargo.
+                with transaction.atomic():
+                    if pedir_datos_tecnico:
+                        cuenta = request.user
+                        cuenta.first_name = form.cleaned_data["first_name"]
+                        cuenta.last_name = form.cleaned_data["last_name"]
+                        cuenta.cargo = form.cleaned_data["cargo"]
+                        cuenta.save(update_fields=["first_name", "last_name", "cargo"])
+                    servicio.cerrar_orden(orden, request.user, **form.datos_cierre())
+            except ValidationError as e:
+                if pedir_datos_tecnico:
+                    request.user.refresh_from_db(fields=["first_name", "last_name", "cargo"])
+                for mensaje in e.messages:
+                    form.add_error(None, mensaje)
+            else:
+                messages.success(request, "Mantenimiento cerrado.")
+                return redirect("mantenimiento:detalle_orden", pk=orden.pk)
+    else:
+        form = CerrarOrdenForm(orden=orden, pedir_datos_tecnico=pedir_datos_tecnico)
+
+    contexto = {"orden": orden, "form": form, "pedir_datos_tecnico": pedir_datos_tecnico}
+    if orden.tipo == "preventivo" and orden.formato == FORMATO_ACTUAL:
+        items = list(orden.checklist_items.all())
+        contexto |= {
+            "checklist_total": len(items),
+            "checklist_marcados": sum(1 for i in items if i.resultado),
+        }
+    return render(request, "mantenimiento/cerrar.html", contexto)
+
+
+@requiere_permiso("mantenimiento", "escritura")
+@require_POST
+def reabrir_orden(request, pk):
+    orden = get_object_or_404(OrdenMantenimiento, pk=pk)
+    try:
+        servicio.reabrir_orden(orden)
+    except ValidationError as e:
+        messages.error(request, _mensaje(e))
+    else:
+        messages.success(request, "Mantenimiento reabierto. Ciérralo de nuevo cuando termines.")
+    return redirect("mantenimiento:detalle_orden", pk=orden.pk)

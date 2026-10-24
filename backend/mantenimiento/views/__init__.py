@@ -1,6 +1,5 @@
 """Vistas de mantenimiento, agrupadas por tema en submódulos."""
 from .ordenes import (  # noqa: F401
-    cerrar_orden,
     crear_foto,
     crear_orden,
     crear_repuesto,
@@ -21,9 +20,11 @@ from .planes import (  # noqa: F401
     toggle_plan,
 )
 from .ejecucion import (  # noqa: F401
+    cerrar_orden,
     iniciar_preventivo,
     marcar_punto,
     nuevo,
+    reabrir_orden,
 )
 from .legado import (  # noqa: F401
     crear_item_checklist,

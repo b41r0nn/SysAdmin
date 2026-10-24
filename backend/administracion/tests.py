@@ -152,6 +152,45 @@ class AdministracionCuentasTests(TestCase):
         self.assertTrue(CustomUser.objects.filter(username="nuevo_cta").exists())
         self.assertContains(resp, "Contraseña temporal")
 
+    def test_crear_cuenta_con_nombre_y_cargo(self):
+        resp = self.client.get(reverse("administracion:crear_cuenta"))
+        self.assertContains(resp, 'name="first_name"')
+        self.assertContains(resp, 'name="cargo"')
+        self.client.post(
+            reverse("administracion:crear_cuenta"),
+            {
+                "username": "ana_cta",
+                "first_name": "Ana",
+                "last_name": "Técnica Ruiz",
+                "cargo": "Analista de Sistemas",
+                "email": "ana@example.com",
+                "rol": "tecnico",
+            },
+        )
+        cuenta = CustomUser.objects.get(username="ana_cta")
+        self.assertEqual(
+            (cuenta.first_name, cuenta.last_name, cuenta.cargo),
+            ("Ana", "Técnica Ruiz", "Analista de Sistemas"),
+        )
+
+    def test_editar_cuenta_cambia_nombre_cargo_y_rol(self):
+        cuenta = crear_usuario("tecnico", "editar_cta")
+        resp = self.client.get(reverse("administracion:cambiar_rol", args=[cuenta.pk]))
+        self.assertContains(resp, "Editar cuenta")
+        self.assertContains(resp, "Nombres")
+        self.assertContains(resp, "Apellidos")
+        self.assertContains(resp, "Cargo")
+        resp = self.client.post(
+            reverse("administracion:cambiar_rol", args=[cuenta.pk]),
+            {"first_name": "Luis", "last_name": "Pérez", "cargo": "Coordinador de TI", "rol": "admin"},
+        )
+        self.assertRedirects(resp, reverse("administracion:cuentas"))
+        cuenta.refresh_from_db()
+        self.assertEqual(
+            (cuenta.first_name, cuenta.last_name, cuenta.cargo, cuenta.rol),
+            ("Luis", "Pérez", "Coordinador de TI", "admin"),
+        )
+
     def test_staff_y_superuser_solo_para_superadmin(self):
         self.client.post(
             reverse("administracion:crear_cuenta"),
