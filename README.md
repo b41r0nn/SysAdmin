@@ -61,6 +61,8 @@
 
 **Producción** (2026-10-22): 26 activos · Django 5.2 LTS · contenedor sin root · **469 tests en verde** (SQLite y PostgreSQL). Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
 
+**En la rama `feat/mantenimiento-v2`** (v1.13, pendiente de despliegue): mantenimiento rediseñado + importación de contraseñas desde Excel · **679 tests en verde** (4 omitidas en Windows: 3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL).
+
 ---
 
 ## 🏗️ Stack Técnico
@@ -424,11 +426,11 @@ Programación del preventivo por equipo, checklists por tipo, correctivos y acta
 - **Cerrar y reabrir**: cerrar exige todos los puntos con resultado, las fallas con observación y el estado final; el técnico es la cuenta que cierra (si no tiene nombre completo y cargo, el formulario los pide una vez y los guarda). La fecha de cierre puede ser pasada, nunca futura. Una orden cerrada no se edita; con permiso de escritura se puede **Reabrir** (descongela el acta)
 - **Correctivos**: portal "Reportar falla", escalamiento desde Soporte o creación a mano, para cualquier tipo de equipo. Sin checklist: llevan Diagnóstico y Solución (600 caracteres cada uno), fotos, repuestos y estado final
 - **Acta de mantenimiento (PDF)**: una sola hoja carta (fuente DejaVu Sans) con encabezado (código y versión desde Administración › Configuración), datos del equipo, QR a la hoja de vida, responsable de la asignación activa, checklist en dos columnas con resumen, hasta 3 fotos, repuestos, cuadro de observaciones y firmas. Se genera siempre desde los datos congelados al cerrar (`datos_acta`), así no cambia aunque después cambie el activo, la asignación o la cuenta
-- **Acta firmada**: se imprime, se firma a mano y se sube en el detalle de la orden (PDF, JPG o PNG, hasta 10 MB). La campana avisa de las actas de mantenimiento cerradas sin firmar. Si se reabre la orden, el acta firmada se conserva marcada "de una versión anterior"
+- **Acta firmada**: se imprime, se firma a mano y se sube en el detalle de la orden (PDF, JPG o PNG, hasta 10 MB). La campana avisa de las actas de mantenimiento cerradas sin firmar, y vuelve a avisar si la orden se reabrió después de subirla. Si se reabre la orden, el acta firmada se conserva marcada "de una versión anterior"
 - **Órdenes de formato anterior**: las creadas antes de v1.13 se ven en solo lectura (checklist viejo, estado de partes, PDF anterior)
 - **Avisos, calendario, dashboard y Excel con la programación**: la campana avisa "Le toca mantenimiento" (una vez por ciclo) y "Mañana: mantenimiento de ..."; el calendario muestra órdenes y equipos programados; el dashboard muestra "Les toca mantenimiento"; el Excel de mantenimiento trae En garantía, Estado final y Técnico
 - **Planes de mantenimiento por categoría: retirados** (modelo, pantallas, rutas, avisos y eventos de calendario)
-- Hoja de vida y reportes PDF con el resumen del checklist, las fallas, el estado final y los enlaces al acta y al acta firmada
+- **Hoja de vida y reportes**: la hoja de vida (pantalla y PDF) muestra por orden el resumen del checklist ("N bien · N con falla · N no aplica"), las fallas con su observación, En garantía, el estado final y los enlaces al acta y al acta firmada (en el PDF, enlaces absolutos armados con `QR_BASE_URL`). El PDF de reportes de mantenimiento ganó las columnas "En garantía" y "Estado final"
 
 **Acceso:** `https://192.168.1.250:6060/mantenimiento/`
 
@@ -596,7 +598,7 @@ BD: PostgreSQL 15 en contenedor
 - ✅ Órdenes anteriores en solo lectura (formato 1)
 - ✅ Incluye la **importación de contraseñas desde Excel** (Etapa A, ver entrada del 2026-10-23)
 - ✅ Migraciones `mantenimiento/0009` a `0015`, `accounts/0003_customuser_cargo`, `administracion/0004_acta_mantenimiento`
-- ✅ Suite **511 OK** al cierre de la rama de contraseñas; el total de v1.13 se actualiza tras la suite final
+- ✅ Suite **679 OK**: en Windows/SQLite con 4 omitidas (3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL) y en Linux con WeasyPrint real con 1 omitida (la de PostgreSQL). Las pruebas del acta confirman con WeasyPrint real que cabe en una sola hoja carta
 
 ### 2026-10-23 — Importación de contraseñas desde Excel (rama `feat/importar-contrasenas`, pendiente de despliegue)
 

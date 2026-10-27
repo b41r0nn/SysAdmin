@@ -41,6 +41,12 @@
       border-collapse: collapse;
       margin-top: 3mm;
     }
+    /* Una fila no se parte entre hojas: con 10 columnas el serial y el modelo
+       ocupan dos renglones y la fila quedaba a medias en cada página. */
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
     th {
       background: #0156a6;
       color: #fff;
