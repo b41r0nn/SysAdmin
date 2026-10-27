@@ -38,6 +38,17 @@
 - **Imports dentro de `inventario/views/<módulo>.py`**: los modelos y forms de la app se importan con `..` (`from ..models import ...`), no con `.`. `core.tests.SmokeVistasTests` abre las páginas de cada módulo; agregar ahí las rutas nuevas.
 - **Dependencias**: si `pip-audit` falla en CI por un CVE nuevo, subir la versión, correr la suite y probar QR/PDF/Excel con la imagen real en un contenedor aislado (`--network none`) antes de desplegar.
 
+## Mantenimiento v2 (2026-10, rama `feat/mantenimiento-v2`)
+
+- **El acta siempre se genera desde `datos_acta`** (la foto congelada al cerrar la orden), nunca desde el activo, la asignación o la cuenta actuales. No se guarda copia del PDF.
+- **Sin rojos en la programación**: "Le toca desde dd/mm/aaaa" va en ámbar (`text-bg-warning`); la pantalla principal no usa `bg-danger` ni la palabra "vencido".
+- **El acta usa DejaVu Sans y una sola hoja carta** (`@page { size: letter }`, `font-family: "DejaVu Sans", sans-serif`). Es la única fuente del contenedor de producción y CI instala la misma. `ActaUnaHojaTests` corre con WeasyPrint real solo en CI (en Windows se simula).
+- **Pruebas**: los ayudantes van en `mantenimiento/ayudas_pruebas.py` (no se descubre como prueba); las pruebas nuevas, en archivos `mantenimiento/test_*.py`.
+- **Vistas**: toda vista nueva se reexporta en `mantenimiento/views/__init__.py` con `# noqa: F401` (`urls.py` usa `views.<nombre>`). Los módulos de vistas importan los servicios como módulo (`from .. import ejecucion as servicio`) y llaman `servicio.cerrar_orden(...)`, porque hay vistas con el mismo nombre que la función de servicio.
+- **Mocks en tests**: parchear en `mantenimiento.views.<submódulo>.<nombre>`.
+- **Técnico**: el técnico es `OrdenMantenimiento.tecnico` (la cuenta que cierra). `tecnico_asignado` (texto libre) se conserva solo por las órdenes viejas y el escalamiento de Soporte; para mostrar, `orden.tecnico.get_full_name()` y, si no hay, `orden.tecnico_asignado`.
+- **Órdenes de formato 1** (`formato=1`): solo lectura; conservan `estado_partes` y el PDF anterior.
+
 ## Estado actual (2026-09-29, producción + OCS + inventario de software)
 
 - **Servidor**: `sistemas@192.168.1.250` (Ubuntu Server 22.04), proyecto en `/opt/sysadmin/app` (Docker Compose).

@@ -1767,6 +1767,38 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
+## MANTENIMIENTO V2 · v1.13 (rama `feat/mantenimiento-v2`, pendiente de despliegue)
+
+Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.md` (Parte B). Incluye también la importación de contraseñas desde Excel (Etapa A, ver README).
+
+**Modelos nuevos / cambiados (`mantenimiento`)**
+- `PlantillaChecklist` (una por `tipo_dispositivo`, `frecuencia_meses`) y `PuntoPlantilla` (sección, descripción, posición, `aplica_en_garantia`, `activo`).
+- `ProgramacionMantenimiento` (OneToOne con `Activo`, `fecha_programada`).
+- `OrdenMantenimiento`: `en_garantia`, `formato` (1 = anterior, 2 = actual), `tecnico` (FK a la cuenta que cierra), `estado_final`, `observaciones`, `datos_acta` (JSON congelado al cerrar), `acta_firmada` y `acta_firmada_desactualizada`.
+- `ChecklistItem`: `seccion`, `resultado` (Bien / Con falla / No aplica) y `observacion`. `FotoMantenimiento.en_acta`.
+- `accounts.CustomUser.cargo`; `administracion.ConfiguracionSistema.acta_mant_codigo` y `acta_mant_version`.
+- Lógica: `programacion.py` (situación y tablero), `ejecucion.py` (iniciar, marcar, cerrar, reabrir, `datos_para_acta`), `acta.py` (PDF de una hoja). Vistas en el paquete `mantenimiento/views/`.
+
+**Migraciones**
+- `mantenimiento/0009_plantillachecklist_puntoplantilla`, `0010_plantillas_iniciales` (carga portátil y escritorio), `0011_programacion_y_formato` (marca las órdenes existentes como formato 1), `0012_checklistitem_resultado`, `0013_cierre_y_acta`, `0014_foto_en_acta`.
+- `mantenimiento/0015` (retirar planes): borra `PlanMantenimiento`, `OrdenMantenimiento.plan`, `ChecklistItem.plan` y `ChecklistItem.completado` (según brief de la Tarea 11; el nombre del archivo lo genera `makemigrations`). Producción tiene 1 plan sin uso, que se elimina.
+- `accounts/0003_customuser_cargo`, `administracion/0004_acta_mantenimiento`.
+
+**Despliegue** (seguir `GUIA_DEPLOY_PASO_A_PASO.md` §8b)
+1. Backup previo: `pg_dump -Fc` de la base (guardar el `.dump` fuera de `/opt/sysadmin/app`).
+2. Subir el tar (`git archive` con LF, `chmod` del entrypoint).
+3. Borrar en el servidor lo que el tar no quita: `backend/mantenimiento/views.py` (ahora es el paquete `views/`), `backend/mantenimiento/views/planes.py`, `views/legado.py` y las plantillas `lista_planes.html`, `detalle_plan.html`, `form_plan.html`, `partials/tabla_planes.html`, `partials/checklist_orden.html`, `partials/estado_partes.html` y `form_orden.html`.
+4. `docker compose build django nginx` → `up -d` → `docker exec sysadmin_django python manage.py migrate`.
+
+**Verificación posterior**
+- La orden correctiva vieja (formato 1, cerrada, con `estado_partes`) abre en el detalle, la hoja de vida y su PDF.
+- Existen las 2 plantillas de checklist (portátil y escritorio) en `/mantenimiento/checklists/`.
+- Descargar el acta de una orden cerrada de prueba y comprobar que sale en una sola hoja.
+
+**Datos de producción al 2026-10-23**: 1 orden correctiva cerrada con `estado_partes` (queda en formato 1) y 1 plan sin uso (se elimina con 0015).
+
+---
+
 ## CORRECCIONES POSTERIORES (2026-10-20 / 2026-10-22) · v1.12.1
 
 - **Lista de activos y catálogo con error 500** (`31903ce`): al pasar `inventario/views.py` a paquete, los imports dentro de funciones quedaron como `from .models` (deben ser `from ..models`). `core.tests.SmokeVistasTests` abre con superadmin las páginas de lectura de cada módulo para detectar esto.
