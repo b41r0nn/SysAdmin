@@ -130,7 +130,7 @@ def hoja_de_vida_pdf_bytes(activo):
     ordenes = (
         OrdenMantenimiento.objects.filter(activo=activo)
         .select_related("activo", "tecnico")
-        .prefetch_related("fotos")
+        .prefetch_related("fotos", "checklist_items")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
     ultima = ordenes.first()
@@ -156,9 +156,12 @@ def hoja_de_vida_pdf_bytes(activo):
                 for s in software_ultimo
             ]
 
+    from .acta import detalle_formato_nuevo  # import local: acta importa services
+
     ordenes_detalle = [
         {
             "orden": o,
+            "nuevo": detalle_formato_nuevo(o),
             "acciones": _acciones_marcadas(o),
             "estado_partes": _estado_partes_etiquetado(activo, o),
             "fotos": [

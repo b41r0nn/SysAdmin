@@ -17,6 +17,7 @@ from administracion.models import ConfiguracionSistema
 from inventario.models import Activo
 from notificaciones.services import aviso_usuario, encolar_email
 
+from ..acta import detalle_formato_nuevo
 from ..constants import PARTES_POR_TIPO
 from ..forms import ReporteFallaForm
 from ..models import FotoMantenimiento, OrdenMantenimiento, ProgramacionMantenimiento
@@ -137,9 +138,13 @@ def hoja_de_vida(request, activo_pk):
     ordenes = (
         OrdenMantenimiento.objects.filter(activo=activo)
         .select_related("tecnico")
+        .prefetch_related("checklist_items")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
-    ultima = ordenes.first()
+    ordenes = list(ordenes)
+    for orden in ordenes:
+        orden.nuevo = detalle_formato_nuevo(orden)
+    ultima = ordenes[0] if ordenes else None
     fotos = FotoMantenimiento.objects.filter(orden__activo=activo).order_by("-fecha_creacion")
     equipo_ocs = activo.equipo_ocs.first() if activo.equipo_ocs.exists() else None
     software_ultimo = []

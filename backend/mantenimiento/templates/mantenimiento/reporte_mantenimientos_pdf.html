@@ -45,13 +45,13 @@
       background: #0156a6;
       color: #fff;
       font-size: 9pt;
-      padding: 2mm 2.5mm;
+      padding: 2mm 1.8mm;
       text-align: left;
     }
     td {
       border: .5px solid #cbd5e1;
-      padding: 1.8mm 2.5mm;
-      font-size: 8.8pt;
+      padding: 1.6mm 1.8mm;
+      font-size: 8.2pt;
     }
     tr:nth-child(even) td { background: #f8fafc; }
     .mono { font-family: 'Courier New', Courier, monospace; font-size: 8.5pt; }
@@ -95,6 +95,8 @@
         <th>Tipo</th>
         <th>Técnico</th>
         <th>Costo</th>
+        <th>En garantía</th>
+        <th>Estado final</th>
         <th>Estado</th>
       </tr>
     </thead>
@@ -108,6 +110,8 @@
         <td>{{ o.get_tipo_display }}</td>
         <td>{% firstof o.tecnico.get_full_name o.tecnico_asignado "—" %}</td>
         <td>${{ o.costo_real|floatformat:2|default:"0.00" }}</td>
+        <td>{% if o.en_garantia %}Sí{% else %}No{% endif %}</td>
+        <td>{% if o.estado_final %}{{ o.get_estado_final_display }}{% else %}—{% endif %}</td>
         <td>
           <span class="estado"
                 {% if o.estado == "cerrada" %}style="color:#16a34a;"
@@ -119,7 +123,7 @@
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="8" style="text-align:center;color:#94a3b8;">Sin órdenes para los filtros seleccionados.</td></tr>
+      <tr><td colspan="10" style="text-align:center;color:#94a3b8;">Sin órdenes para los filtros seleccionados.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -13,7 +13,7 @@ from administracion.models import ConfiguracionSistema
 from inventario.views.qr import _qr_data_uri
 
 from . import services
-from .models import MAX_FOTOS_ACTA
+from .models import FORMATO_ACTUAL, MAX_FOTOS_ACTA
 
 PLANTILLA = "mantenimiento/acta_pdf.html"
 # 0 es la letra normal; cada escala achica la letra y las fotos (ver la plantilla).
@@ -72,13 +72,18 @@ def columnas_checklist(items):
     return izquierda, derecha
 
 
-def observaciones_acta(orden):
-    """Líneas del cuadro de observaciones: las fallas del checklist y después las generales."""
-    lineas = [
+def fallas_acta(orden):
+    """Una línea por punto del checklist que falló: "descripción (falla): observación"."""
+    return [
         f"{item.descripcion} (falla): {item.observacion}"
         for item in orden.checklist_items.all()
         if item.resultado == "falla"
     ]
+
+
+def observaciones_acta(orden):
+    """Líneas del cuadro de observaciones: las fallas del checklist y después las generales."""
+    lineas = fallas_acta(orden)
     if orden.observaciones.strip():
         lineas.append(orden.observaciones.strip())
     return lineas
@@ -91,6 +96,20 @@ def resumen_checklist(items):
         "bien": resultados.count("bien"),
         "falla": resultados.count("falla"),
         "na": resultados.count("na"),
+    }
+
+
+def detalle_formato_nuevo(orden):
+    """Resumen del checklist y fallas de una orden del formato nuevo; ``None`` si es del anterior.
+
+    ``acta`` es verdadero solo cuando la vista del acta la serviría (cerrada y con datos congelados).
+    """
+    if orden.formato != FORMATO_ACTUAL:
+        return None
+    return {
+        "resumen": resumen_checklist(list(orden.checklist_items.all())),
+        "fallas": fallas_acta(orden),
+        "acta": orden.estado == "cerrada" and bool(orden.datos_acta),
     }
 
 
