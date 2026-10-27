@@ -16,14 +16,6 @@ from .actas import (  # noqa: F401
     acta_pdf,
     subir_acta_firmada,
 )
-from .planes import (  # noqa: F401
-    crear_plan,
-    detalle_plan,
-    editar_plan,
-    eliminar_plan,
-    lista_planes,
-    toggle_plan,
-)
 from .ejecucion import (  # noqa: F401
     cerrar_orden,
     iniciar_preventivo,
@@ -35,11 +27,6 @@ from .plantillas import (  # noqa: F401
     crear_plantilla,
     editar_plantilla,
     lista_plantillas,
-)
-from .legado import (  # noqa: F401
-    crear_item_checklist,
-    estado_partes_partial,
-    toggle_checklist,
 )
 from .reportes import (  # noqa: F401
     calendario,

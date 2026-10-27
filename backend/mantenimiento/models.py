@@ -11,11 +11,6 @@ TIPOS_MANTENIMIENTO = [
     ("correctivo", "Correctivo"),
 ]
 
-ESTADOS_PLAN = [
-    ("activo", "Activo"),
-    ("pausado", "Pausado"),
-]
-
 ESTADOS_ORDEN = [
     ("abierta", "Abierta"),
     ("en_proceso", "En proceso"),
@@ -25,12 +20,6 @@ ESTADOS_ORDEN = [
 ]
 
 PRIORIDADES = [
-    ("baja", "Baja"),
-    ("media", "Media"),
-    ("alta", "Alta"),
-]
-
-CRITICIDADES = [
     ("baja", "Baja"),
     ("media", "Media"),
     ("alta", "Alta"),
@@ -75,39 +64,7 @@ def normalizar_saltos(texto):
 MAX_FOTOS_ACTA = 3
 
 
-class PlanMantenimiento(models.Model):
-    tipo_dispositivo = models.CharField(
-        max_length=50,
-        verbose_name="Categoría de equipo",
-    )
-    tipo = models.CharField(max_length=20, choices=TIPOS_MANTENIMIENTO)
-    criticidad = models.CharField(max_length=20, choices=CRITICIDADES, default="media")
-    frecuencia_dias = models.PositiveIntegerField(null=True, blank=True)
-    fecha_inicio = models.DateField(null=True, blank=True)
-    proxima_ejecucion = models.DateField(null=True, blank=True)
-    estado = models.CharField(max_length=20, choices=ESTADOS_PLAN, default="activo")
-    responsable = models.CharField(max_length=150, blank=True)
-    observaciones = models.TextField(blank=True)
-    fecha_creacion = models.DateTimeField(auto_now_add=True)
-    fecha_actualizacion = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-fecha_creacion"]
-        verbose_name = "Plan de Mantenimiento"
-        verbose_name_plural = "Planes de Mantenimiento"
-
-    def __str__(self):
-        return f"{self.get_tipo_display()} · {self.tipo_dispositivo}"
-
-
 class OrdenMantenimiento(models.Model):
-    plan = models.ForeignKey(
-        PlanMantenimiento,
-        on_delete=models.SET_NULL,
-        related_name="ordenes",
-        null=True,
-        blank=True,
-    )
     ticket = models.ForeignKey(
         "soporte.Ticket",
         on_delete=models.SET_NULL,
@@ -200,10 +157,6 @@ class OrdenMantenimiento(models.Model):
     def __str__(self):
         return f"{self.get_tipo_display()} · {self.activo.serial}"
 
-    @property
-    def checklist_items_completados(self):
-        return self.checklist_items.filter(completado=True).count()
-
 
 class Repuesto(models.Model):
     orden = models.ForeignKey(
@@ -228,14 +181,6 @@ class Repuesto(models.Model):
 
 
 class ChecklistItem(models.Model):
-    plan = models.ForeignKey(
-        PlanMantenimiento,
-        on_delete=models.CASCADE,
-        related_name="checklist_items",
-        null=True,
-        blank=True,
-        verbose_name="Plan (plantilla)",
-    )
     orden = models.ForeignKey(
         OrdenMantenimiento,
         on_delete=models.CASCADE,
@@ -246,7 +191,6 @@ class ChecklistItem(models.Model):
     )
     seccion = models.CharField(max_length=60, blank=True)
     descripcion = models.CharField(max_length=250)
-    completado = models.BooleanField(default=False)
     resultado = models.CharField(max_length=10, choices=RESULTADOS_PUNTO, blank=True)
     observacion = models.CharField(max_length=LIMITE_OBS_PUNTO, blank=True)
     posicion = models.PositiveIntegerField(default=0)

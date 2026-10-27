@@ -19,7 +19,7 @@ from notificaciones.services import aviso_usuario, encolar_email
 
 from ..constants import PARTES_POR_TIPO
 from ..forms import ReporteFallaForm
-from ..models import FotoMantenimiento, OrdenMantenimiento, PlanMantenimiento
+from ..models import FotoMantenimiento, OrdenMantenimiento, ProgramacionMantenimiento
 from ..services import hoja_de_vida_pdf_bytes, reporte_activos_pdf_bytes
 
 
@@ -39,11 +39,6 @@ def calendario_eventos(request):
         "cancelada": "#6c757d",
         "reportada": "#dc3545",
     }
-    colores_criticidad = {
-        "baja": "#198754",
-        "media": "#ffc107",
-        "alta": "#dc3545",
-    }
     eventos = []
 
     for orden in OrdenMantenimiento.objects.select_related("activo").all():
@@ -54,14 +49,16 @@ def calendario_eventos(request):
             "color": colores_estado.get(orden.estado, "#0d6efd"),
         })
 
-    for plan in PlanMantenimiento.objects.filter(
-        estado="activo", proxima_ejecucion__isnull=False
-    ):
+    # La fecha acordada de cada equipo; los que no tienen fecha no salen.
+    programadas = ProgramacionMantenimiento.objects.filter(
+        fecha_programada__isnull=False
+    ).select_related("activo")
+    for programada in programadas:
         eventos.append({
-            "title": f"Plan {plan.get_tipo_display()} · {plan.tipo_dispositivo}",
-            "start": plan.proxima_ejecucion.isoformat(),
-            "url": reverse("mantenimiento:detalle_plan", args=[plan.pk]),
-            "color": colores_criticidad.get(plan.criticidad, "#ffc107"),
+            "title": f"Programado · {programada.activo.serial}",
+            "start": programada.fecha_programada.isoformat(),
+            "url": reverse("mantenimiento:hoja_de_vida", args=[programada.activo_id]),
+            "color": "#0156a6",
         })
 
     return JsonResponse(eventos, safe=False)
@@ -112,7 +109,7 @@ def hoja_de_vida_buscar(request):
     """Índice de hoja de vida: búsqueda HTMX por serial/marca/modelo.
 
     Cuando la petición viene con HX-Request devuelve solo el partial de
-    resultados (mismo patrón que lista_planes/lista_ordenes).
+    resultados (mismo patrón que lista_ordenes).
     """
     q = request.GET.get("q", "").strip()
     resultados = []
@@ -139,7 +136,7 @@ def hoja_de_vida(request, activo_pk):
     activo = get_object_or_404(Activo, pk=activo_pk)
     ordenes = (
         OrdenMantenimiento.objects.filter(activo=activo)
-        .select_related("plan")
+        .select_related("tecnico")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
     ultima = ordenes.first()
@@ -243,7 +240,7 @@ def reporte_mantenimientos_pdf(request):
     fin = request.GET.get("fin", "").strip()
 
     qs = (
-        OrdenMantenimiento.objects.select_related("activo")
+        OrdenMantenimiento.objects.select_related("activo", "tecnico")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
     if tipo:

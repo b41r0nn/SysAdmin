@@ -267,7 +267,7 @@
         <td class="etiqueta">Prioridad</td>
         <td>{{ item.orden.get_prioridad_display }}</td>
         <td class="etiqueta">Técnico</td>
-        <td>{{ item.orden.tecnico_asignado|default:"—" }}</td>
+        <td>{% firstof item.orden.tecnico.get_full_name item.orden.tecnico_asignado "—" %}</td>
       </tr>
       {% if item.orden.costo_estimado or item.orden.costo_real %}
       <tr>

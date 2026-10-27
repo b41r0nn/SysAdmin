@@ -129,7 +129,7 @@ def hoja_de_vida_pdf_bytes(activo):
 
     ordenes = (
         OrdenMantenimiento.objects.filter(activo=activo)
-        .select_related("plan", "activo")
+        .select_related("activo", "tecnico")
         .prefetch_related("fotos")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
