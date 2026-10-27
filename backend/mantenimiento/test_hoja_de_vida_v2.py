@@ -141,3 +141,12 @@ class HojaDeVidaV2Tests(TestCase):
         self.assertIn("<td>No</td>", sin)
         self.assertNotIn("<td>Sí</td>", sin)
         self.assertIn("Pedro Externo", sin)
+
+    def test_reporte_mantenimientos_pdf_no_parte_las_filas_entre_hojas(self):
+        """Con 10 columnas, una fila alta se partía en dos hojas y dejaba media fila vacía."""
+        with _con_weasy():
+            resp = self.client.get(reverse("mantenimiento:reporte_mantenimientos_pdf"))
+        self.assertEqual(resp.status_code, 200)
+        estilos = FakeWeasy.html.split("</style>")[0]
+        regla = estilos.split("tr {")[1].split("}")[0]
+        self.assertIn("break-inside: avoid", regla)
