@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-10-27 · v1.13 (mantenimiento v2 + importación de contraseñas, pendiente de despliegue) · 711 tests OK · en producción sigue v1.12.1
+> Documento actualizado: 2026-10-27 · v1.13 (mantenimiento v2 + importación de contraseñas) · 711 tests OK · **desplegado en producción el 2026-10-27**
 
 ---
 
@@ -1767,7 +1767,7 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
-## MANTENIMIENTO V2 · v1.13 (rama `feat/mantenimiento-v2`, pendiente de despliegue)
+## MANTENIMIENTO V2 · v1.13 (en `master`, desplegado el 2026-10-27)
 
 Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.md` (Parte B). Incluye también la importación de contraseñas desde Excel (Etapa A, ver README).
 
@@ -1835,4 +1835,4 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 
 ---
 
-*Última actualización: 2026-10-27 · v1.13 · Mantenimiento v2 (711 tests OK, pendiente de despliegue; en producción sigue v1.12.1)*
+*Última actualización: 2026-10-27 · v1.13 · Mantenimiento v2 (711 tests OK, desplegado en producción el 2026-10-27)*

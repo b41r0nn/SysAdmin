@@ -59,9 +59,7 @@
 | 🔒 HTTPS interno (nginx + cert autofirmado) | infraestructura | ✅ Completa | Fase 7 |
 | 🧯 Auditoría de seguridad y hardening (2026-10-19) | todas | ✅ Completa | Auditoría |
 
-**Producción** (2026-10-22): 26 activos · Django 5.2 LTS · contenedor sin root · **469 tests en verde** (SQLite y PostgreSQL). Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
-
-**En la rama `feat/mantenimiento-v2`** (v1.13, pendiente de despliegue): mantenimiento rediseñado + importación de contraseñas desde Excel · **711 tests en verde** (4 omitidas en Windows: 3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL).
+**Producción** (2026-10-27, v1.13): 26 activos · Django 5.2 LTS · contenedor sin root · **711 tests en verde** (SQLite y PostgreSQL, en CI). Incluye mantenimiento v2 y la importación de contraseñas desde Excel. Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
 
 ---
 
@@ -589,7 +587,7 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
-### 2026-10-27 — v1.13 · Mantenimiento v2 + importación de contraseñas desde Excel (rama `feat/mantenimiento-v2`, pendiente de despliegue)
+### 2026-10-27 — v1.13 · Mantenimiento v2 + importación de contraseñas desde Excel (en producción desde el 2026-10-27)
 
 - ✅ **Mantenimiento rediseñado por equipo**: pantalla principal con tarjetas y pestañas (Por hacer, En garantía, Al día, Historial, Fallas reportadas), programación (garantía + ciclo de 12 meses desde el último preventivo completo, fecha programada opcional, sin rojos), checklists por tipo editables desde la app (`PlantillaChecklist`, `PuntoPlantilla`; portátil y escritorio precargados) y preventivo con puntos Bien / Con falla / No aplica
 - ✅ **Acta de mantenimiento de una hoja carta** (PDF con QR, checklist en dos columnas, hasta 3 fotos y firmas) generada desde los datos congelados al cerrar (`datos_acta`); **acta firmada** subible (PDF/JPG/PNG, 10 MB) y aviso de las que faltan; Reabrir una orden cerrada
