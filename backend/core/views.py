@@ -6,24 +6,19 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
-from django.utils import timezone
 from django.utils.http import content_disposition_header
 
 from accounts.permisos import PERMISOS_POR_ROL
 from inventario.models import Activo
 from mantenimiento.models import OrdenMantenimiento
+from mantenimiento.programacion import tablero
 from usuarios.models import Usuario
 
 
 @login_required
 def dashboard(request):
-    hoy = timezone.now().date()
     ordenes_abiertas = OrdenMantenimiento.objects.filter(
         estado__in=["abierta", "en_proceso"]
-    )
-    ordenes_atrasadas = ordenes_abiertas.filter(
-        plan__isnull=False,
-        plan__proxima_ejecucion__lt=hoy,
     )
     context = {
         "total_usuarios": Usuario.objects.filter(estado="activo").count(),
@@ -32,7 +27,7 @@ def dashboard(request):
         "activos_disponibles": Activo.objects.filter(estado="disponible").count(),
         "activos_baja": Activo.objects.filter(estado="dado_de_baja").count(),
         "ordenes_abiertas": ordenes_abiertas.count(),
-        "ordenes_atrasadas": ordenes_atrasadas.count(),
+        "les_toca_mantenimiento": tablero()["conteos"]["le_toca"],
     }
     return render(request, "core/dashboard.html", context)
 
@@ -43,6 +38,7 @@ MEDIA_PERMISOS = (
     ("inventario/fotos/", "inventario"),
     ("inventario/actas/", "inventario"),
     ("mantenimiento/fotos/", "mantenimiento"),
+    ("mantenimiento/actas/", "mantenimiento"),
     ("documentos/", "documentos"),
 )
 

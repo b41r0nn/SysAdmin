@@ -264,10 +264,16 @@
         <td>{{ item.orden.get_estado_display }}</td>
       </tr>
       <tr>
+        <td class="etiqueta">Estado final</td>
+        <td>{% if item.orden.estado_final %}{{ item.orden.get_estado_final_display }}{% else %}—{% endif %}</td>
+        <td class="etiqueta">En garantía</td>
+        <td>{% if item.orden.en_garantia %}Sí{% else %}No{% endif %}</td>
+      </tr>
+      <tr>
         <td class="etiqueta">Prioridad</td>
         <td>{{ item.orden.get_prioridad_display }}</td>
         <td class="etiqueta">Técnico</td>
-        <td>{{ item.orden.tecnico_asignado|default:"—" }}</td>
+        <td>{% firstof item.orden.tecnico.get_full_name item.orden.tecnico_asignado "—" %}</td>
       </tr>
       {% if item.orden.costo_estimado or item.orden.costo_real %}
       <tr>
@@ -278,6 +284,18 @@
       </tr>
       {% endif %}
     </table>
+
+    {% if item.nuevo %}
+    <div class="seccion">
+      <div class="t">Checklist</div>
+      {{ item.nuevo.resumen.bien }} bien · {{ item.nuevo.resumen.falla }} con falla · {{ item.nuevo.resumen.na }} no aplica
+      {% if item.enlaces.acta %}<br>Acta: <a href="{{ item.enlaces.acta }}">{{ item.enlaces.acta }}</a>{% endif %}
+      {% if item.enlaces.firmada %}<br>Acta firmada{% if item.orden.acta_firmada_desactualizada %} (desactualizada){% endif %}: <a href="{{ item.enlaces.firmada }}">{{ item.enlaces.firmada }}</a>{% endif %}
+      {% for falla in item.nuevo.fallas %}
+      <p style="margin-top:1mm;">{{ falla }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {% if item.orden.descripcion or item.orden.diagnostico or item.orden.acciones %}
     <div class="seccion">

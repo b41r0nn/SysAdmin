@@ -1,13 +1,12 @@
 from django.contrib import admin
 
-from .models import ChecklistItem, OrdenMantenimiento, PlanMantenimiento, Repuesto
-
-
-@admin.register(PlanMantenimiento)
-class PlanMantenimientoAdmin(admin.ModelAdmin):
-    list_display = ("tipo_dispositivo", "tipo", "criticidad", "estado", "proxima_ejecucion")
-    list_filter = ("tipo", "criticidad", "estado")
-    search_fields = ("tipo_dispositivo",)
+from .models import (
+    ChecklistItem,
+    OrdenMantenimiento,
+    PlantillaChecklist,
+    PuntoPlantilla,
+    Repuesto,
+)
 
 
 @admin.register(OrdenMantenimiento)
@@ -25,6 +24,18 @@ class RepuestoAdmin(admin.ModelAdmin):
 
 @admin.register(ChecklistItem)
 class ChecklistItemAdmin(admin.ModelAdmin):
-    list_display = ("descripcion", "plan", "orden", "completado", "posicion")
-    list_filter = ("completado",)
+    list_display = ("descripcion", "orden", "seccion", "resultado", "posicion")
+    list_filter = ("resultado",)
     search_fields = ("descripcion",)
+
+
+class PuntoPlantillaInline(admin.TabularInline):
+    model = PuntoPlantilla
+    extra = 0
+    fields = ("posicion", "seccion", "descripcion", "aplica_en_garantia", "activo")
+
+
+@admin.register(PlantillaChecklist)
+class PlantillaChecklistAdmin(admin.ModelAdmin):
+    list_display = ("tipo_dispositivo", "frecuencia_meses", "fecha_actualizacion")
+    inlines = [PuntoPlantillaInline]

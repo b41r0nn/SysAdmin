@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Boceto: acta-una-hoja</title>
+<style>:root{--text-secondary:#64748b}body{margin:24px;font-family:system-ui,sans-serif;background:#f5f5f7;color:#1d1d1f}.subtitle{color:#64748b;margin-bottom:1rem}.label{font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:1rem 0 .5rem}h2{margin:0 0 .4rem}</style></head><body>
+<style>
+  /* Hoja carta a escala: 216 × 279 mm  →  760 × 983 px (3,52 px/mm) */
+  .hoja-wrap { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+  .hoja-cap { font-size: .8rem; color: var(--text-secondary); }
+  .hoja {
+    width: 760px; height: 983px; box-sizing: border-box;
+    padding: 28px 34px 22px; background: #fff; color: #1e293b;
+    font-family: Arial, Helvetica, sans-serif; font-size: 11.5px; line-height: 1.32;
+    box-shadow: 0 2px 14px rgba(0,0,0,.2); position: relative; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .hoja table { width: 100%; border-collapse: collapse; }
+  .hoja td, .hoja th { border: 1px solid #cbd5e1; padding: 3px 5px; vertical-align: middle; text-align: left; }
+  .hoja th { background: #f1f5f9; color: #334155; font-size: 10px; }
+  .hoja .l { font-weight: 700; color: #334155; white-space: nowrap; background: #f8fafc; }
+  .hoja .sec { background: #0156a6; color: #fff; font-weight: 700; font-size: 10px; letter-spacing: .06em; padding: 3px 6px; margin-top: 8px; }
+  .hoja .grp td { background: #e8f0fa; color: #0156a6; font-weight: 700; font-size: 9.5px; letter-spacing: .05em; }
+  .hoja .n { width: 18px; text-align: center; color: #64748b; }
+  .hoja .r { width: 58px; text-align: center; }
+  .badge { display: inline-block; border-radius: 3px; padding: 0 5px; font-weight: 700; font-size: 9.5px; }
+  .badge.ok { background: #dcfce7; color: #166534; }
+  .badge.falla { background: #fee2e2; color: #991b1b; }
+  .badge.na { background: #f1f5f9; color: #475569; }
+
+  .h-head td { border: 1px solid #94a3b8; }
+  .h-head .logo { width: 25%; text-align: center; }
+  .h-head .logo img { height: 34px; }
+  .h-head .tit { text-align: center; font-weight: 700; color: #0156a6; font-size: 14px; letter-spacing: .04em; }
+  .h-head .meta { width: 22%; font-size: 9.5px; padding: 2px 6px; }
+
+  .eq { display: flex; gap: 8px; }
+  .eq table { flex: 1; }
+  .qr-box { width: 92px; flex-shrink: 0; border: 1px solid #cbd5e1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
+  .qr-box svg { width: 74px; height: 74px; }
+  .qr-box div { font-size: 8.5px; color: #64748b; margin-top: 2px; text-align: center; }
+
+  .chk { display: flex; gap: 8px; }
+  .chk table { flex: 1; align-self: flex-start; }
+
+  .fotos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+  .foto { height: 126px; border: 1px solid #cbd5e1; background: linear-gradient(135deg, #cbd5e1, #94a3b8); position: relative; }
+  .foto span { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.88); font-size: 9px; padding: 2px 4px; color: #334155; }
+
+  .cuadro { border: 1px solid #94a3b8; min-height: 80px; padding: 5px 7px; margin-top: 4px; font-size: 10.5px; }
+  .cuadro b { color: #991b1b; }
+  .linea-dato { display: flex; gap: 6px; margin-top: 4px; }
+  .linea-dato table { flex: 1; }
+
+  .firmas { display: flex; gap: 40px; margin-top: auto; padding-top: 10px; }
+  .firma { flex: 1; text-align: center; }
+  .firma .esp { height: 46px; }
+  .firma .linea { border-top: 1px solid #0f172a; margin-bottom: 3px; }
+  .firma .cargo { color: #475569; font-size: 9.5px; }
+  .pie { border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 3px; font-size: 8.5px; color: #94a3b8; text-align: center; }
+</style>
+
+<h2>Acta en una sola hoja carta</h2>
+<p class="subtitle">Sin columna de observación por punto: las fallas y las notas pasan al cuadro de observaciones, antes de las firmas. Checklist en dos columnas y hasta 3 fotos. El borde de la hoja es el tamaño real a escala.</p>
+
+<div class="hoja-wrap">
+  <div class="hoja">
+    <table class="h-head">
+      <tr>
+        <td class="logo" rowspan="3"><img src="../../../../backend/static/img/logo_redihos_mark.png" alt="REDIHOS"></td>
+        <td class="tit" rowspan="3">ACTA DE MANTENIMIENTO<br>DE EQUIPOS DE CÓMPUTO</td>
+        <td class="meta">Código: FT-TI-002</td>
+      </tr>
+      <tr><td class="meta">Versión: 01</td></tr>
+      <tr><td class="meta">Página 1 de 1</td></tr>
+    </table>
+
+    <div class="sec">1. DATOS DEL MANTENIMIENTO Y DEL EQUIPO</div>
+    <div class="eq">
+      <table>
+        <tr><td class="l">Acta N°</td><td>0042</td><td class="l">Fecha</td><td>23/10/2026</td><td class="l">Tipo</td><td>Preventivo</td></tr>
+        <tr><td class="l">Equipo</td><td>Portátil</td><td class="l">Nombre</td><td>REDIHOS-PT12</td><td class="l">N° interno</td><td>1012</td></tr>
+        <tr><td class="l">Marca/modelo</td><td colspan="3">HP ProBook 440 G8</td><td class="l">Serial</td><td>5CD1234XYZ</td></tr>
+        <tr><td class="l">Procesador</td><td colspan="3">Intel Core i5-1135G7</td><td class="l">RAM</td><td>16 GB</td></tr>
+        <tr><td class="l">Disco</td><td>512 GB SSD</td><td class="l">S.O.</td><td>Windows 11 Pro</td><td class="l">IP</td><td>192.168.1.57</td></tr>
+        <tr><td class="l">Ubicación</td><td>Oficina principal</td><td class="l">Garantía</td><td>Hasta 14/03/2027</td><td class="l">Próximo</td><td>23/04/2027</td></tr>
+      </table>
+      <div class="qr-box">
+        <svg viewBox="0 0 21 21" shape-rendering="crispEdges">
+          <rect width="21" height="21" fill="#fff"/>
+          <g fill="#0f172a"><rect x="0" y="0" width="7" height="7"/><rect x="14" y="0" width="7" height="7"/><rect x="0" y="14" width="7" height="7"/></g>
+          <g fill="#fff"><rect x="1" y="1" width="5" height="5"/><rect x="15" y="1" width="5" height="5"/><rect x="1" y="15" width="5" height="5"/></g>
+          <g fill="#0f172a">
+            <rect x="2" y="2" width="3" height="3"/><rect x="16" y="2" width="3" height="3"/><rect x="2" y="16" width="3" height="3"/>
+            <rect x="8" y="1" width="1" height="2"/><rect x="10" y="0" width="2" height="1"/><rect x="9" y="4" width="2" height="2"/>
+            <rect x="8" y="8" width="3" height="1"/><rect x="12" y="9" width="2" height="2"/><rect x="1" y="9" width="2" height="1"/>
+            <rect x="4" y="10" width="2" height="2"/><rect x="15" y="8" width="1" height="3"/><rect x="18" y="10" width="2" height="1"/>
+            <rect x="9" y="12" width="1" height="3"/><rect x="11" y="14" width="3" height="1"/><rect x="16" y="13" width="2" height="2"/>
+            <rect x="9" y="17" width="2" height="2"/><rect x="13" y="16" width="1" height="3"/><rect x="15" y="18" width="3" height="1"/>
+            <rect x="19" y="15" width="1" height="3"/><rect x="11" y="19" width="1" height="2"/>
+          </g>
+        </svg>
+        <div>Hoja de vida</div>
+      </div>
+    </div>
+
+    <div class="sec">2. RESPONSABLE DEL EQUIPO</div>
+    <table>
+      <tr><td class="l">Nombre</td><td>Marta López Gómez</td><td class="l">C.C.</td><td>200300400</td><td class="l">Cargo</td><td>Contadora</td><td class="l">Área</td><td>Finanzas</td></tr>
+    </table>
+
+    <div class="sec">3. CHECKLIST · 12 puntos · 11 bien · 1 con falla</div>
+    <div class="chk">
+      <table>
+        <tr><th class="n">#</th><th>Punto revisado</th><th class="r">Resultado</th></tr>
+        <tr class="grp"><td colspan="3">HARDWARE</td></tr>
+        <tr><td class="n">1</td><td>Desarme del equipo</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">2</td><td>Pantalla</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">3</td><td>Bisagras</td><td class="r"><span class="badge falla">FALLA</span></td></tr>
+        <tr><td class="n">4</td><td>Batería</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr class="grp"><td colspan="3">LIMPIEZA</td></tr>
+        <tr><td class="n">5</td><td>Limpieza externa</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">6</td><td>Limpieza interna</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">7</td><td>Limpieza de puertos</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+      </table>
+      <table>
+        <tr><th class="n">#</th><th>Punto revisado</th><th class="r">Resultado</th></tr>
+        <tr class="grp"><td colspan="3">MANTENIMIENTO LÓGICO</td></tr>
+        <tr><td class="n">8</td><td>Actualizaciones de Windows</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">9</td><td>Antivirus</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">10</td><td>Archivos temporales</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">11</td><td>Estado del disco</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+        <tr><td class="n">12</td><td>Programas de inicio</td><td class="r"><span class="badge ok">BIEN</span></td></tr>
+      </table>
+    </div>
+
+    <div class="sec">4. EVIDENCIA FOTOGRÁFICA</div>
+    <div class="fotos">
+      <div class="foto"><span>Antes · interior</span></div>
+      <div class="foto"><span>Después · interior</span></div>
+      <div class="foto"><span>Bisagra izquierda</span></div>
+    </div>
+
+    <div class="sec">5. REPUESTOS Y ESTADO FINAL</div>
+    <table>
+      <tr><td class="l">Repuestos</td><td>Ninguno</td><td class="l">Estado final</td><td><span class="badge ok">OPERATIVO</span></td></tr>
+    </table>
+
+    <div class="sec">6. OBSERVACIONES</div>
+    <div class="cuadro">
+      <b>Bisagras (falla):</b> bisagra izquierda floja, se ajustaron los tornillos.<br>
+      Usar el equipo sobre una superficie plana para no tapar la ventilación. Revisar la bisagra izquierda en el próximo mantenimiento.
+    </div>
+
+    <div class="firmas">
+      <div class="firma"><div class="esp"></div><div class="linea"></div><strong>Técnico</strong> Bairon Calle<br><span class="cargo">Analista de Sistemas</span></div>
+      <div class="firma"><div class="esp"></div><div class="linea"></div><strong>Usuario</strong> Marta López Gómez<br><span class="cargo">Contadora · C.C. 200300400</span></div>
+    </div>
+    <div class="pie">SysAdmin · FT-TI-002 v01 · Acta de mantenimiento N° 0042 · 23/10/2026 · Página 1 de 1</div>
+  </div>
+  <div class="hoja-cap">Hoja carta 216 × 279 mm, a escala</div>
+</div>
+
+</body></html>

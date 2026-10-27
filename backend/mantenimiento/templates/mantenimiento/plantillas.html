@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load permisos_extras %}
+
+{% block title %}Checklists — Mantenimiento{% endblock %}
+
+{% block content %}
+{% tiene_permiso 'mantenimiento' 'escritura' as puede_escribir %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Checklists</h1>
+    <p class="page-subtitle">Un checklist por tipo de equipo. Los tipos que tienen checklist entran en la programación.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'mantenimiento:inicio' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Mantenimiento
+    </a>
+    {% if puede_escribir %}
+    <a href="{% url 'mantenimiento:crear_plantilla' %}" class="btn btn-primary">
+      <i class="bi bi-plus-circle-fill"></i> Nuevo checklist
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="sa-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Tipo de equipo</th>
+          <th>Puntos</th>
+          <th>Frecuencia</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in plantillas %}
+        <tr>
+          <td class="fw-semibold">{{ p.get_tipo_dispositivo_display }}</td>
+          <td>{{ p.total_puntos }}</td>
+          <td>Cada {{ p.frecuencia_meses }} mes{{ p.frecuencia_meses|pluralize:",es" }}</td>
+          <td class="text-end">
+            {% if puede_escribir %}
+            <a href="{% url 'mantenimiento:editar_plantilla' p.pk %}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-pencil"></i> Editar
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted py-4">Aún no hay checklists.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

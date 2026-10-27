@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Importar contraseñas — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'passwords:index' %}" class="text-decoration-none">Contraseñas</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'passwords:credenciales_lista' vault_id=vault.id %}" class="text-decoration-none">{{ vault.nombre }}</a>
+    </li>
+    <li class="breadcrumb-item active">Importar desde Excel</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-7">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-file-earmark-lock2"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Importar contraseñas a «{{ vault.nombre }}»</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Se lee la primera hoja del archivo. La fila 1 debe tener los encabezados.
+          </p>
+        </div>
+      </div>
+
+      <div class="alert alert-info py-2 mb-4" style="font-size:.83rem;">
+        <strong>Columnas reconocidas</strong> (sin importar orden, mayúsculas ni tildes):
+        <strong>Título</strong> (o Nombre, Servicio) · Usuario (o User, Login, Correo) ·
+        <strong>Contraseña</strong> (o Clave, Password) · URL (o Sitio, Enlace, IP) ·
+        Notas · Estado · Fecha de expiración.
+        <br>Título y Contraseña son obligatorios. Si en la bóveda ya existe una credencial con el
+        mismo título y usuario, la fila se omite: <strong>nunca se sobrescribe</strong>.
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Archivo</legend>
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <label class="form-label fw-semibold mb-0" for="id_archivo">Archivo Excel <span class="text-danger">*</span></label>
+            <a href="{% url 'passwords:importar_plantilla' %}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-download me-1"></i>Descargar plantilla
+            </a>
+          </div>
+          <input type="file" name="archivo" id="id_archivo" class="form-control" accept=".xlsx" required>
+          <div class="form-text">Solo .xlsx, hasta 1.000 filas y 5 MB. Nada se guarda hasta confirmar.</div>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'passwords:credenciales_lista' vault_id=vault.id %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-upload me-2"></i>Subir y previsualizar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

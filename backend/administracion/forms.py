@@ -31,6 +31,8 @@ class ConfiguracionForm(forms.ModelForm):
             "smtp_usuario",
             "smtp_usa_tls",
             "smtp_usa_ssl",
+            "acta_mant_codigo",
+            "acta_mant_version",
         ]
         widgets = {
             "nombre_empresa": forms.TextInput(attrs={"class": "form-control"}),
@@ -50,6 +52,8 @@ class ConfiguracionForm(forms.ModelForm):
             }),
             "smtp_usa_tls": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "smtp_usa_ssl": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "acta_mant_codigo": forms.TextInput(attrs={"class": "form-control", "placeholder": "FT-TI-002"}),
+            "acta_mant_version": forms.TextInput(attrs={"class": "form-control", "placeholder": "01"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -72,15 +76,27 @@ class ConfiguracionForm(forms.ModelForm):
         return instance
 
 
+# Nombre y cargo de la cuenta: salen en las actas que firma (p. ej. el técnico
+# de un mantenimiento).
+ETIQUETAS_PERSONA = {"first_name": "Nombres", "last_name": "Apellidos", "cargo": "Cargo"}
+WIDGETS_PERSONA = {
+    "first_name": forms.TextInput(attrs={"class": "form-control"}),
+    "last_name": forms.TextInput(attrs={"class": "form-control"}),
+    "cargo": forms.TextInput(attrs={"class": "form-control"}),
+}
+
+
 class CuentaForm(forms.ModelForm):
     class Meta:
         model = CustomUser
-        fields = ["username", "email", "rol"]
+        fields = ["username", "first_name", "last_name", "cargo", "email", "rol"]
+        labels = ETIQUETAS_PERSONA
         widgets = {
             "username": forms.TextInput(attrs={
                 "class": "form-control",
                 "autocomplete": "off",
             }),
+            **WIDGETS_PERSONA,
             "email": forms.EmailInput(attrs={"class": "form-control"}),
             "rol": forms.Select(attrs={"class": "form-select"}),
         }
@@ -93,7 +109,13 @@ class CuentaForm(forms.ModelForm):
 
 
 class CuentaRolForm(forms.ModelForm):
+    """Editar una cuenta: nombres, apellidos, cargo y rol."""
+
     class Meta:
         model = CustomUser
-        fields = ["rol"]
-        widgets = {"rol": forms.Select(attrs={"class": "form-select"})}
+        fields = ["first_name", "last_name", "cargo", "rol"]
+        labels = ETIQUETAS_PERSONA
+        widgets = {
+            **WIDGETS_PERSONA,
+            "rol": forms.Select(attrs={"class": "form-select"}),
+        }

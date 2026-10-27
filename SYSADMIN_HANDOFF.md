@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-10-22 · v1.12.1 (auditoría 2026-10-19 + correcciones) · 469 tests OK
+> Documento actualizado: 2026-10-27 · v1.13 (mantenimiento v2 + importación de contraseñas, pendiente de despliegue) · 711 tests OK · en producción sigue v1.12.1
 
 ---
 
@@ -1767,6 +1767,62 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
+## MANTENIMIENTO V2 · v1.13 (rama `feat/mantenimiento-v2`, pendiente de despliegue)
+
+Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.md` (Parte B). Incluye también la importación de contraseñas desde Excel (Etapa A, ver README).
+
+**Modelos nuevos / cambiados (`mantenimiento`)**
+- `PlantillaChecklist` (una por `tipo_dispositivo`, `frecuencia_meses`) y `PuntoPlantilla` (sección, descripción, posición, `aplica_en_garantia`, `activo`).
+- `ProgramacionMantenimiento` (OneToOne con `Activo`, `fecha_programada`).
+- `OrdenMantenimiento`: `en_garantia`, `formato` (1 = anterior, 2 = actual), `tecnico` (FK a la cuenta que cierra), `estado_final`, `observaciones`, `datos_acta` (JSON congelado al cerrar), `acta_firmada` y `acta_firmada_desactualizada`.
+- `ChecklistItem`: `seccion`, `resultado` (Bien / Con falla / No aplica) y `observacion`. `FotoMantenimiento.en_acta`.
+- `accounts.CustomUser.cargo`; `administracion.ConfiguracionSistema.acta_mant_codigo` y `acta_mant_version`.
+- Lógica: `programacion.py` (situación y tablero), `ejecucion.py` (iniciar, marcar, cerrar, reabrir, `datos_para_acta`), `acta.py` (PDF de una hoja). Vistas en el paquete `mantenimiento/views/`.
+
+**Hoja de vida, reportes y avisos (lo que ganaron con v1.13)**
+- Hoja de vida (pantalla y PDF): por cada orden de formato 2, resumen del checklist (`N bien · N con falla · N no aplica`), las fallas con su observación, "En garantía" y "Estado final", y enlaces al acta y al acta firmada (con la marca "desactualizada" si la orden se reabrió después de subirla). En el PDF los enlaces son absolutos: `acta.url_absoluta()` les pone delante `QR_BASE_URL`, porque un PDF no tiene *request* (piden iniciar sesión al abrirlos).
+- `reporte_mantenimientos_pdf.html`: 10 columnas, con "En garantía" (Sí/No) y "Estado final" nuevas, y "Técnico" en lugar de "Plan" (`orden.tecnico.get_full_name()` y, si no hay, `tecnico_asignado`). El Excel de mantenimiento trae las mismas columnas.
+- Avisos de la campana (`notificaciones/services.py`): "Le toca mantenimiento · <serial>" **una vez por ciclo** (la `objetokey` lleva la fecha desde la que le toca: `mant:toca:<activo>:<fecha>`), "Mañana: mantenimiento de <serial>" para las fechas programadas, y "Acta de mantenimiento sin firmar · N° 0001" por cada orden cerrada de formato 2 sin `acta_firmada` o con la firmada desactualizada. Los avisos salen de `programacion.tablero()`, que excluye los equipos dados de baja.
+
+**Migraciones**
+- `mantenimiento/0009_plantillachecklist_puntoplantilla`, `0010_plantillas_iniciales` (carga portátil y escritorio), `0011_programacion_y_formato` (marca las órdenes existentes como formato 1), `0012_checklistitem_resultado`, `0013_cierre_y_acta`, `0014_foto_en_acta`.
+- `mantenimiento/0015_retirar_planes`: borra `PlanMantenimiento`, `OrdenMantenimiento.plan`, `ChecklistItem.plan` y `ChecklistItem.completado`. Producción tiene 1 plan sin uso, que se elimina. Probada adelante y atrás con datos tipo producción.
+- `accounts/0003_customuser_cargo`, `administracion/0004_acta_mantenimiento`.
+
+**Despliegue** (seguir `GUIA_DEPLOY_PASO_A_PASO.md` §8b)
+1. Backup previo (igual que §8b; el `.dump` queda en `backups/<TS>/`, que no se sube al repo):
+   ```bash
+   cd /opt/sysadmin/app
+   TS=$(date +%F-%H%M); mkdir -p backups/$TS
+   docker exec sysadmin_db sh -c 'pg_dump -U $POSTGRES_USER -d $POSTGRES_DB -Fc' > backups/$TS/db.dump
+   ls -lh backups/$TS/db.dump   # debe pesar más de unos pocos KB
+   ```
+2. Comprobación antes del `migrate` (0015 borra `ChecklistItem.plan`): ningún punto de checklist puede estar colgado de un plan.
+   ```bash
+   docker exec sysadmin_db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT count(*) FROM mantenimiento_checklistitem WHERE plan_id IS NOT NULL;"'
+   ```
+   Esperado `0` (el spec B10: el plan de producción no tiene órdenes ni checklist). Si sale distinto de 0, parar: esas filas se perderían con la migración.
+3. Subir el tar (`git archive` con LF, `chmod` del entrypoint).
+4. Borrar en el servidor lo que el tar no quita: `backend/mantenimiento/views.py` (ahora es el paquete `views/`), `backend/mantenimiento/views/planes.py`, `views/legado.py` y las plantillas `lista_planes.html`, `detalle_plan.html`, `form_plan.html`, `partials/tabla_planes.html`, `partials/checklist_orden.html`, `partials/estado_partes.html` y `form_orden.html`.
+5. `docker compose build django nginx` → `up -d` → `docker exec sysadmin_django python manage.py migrate` (el `entrypoint.sh` ya corre `migrate` al arrancar; el comando sirve para ver la salida).
+
+**nginx y cron (vienen con la Etapa A, importar contraseñas)**
+- **nginx hay que reconstruirlo**: esta versión cambia `nginx/nginx.conf` (una `location` propia para `/passwords/vaults/<id>/credenciales/importar/` con `client_body_buffer_size 6m`, para que el Excel con las claves en texto plano no pase por un archivo temporal de nginx, y un 413 propio en español). El `.conf` va dentro de la imagen: el `docker compose build django nginx` del paso 5 ya lo cubre, pero un `up -d` o un `nginx -s reload` **no**. Comprobar después: `docker exec sysadmin_nginx nginx -t` → `syntax is ok` / `test is successful`.
+- **El cron no se toca**: `deploy/instalar_cron_limpieza.sh` no cambió y no hay que reinstalarlo. Lo que cambió es el comando que ya corría semanalmente: `limpiar_historial` ahora borra además las sesiones vencidas (ahí quedan las vistas previas de importación abandonadas). Para verlo sin borrar nada: `docker exec sysadmin_django python manage.py limpiar_historial --dias 365 --media-dias 30 --dry-run`.
+
+**Verificación posterior**
+- La orden correctiva vieja (formato 1, cerrada, con `estado_partes`) abre en el detalle, la hoja de vida y su PDF.
+- Existen las 2 plantillas de checklist (portátil y escritorio) en `/mantenimiento/checklists/`.
+- Descargar el acta de una orden cerrada de prueba y comprobar que sale en una sola hoja.
+- La hoja de vida y su PDF muestran el resumen del checklist y los enlaces al acta: el PDF los arma con `QR_BASE_URL`, que debe estar en el `.env` del servidor (hoy `https://192.168.1.250:6060`); si está vacío, los enlaces del PDF salen relativos y no se pueden abrir.
+- Importar contraseñas: subir un `.xlsx` de prueba con una columna "Servidor" de nombres sin dominio (`SRV-DC01`) → **no** se bloquea el archivo y esas filas salen con el aviso "Revisa: «Servidor» no es una dirección y quedó como nota sin cifrar". Subir uno de más de 5 MB → la página "El archivo pasa de 5 MB" (la da nginx con un 413 propio si pasa de 6 MB, o Django si está entre 5 y 6 MB).
+
+**Datos de producción al 2026-10-23**: 1 orden correctiva cerrada con `estado_partes` (queda en formato 1) y 1 plan sin uso (se elimina con 0015).
+
+**Tests**: **711 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
+
+---
+
 ## CORRECCIONES POSTERIORES (2026-10-20 / 2026-10-22) · v1.12.1
 
 - **Lista de activos y catálogo con error 500** (`31903ce`): al pasar `inventario/views.py` a paquete, los imports dentro de funciones quedaron como `from .models` (deben ser `from ..models`). `core.tests.SmokeVistasTests` abre con superadmin las páginas de lectura de cada módulo para detectar esto.
@@ -1779,4 +1835,4 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
-*Última actualización: 2026-10-22 · v1.12.1 · Correcciones tras salir a producción*
+*Última actualización: 2026-10-27 · v1.13 · Mantenimiento v2 (711 tests OK, pendiente de despliegue; en producción sigue v1.12.1)*

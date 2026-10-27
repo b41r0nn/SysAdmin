@@ -17,6 +17,9 @@
           <td class="px-3">
             <span class="fw-semibold">{{ c.username }}</span>
             {% if c == user %}<span class="badge bg-info bg-opacity-10 text-info" style="font-size:.8rem;">tú</span>{% endif %}
+            {% if c.get_full_name %}
+              <div class="text-muted" style="font-size:.8rem;">{{ c.get_full_name }}{% if c.cargo %} · {{ c.cargo }}{% endif %}</div>
+            {% endif %}
           </td>
           <td style="font-size:.85rem;">{{ c.email|default:"—" }}</td>
           <td>
@@ -41,8 +44,8 @@
             {{ c.last_login|date:"d/m/Y H:i"|default:"nunca" }}
           </td>
           <td class="text-end pe-3 text-nowrap">
-            <a href="{% url 'administracion:cambiar_rol' c.pk %}" class="btn btn-sm btn-outline-secondary" title="Cambiar rol">
-              <i class="bi bi-shield-shaded"></i>
+            <a href="{% url 'administracion:cambiar_rol' c.pk %}" class="btn btn-sm btn-outline-secondary" title="Editar cuenta">
+              <i class="bi bi-pencil-square"></i>
             </a>
             <form method="post" action="{% url 'administracion:toggle_cuenta' c.pk %}" class="d-inline">
               {% csrf_token %}

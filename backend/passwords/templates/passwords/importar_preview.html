@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Vista previa de importación — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'passwords:index' %}" class="text-decoration-none">Contraseñas</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'passwords:credenciales_lista' vault_id=vault.id %}" class="text-decoration-none">{{ vault.nombre }}</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'passwords:credenciales_importar' vault_id=vault.id %}" class="text-decoration-none">Importar desde Excel</a>
+    </li>
+    <li class="breadcrumb-item active">Vista previa</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-11">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-table"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Vista previa — {{ nombre_archivo }}</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            {{ resumen.total }} fila{{ resumen.total|pluralize }} leída{{ resumen.total|pluralize }} de la hoja «{{ hoja }}» (la primera del archivo).
+            Las contraseñas ya están cifradas y aquí nunca se muestran.
+            Solo se importan las filas nuevas.
+          </p>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+          <div class="sa-card sa-stat-card mb-0" style="padding:14px;">
+            <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-content">
+              <div class="stat-value">{{ resumen.nuevas }}</div>
+              <div class="stat-label">Nuevas</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="sa-card sa-stat-card mb-0" style="padding:14px;">
+            <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-exclamation-circle"></i></div>
+            <div class="stat-content">
+              <div class="stat-value">{{ resumen.ya_existen }}</div>
+              <div class="stat-label">Ya existen (se omiten)</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="sa-card sa-stat-card mb-0" style="padding:14px;">
+            <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-x-octagon"></i></div>
+            <div class="stat-content">
+              <div class="stat-value">{{ resumen.errores }}</div>
+              <div class="stat-label">Con error (se omiten)</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="sa-card sa-stat-card mb-0" style="padding:14px;">
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-list-ol"></i></div>
+            <div class="stat-content">
+              <div class="stat-value">{{ resumen.total }}</div>
+              <div class="stat-label">Total de filas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive mb-4">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Fila</th>
+              <th>Título</th>
+              <th>Usuario</th>
+              <th>Contraseña</th>
+              <th>URL</th>
+              <th>Resultado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in filas %}
+            <tr>
+              <td class="text-center text-muted">{{ fila.fila }}</td>
+              <td>{{ fila.titulo|default:"—" }}</td>
+              <td>{{ fila.usuario|default:"—" }}</td>
+              <td>{% if fila.resultado == "nueva" %}<span class="text-muted" style="letter-spacing:2px;">••••••••</span>{% else %}—{% endif %}</td>
+              <td>{% if fila.url_a_notas %}<span class="text-muted">→ Notas (no es una dirección)</span>{% else %}{{ fila.url|default:"—" }}{% endif %}</td>
+              <td>
+                {% if fila.resultado == "nueva" %}
+                  <span class="badge bg-success">Nueva</span>
+                  {% if fila.detalle %}<div class="text-muted small">{{ fila.detalle }}</div>{% endif %}
+                {% elif fila.resultado == "error" %}
+                  <span class="badge bg-danger">{{ fila.detalle }}</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark">{{ fila.detalle }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-4">El archivo no contiene filas con datos.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="alert alert-warning py-2" style="font-size:.85rem;">
+        <i class="bi bi-shield-exclamation me-1"></i>
+        Cuando termines, borra el Excel de tu PC (y de la papelera): tiene las contraseñas en texto plano.
+      </div>
+
+      <div class="d-flex gap-2 justify-content-end pt-3"
+           style="border-top:1px solid var(--sa-border,#e2e8f0);">
+        <a href="{% url 'passwords:credenciales_importar' vault_id=vault.id %}" class="btn btn-outline-secondary">Subir otro archivo</a>
+        {% if resumen.nuevas > 0 %}
+        <form method="post" action="{% url 'passwords:credenciales_importar_confirmar' vault_id=vault.id %}"
+              onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Importando…';">
+          {% csrf_token %}
+          <input type="hidden" name="lote" value="{{ lote }}">
+          <button type="submit" class="btn btn-success px-4">
+            <i class="bi bi-check2-all me-2"></i>Importar {{ resumen.nuevas }} contraseña{{ resumen.nuevas|pluralize }}
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

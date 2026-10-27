@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Boceto: importar-contrasenas</title>
+<style>:root{--text-secondary:#64748b}body{margin:24px;font-family:system-ui,sans-serif;background:#f5f5f7;color:#1d1d1f}.subtitle{color:#64748b;margin-bottom:1rem}.label{font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:1rem 0 .5rem}h2{margin:0 0 .4rem}</style></head><body>
+<style>
+  .xl { background: #fff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; font-family: Calibri, "Segoe UI", sans-serif; font-size: 13px; }
+  .xl .bar { background: #217346; color: #fff; padding: 6px 10px; font-size: 12px; }
+  .xl table { width: 100%; border-collapse: collapse; }
+  .xl th, .xl td { border: 1px solid #d4d4d4; padding: 4px 8px; text-align: left; white-space: nowrap; }
+  .xl .colh td { background: #f3f3f3; color: #666; text-align: center; font-size: 11px; padding: 2px; }
+  .xl .rowh { background: #f3f3f3; color: #666; text-align: center; width: 28px; font-size: 11px; }
+  .xl .hdr td.c { background: #0156a6; color: #fff; font-weight: 700; text-align: center; }
+  .xl .tabs { display: flex; gap: 2px; background: #f3f3f3; padding: 4px 8px 0; font-size: 12px; }
+  .xl .tabs span { padding: 3px 12px; background: #e6e6e6; color: #555; }
+  .xl .tabs span.on { background: #fff; color: #217346; font-weight: 700; border-bottom: 2px solid #217346; }
+  .req { color: #fde68a; }
+
+  .sa { background: #f4f6f9; color: #1e293b; border-radius: 12px; padding: 16px 18px; font-size: 13px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .sa h1 { font-size: 18px; margin: 0 0 2px; }
+  .sa .muted { color: #64748b; font-size: 12px; }
+  .sa .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+  .sa .stat { background: #fff; border-radius: 10px; padding: 8px 12px; border: 1px solid #e2e8f0; }
+  .sa .stat .v { font-size: 20px; font-weight: 700; }
+  .sa .stat.g .v { color: #15803d; } .sa .stat.y .v { color: #b45309; } .sa .stat.r .v { color: #b91c1c; }
+  .sa table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+  .sa th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; background: #f8fafc; padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
+  .sa td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; }
+  .chip.g { background: #dcfce7; color: #166534; } .chip.y { background: #fef3c7; color: #92400e; } .chip.r { background: #fee2e2; color: #991b1b; }
+  .sa .warn { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; border-radius: 8px; padding: 8px 10px; margin-top: 10px; font-size: 12.5px; }
+  .sa .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .sa .btn { border: 1px solid #cbd5e1; background: #fff; border-radius: 7px; padding: 5px 12px; font-size: 12.5px; }
+  .sa .btn.pri { background: #0156a6; border-color: #0156a6; color: #fff; }
+  .dots { letter-spacing: 2px; color: #475569; }
+</style>
+
+<h2>Importar contraseñas desde Excel</h2>
+<p class="subtitle">Mismo flujo que la importación de activos, desde dentro de cada bóveda: descargas la plantilla, pegas, subes, revisas y confirmas. Datos inventados.</p>
+
+<div class="section">
+  <div class="label">1 · La plantilla (plantilla_importar_contrasenas.xlsx)</div>
+  <div class="xl">
+    <div class="bar">plantilla_importar_contrasenas.xlsx — todas las columnas en formato Texto, para que Excel no cambie claves como 00123 o 1/2/24</div>
+    <table>
+      <tr class="colh"><td></td><td>A</td><td>B</td><td>C</td><td>D</td><td>E</td><td>F</td><td>G</td></tr>
+      <tr class="hdr"><td class="rowh">1</td><td class="c">Título <span class="req">*</span></td><td class="c">Usuario</td><td class="c">Contraseña <span class="req">*</span></td><td class="c">URL</td><td class="c">Notas</td><td class="c">Estado</td><td class="c">Fecha de expiración</td></tr>
+      <tr><td class="rowh">2</td><td>Correo Gerencia</td><td>gerencia@empresa.com</td><td>Ejemplo-Clave-1</td><td>https://outlook.office.com</td><td>Cuenta principal</td><td>Activa</td><td></td></tr>
+      <tr><td class="rowh">3</td><td>Router oficina</td><td>admin</td><td>Ejemplo-Clave-2</td><td>http://192.168.1.1</td><td></td><td>Activa</td><td>31/12/2027</td></tr>
+      <tr><td class="rowh">4</td><td style="color:#999">← pega aquí tus filas…</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    </table>
+    <div class="tabs"><span class="on">Plantilla Contraseñas</span><span>Instrucciones</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">2 · Vista previa antes de confirmar (en la bóveda “Infraestructura”)</div>
+  <div class="sa">
+    <h1>Vista previa · mis_claves.xlsx</h1>
+    <div class="muted">Las contraseñas ya están cifradas; aquí nunca se muestran.</div>
+    <div class="stats">
+      <div class="stat g"><div class="v">3</div><div class="muted">Nuevas</div></div>
+      <div class="stat y"><div class="v">1</div><div class="muted">Ya existen (se omiten)</div></div>
+      <div class="stat r"><div class="v">1</div><div class="muted">Con error</div></div>
+    </div>
+    <table>
+      <tr><th>Fila</th><th>Título</th><th>Usuario</th><th>Contraseña</th><th>URL</th><th>Resultado</th></tr>
+      <tr><td>2</td><td>Correo Gerencia</td><td>gerencia@empresa.com</td><td class="dots">••••••••</td><td>outlook.office.com</td><td><span class="chip g">Nueva</span></td></tr>
+      <tr><td>3</td><td>Router oficina</td><td>admin</td><td class="dots">••••••••</td><td>192.168.1.1</td><td><span class="chip g">Nueva</span></td></tr>
+      <tr><td>4</td><td>Firewall</td><td>root</td><td class="dots">••••••••</td><td>—</td><td><span class="chip g">Nueva</span></td></tr>
+      <tr><td>5</td><td>NAS backups</td><td>admin</td><td class="dots">••••••••</td><td>192.168.1.20</td><td><span class="chip y">Ya existe: mismo título y usuario</span></td></tr>
+      <tr><td>6</td><td>Wifi invitados</td><td></td><td>—</td><td>—</td><td><span class="chip r">Falta la contraseña</span></td></tr>
+    </table>
+    <div class="warn">Cuando termines, borra el Excel de tu PC (y de la papelera): tiene las contraseñas en texto plano.</div>
+    <div class="btns"><span class="btn">Cancelar</span><span class="btn pri">Importar 3 contraseñas</span></div>
+  </div>
+</div>
+
+</body></html>

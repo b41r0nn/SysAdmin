@@ -19,6 +19,12 @@
     <a class="btn btn-outline-success" href="{% url 'passwords:credenciales_export' vault_id=vault.id %}">
       <i class="bi bi-file-earmark-excel"></i> Exportar Excel
     </a>
+    {% tiene_permiso 'passwords' 'escritura' as puede_escribir %}
+    {% if puede_escribir %}
+    <a class="btn btn-outline-primary" href="{% url 'passwords:credenciales_importar' vault_id=vault.id %}">
+      <i class="bi bi-file-earmark-arrow-up"></i> Importar desde Excel
+    </a>
+    {% endif %}
     <a class="btn btn-primary" href="{% url 'passwords:credencial_crear' vault_id=vault.id %}">
       <i class="bi bi-plus-circle-fill"></i> Nueva credencial
     </a>

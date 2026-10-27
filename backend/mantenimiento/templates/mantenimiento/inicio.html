@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load permisos_extras %}
+
+{% block title %}Mantenimiento — SysAdmin{% endblock %}
+
+{% block content %}
+{% tiene_permiso 'mantenimiento' 'escritura' as puede_escribir %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Mantenimiento</h1>
+    <p class="page-subtitle">Portátiles y PC: le toca al vencer la garantía y luego cada 12 meses desde el último.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'mantenimiento:calendario' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-calendar3"></i> Calendario
+    </a>
+    <a href="{% url 'mantenimiento:hoja_de_vida_buscar' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-person-lines-fill"></i> Hoja de vida
+    </a>
+    <a href="{% url 'mantenimiento:lista_plantillas' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-list-check"></i> Checklists
+    </a>
+    {% if puede_escribir %}
+    <a href="{% url 'mantenimiento:nuevo' %}" class="btn btn-primary">
+      <i class="bi bi-plus-circle-fill"></i> + Mantenimiento
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<div id="programacion">
+  {% include "mantenimiento/partials/tabla_programacion.html" %}
+</div>
+{% endblock %}

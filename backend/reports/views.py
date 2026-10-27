@@ -605,7 +605,7 @@ def mantenimiento_excel(request):
 
     ordenes = (
         OrdenMantenimiento.objects.filter(fecha_apertura__range=(rango_inicio, rango_fin))
-        .select_related("activo", "plan")
+        .select_related("activo", "tecnico")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
 
@@ -616,12 +616,13 @@ def mantenimiento_excel(request):
         "Fecha apertura",
         "Fecha cierre",
         "Tipo",
+        "En garantía",
         "Estado",
+        "Estado final",
         "Prioridad",
         "Activo",
         "Serial",
-        "Plan",
-        "Tecnico",
+        "Técnico",
         "Costo estimado",
         "Costo real",
     ]
@@ -632,18 +633,19 @@ def mantenimiento_excel(request):
             orden.fecha_apertura.strftime("%Y-%m-%d") if orden.fecha_apertura else "",
             orden.fecha_cierre.strftime("%Y-%m-%d") if orden.fecha_cierre else "",
             orden.get_tipo_display(),
+            "Sí" if orden.en_garantia else "No",
             orden.get_estado_display(),
+            orden.get_estado_final_display(),
             orden.get_prioridad_display(),
             f"{orden.activo.marca} {orden.activo.modelo}",
             orden.activo.serial,
-            f"Plan #{orden.plan_id}" if orden.plan_id else "",
-            orden.tecnico_asignado,
+            (orden.tecnico.get_full_name() if orden.tecnico else "") or orden.tecnico_asignado,
             float(orden.costo_estimado) if orden.costo_estimado else "",
             float(orden.costo_real) if orden.costo_real else "",
         ])
 
     _apply_redihos_data_style(ws, start_row, len(headers))
-    money_cols = {10, 11}
+    money_cols = {11, 12}
     for row_idx in range(start_row, ws.max_row + 1):
         for col in money_cols:
             cell = ws.cell(row=row_idx, column=col)

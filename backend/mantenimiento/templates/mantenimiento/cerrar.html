@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Cerrar mantenimiento — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:inicio' %}" class="text-decoration-none">Mantenimiento</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="text-decoration-none">Orden #{{ orden.id }}</a>
+    </li>
+    <li class="breadcrumb-item active">Cerrar</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8 col-xl-7">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-success bg-opacity-10 text-success" style="width:44px;height:44px;">
+          <i class="bi bi-check2-circle"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Cerrar mantenimiento</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            {{ orden.get_tipo_display }}{% if orden.en_garantia %} en garantía{% endif %} ·
+            {{ orden.activo.get_tipo_dispositivo_display }} {{ orden.activo.marca }} {{ orden.activo.modelo }} ·
+            Serial {{ orden.activo.serial }}
+          </p>
+        </div>
+      </div>
+
+      {% if checklist_total is not None %}
+      <div class="d-flex align-items-center justify-content-between mb-3" style="font-size:.9rem;">
+        <span>Checklist: <strong>{{ checklist_marcados }} de {{ checklist_total }} marcados</strong></span>
+        {% if checklist_marcados < checklist_total %}
+        <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-list-check"></i> Volver al checklist
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger" role="alert">
+            <ul class="mb-0 ps-3">
+              {% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if pedir_datos_tecnico %}
+        <fieldset class="border rounded p-3 mb-4">
+          <legend class="float-none w-auto px-2 mb-0 fs-6 fw-semibold">Tus datos para el acta</legend>
+          <p class="text-muted mb-3" style="font-size:.82rem;">
+            Tu cuenta no tiene nombre. Se pide una sola vez y queda guardado en tu cuenta:
+            es lo que sale en la firma del técnico.
+          </p>
+          <div class="row g-3">
+            {% for campo in form %}{% if campo.name == "first_name" or campo.name == "last_name" or campo.name == "cargo" %}
+            <div class="col-12 col-md-4">
+              <label for="{{ campo.id_for_label }}" class="form-label fw-semibold">{{ campo.label }}</label>
+              {{ campo }}
+              {% for e in campo.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            {% endif %}{% endfor %}
+          </div>
+        </fieldset>
+        {% endif %}
+
+        <div class="mb-3">
+          <label for="{{ form.fecha_cierre.id_for_label }}" class="form-label fw-semibold">{{ form.fecha_cierre.label }}</label>
+          {{ form.fecha_cierre }}
+          <div class="form-text">Hoy o una fecha pasada, no anterior a la apertura ({{ orden.fecha_apertura|date:"d/m/Y" }}).</div>
+          {% for e in form.fecha_cierre.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="mb-3">
+          <span class="form-label fw-semibold d-block">{{ form.estado_final.label }}</span>
+          {% for radio in form.estado_final %}
+            <div class="form-check form-check-inline">
+              {{ radio.tag }}
+              <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+            </div>
+          {% endfor %}
+          {% for e in form.estado_final.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        {% if form.diagnostico %}
+        <div class="mb-3">
+          <label for="{{ form.diagnostico.id_for_label }}" class="form-label fw-semibold">{{ form.diagnostico.label }}</label>
+          {{ form.diagnostico }}
+          <div class="form-text">Hasta 600 caracteres.</div>
+          {% for e in form.diagnostico.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          <label for="{{ form.acciones.id_for_label }}" class="form-label fw-semibold">{{ form.acciones.label }}</label>
+          {{ form.acciones }}
+          <div class="form-text">Hasta 600 caracteres.</div>
+          {% for e in form.acciones.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="mb-4">
+          <label for="{{ form.observaciones.id_for_label }}" class="form-label fw-semibold">{{ form.observaciones.label }}</label>
+          {{ form.observaciones }}
+          <div class="form-text">Opcional, hasta 600 caracteres. Sale en el acta después de las fallas del checklist.</div>
+          {% for e in form.observaciones.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-check2-circle"></i> Cerrar mantenimiento
+          </button>
+          <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
