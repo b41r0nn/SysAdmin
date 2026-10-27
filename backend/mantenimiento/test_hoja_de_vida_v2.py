@@ -91,11 +91,53 @@ class HojaDeVidaV2Tests(TestCase):
         self.assertIn("En garantía", html)
         self.assertIn("Estado final", html)
 
+    def test_hoja_de_vida_pdf_enlaces_acta_absolutos(self):
+        url_acta = "https://sysadmin.example.com" + reverse("mantenimiento:acta_pdf", args=[self.orden.pk])
+        with _con_weasy(), self.settings(QR_BASE_URL="https://sysadmin.example.com/"):
+            hoja_de_vida_pdf_bytes(self.pc)
+        self.assertIn(f'<a href="{url_acta}">{url_acta}</a>', FakeWeasy.html)
+        self.assertNotIn("Acta firmada", FakeWeasy.html)
+
+        OrdenMantenimiento.objects.filter(pk=self.orden.pk).update(
+            acta_firmada="mantenimiento/actas/a.pdf", acta_firmada_desactualizada=True
+        )
+        with _con_weasy(), self.settings(QR_BASE_URL="https://sysadmin.example.com/"):
+            hoja_de_vida_pdf_bytes(self.pc)
+        html = FakeWeasy.html
+        self.assertIn("Acta firmada (desactualizada)", html)
+        self.assertRegex(html, r'<a href="https://sysadmin\.example\.com[^"]*mantenimiento/actas/a\.pdf">')
+
+    def test_hoja_de_vida_pdf_sin_enlace_si_orden_abierta(self):
+        otro = crear_pc(serial="SN-HV-3")
+        with patch("mantenimiento.ejecucion.snapshot_software_ocs", return_value=[]):
+            abierta = iniciar_preventivo(otro, self.tecnico, HOY)
+        with _con_weasy(), self.settings(QR_BASE_URL="https://sysadmin.example.com"):
+            hoja_de_vida_pdf_bytes(otro)
+        self.assertNotIn(reverse("mantenimiento:acta_pdf", args=[abierta.pk]), FakeWeasy.html)
+
     def test_reporte_mantenimientos_pdf_columnas(self):
+        OrdenMantenimiento.objects.filter(pk=self.orden.pk).update(en_garantia=True)
+        otro = crear_pc(serial="SN-HV-4")
+        OrdenMantenimiento.objects.create(
+            activo=otro, tipo="correctivo", estado="cerrada", formato=1, fecha_cierre=HOY,
+            en_garantia=False, tecnico_asignado="Pedro Externo",
+        )
         with _con_weasy():
             resp = self.client.get(reverse("mantenimiento:reporte_mantenimientos_pdf"))
         self.assertEqual(resp.status_code, 200)
         html = FakeWeasy.html
         self.assertIn("<th>En garantía</th>", html)
         self.assertIn("<th>Estado final</th>", html)
-        self.assertIn("Operativo con observaciones", html)
+        self.assertNotIn("Plan", html)
+        filas = {}
+        for fila in html.split("<tr>")[1:]:
+            for serial in ("SN-HV-1", "SN-HV-4"):
+                if serial in fila:
+                    filas[serial] = fila
+        con, sin = filas["SN-HV-1"], filas["SN-HV-4"]
+        self.assertIn("<td>Sí</td>", con)
+        self.assertIn("Operativo con observaciones", con)
+        self.assertIn("Ana Técnica", con)
+        self.assertIn("<td>No</td>", sin)
+        self.assertNotIn("<td>Sí</td>", sin)
+        self.assertIn("Pedro Externo", sin)
