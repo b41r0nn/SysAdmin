@@ -439,6 +439,12 @@ def leer_credenciales(archivo, vault):
     una clave (o se armó con una terminación desconocida, como "Clave.Segura"), esa
     fila sale con error y sin URL ni notas. Si una columna entera parece cruzada
     (ver _avisos_de_columnas_cruzadas) no se importa nada.
+
+    Aviso "Revisa" por fila (no bloquea) cuando el valor de la columna URL no es una
+    dirección y queda como nota: la nota no se cifra, así que si esa columna traía
+    contraseñas (Contraseña y Servidor intercambiadas, con claves sin símbolos como
+    "Casa2024", que tienen la forma de un nombre de equipo) la clave real quedaría en
+    claro. No se bloquea porque "SRV-DC01" en una columna "Servidor" es legítimo.
     """
     hoja, columnas, nombres, ignoradas, crudas = _leer_hoja(archivo)
     advertencias, faltantes = _advertencias(hoja, columnas, ignoradas)
@@ -526,6 +532,11 @@ def leer_credenciales(archivo, vault):
                 revisar.append("en Excel era un número")
             if url_dudosa:
                 revisar.append("la URL no termina en un dominio conocido (.com, .co, .local…), ¿es una contraseña?")
+            if nota_url and not any(c.isspace() for c in url_original):
+                revisar.append(
+                    f"«{nombres.get('url', 'URL')}» no es una dirección y quedó como nota sin cifrar, "
+                    "¿es una contraseña? (muévela a la columna de contraseña)"
+                )
             if revisar:
                 registro["detalle"] = "Revisa: " + "; ".join(revisar)
         filas.append(registro)

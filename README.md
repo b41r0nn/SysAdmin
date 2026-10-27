@@ -61,7 +61,7 @@
 
 **Producción** (2026-10-22): 26 activos · Django 5.2 LTS · contenedor sin root · **469 tests en verde** (SQLite y PostgreSQL). Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
 
-**En la rama `feat/mantenimiento-v2`** (v1.13, pendiente de despliegue): mantenimiento rediseñado + importación de contraseñas desde Excel · **679 tests en verde** (4 omitidas en Windows: 3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL).
+**En la rama `feat/mantenimiento-v2`** (v1.13, pendiente de despliegue): mantenimiento rediseñado + importación de contraseñas desde Excel · **711 tests en verde** (4 omitidas en Windows: 3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL).
 
 ---
 
@@ -598,14 +598,14 @@ BD: PostgreSQL 15 en contenedor
 - ✅ Órdenes anteriores en solo lectura (formato 1)
 - ✅ Incluye la **importación de contraseñas desde Excel** (Etapa A, ver entrada del 2026-10-23)
 - ✅ Migraciones `mantenimiento/0009` a `0015`, `accounts/0003_customuser_cargo`, `administracion/0004_acta_mantenimiento`
-- ✅ Suite **679 OK**: en Windows/SQLite con 4 omitidas (3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL) y en Linux con WeasyPrint real con 1 omitida (la de PostgreSQL). Las pruebas del acta confirman con WeasyPrint real que cabe en una sola hoja carta
+- ✅ Suite **711 OK**: en Windows/SQLite con 4 omitidas (3 del acta, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL) y en Linux con WeasyPrint real con 1 omitida (la de PostgreSQL). Las pruebas del acta confirman con WeasyPrint real que cabe en una sola hoja carta
 
 ### 2026-10-23 — Importación de contraseñas desde Excel (rama `feat/importar-contrasenas`, pendiente de despliegue)
 
 - ✅ **Contraseñas › Importar desde Excel**, dentro de cada bóveda: plantilla `plantilla_importar_contrasenas.xlsx`, vista previa por fila (nuevas / ya existen / con error) y confirmación. Encabezados flexibles ("Clave", "Password"…), claves numéricas sin `.0`, URL sin esquema → `https://`, máx. 1.000 filas / 5 MB
 - ✅ Seguridad: la clave se cifra al leer el archivo; ni la sesión, ni el HTML, ni la bitácora (`importacion_excel`) la contienen. Solo `passwords: escritura` (superadmin)
 - ✅ Endurecida tras la revisión final: doble clic en Confirmar no duplica (bloqueo por bóveda + lote de la vista previa); un Excel con celdas con formato lejos de los datos o con varias hojas se lee en modo streaming; las claves que Excel alteró (fecha u hora, VERDADERO/FALSO, porcentaje, moneda, números de más de 15 cifras, #N/A) salen con error; aviso de columnas no reconocidas y de falta de Usuario; si las columnas parecen pegadas en otro orden no se importa nada; las filas de ejemplo de la plantilla no se importan; sin claves en logs ni en archivos temporales (`FILE_UPLOAD_MAX_MEMORY_SIZE` = 6 MB)
-- ✅ Arreglos de la auditoría final: el Excel subido no toca el disco ni en Django (solo en memoria; más de 6 MB se rechaza sin leerlo) ni en nginx (buffer de 6 MB en la ruta de importar); archivos fabricados acotados (fila más allá de la 1.048.576, partes del zip de más de 5 MB o 20 MB en total descomprimido, cientos de hojas declaradas); la vista previa en sesión tiene tope de 2 MB; los nombres de equipo sin dominio (SRV-DC01) y las descripciones en la columna URL ya no bloquean el archivo, y el aviso dice qué columna y por qué; una fila con la clave y la URL corridas sale con error; los errores de Estado/Fecha y un archivo sin encabezados no muestran valores; `limpiar_historial` borra las sesiones vencidas
+- ✅ Arreglos de la auditoría final: el Excel subido no toca el disco ni en Django (solo en memoria; más de 6 MB se rechaza sin leerlo) ni en nginx (buffer de 6 MB en la ruta de importar); archivos fabricados acotados (fila más allá de la 1.048.576, partes del zip de más de 5 MB o 20 MB en total descomprimido, cientos de hojas declaradas); la vista previa en sesión tiene tope de 2 MB; los nombres de equipo sin dominio (SRV-DC01) y las descripciones en la columna URL ya no bloquean el archivo, y el aviso dice qué columna y por qué (si ese valor queda como nota, que no se cifra, la fila avisa «Revisa»); una fila con la clave y la URL corridas sale con error; los errores de Estado/Fecha y un archivo sin encabezados no muestran valores; `limpiar_historial` borra las sesiones vencidas
 - ✅ Suite **511 OK** (1 omitida: la prueba de concurrencia solo corre en PostgreSQL)
 
 ### 2026-10-22 — v1.12.1 · Correcciones tras salir a producción

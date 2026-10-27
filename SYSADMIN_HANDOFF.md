@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-10-27 · v1.13 (mantenimiento v2 + importación de contraseñas, pendiente de despliegue) · 679 tests OK · en producción sigue v1.12.1
+> Documento actualizado: 2026-10-27 · v1.13 (mantenimiento v2 + importación de contraseñas, pendiente de despliegue) · 711 tests OK · en producción sigue v1.12.1
 
 ---
 
@@ -1806,15 +1806,20 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 4. Borrar en el servidor lo que el tar no quita: `backend/mantenimiento/views.py` (ahora es el paquete `views/`), `backend/mantenimiento/views/planes.py`, `views/legado.py` y las plantillas `lista_planes.html`, `detalle_plan.html`, `form_plan.html`, `partials/tabla_planes.html`, `partials/checklist_orden.html`, `partials/estado_partes.html` y `form_orden.html`.
 5. `docker compose build django nginx` → `up -d` → `docker exec sysadmin_django python manage.py migrate` (el `entrypoint.sh` ya corre `migrate` al arrancar; el comando sirve para ver la salida).
 
+**nginx y cron (vienen con la Etapa A, importar contraseñas)**
+- **nginx hay que reconstruirlo**: esta versión cambia `nginx/nginx.conf` (una `location` propia para `/passwords/vaults/<id>/credenciales/importar/` con `client_body_buffer_size 6m`, para que el Excel con las claves en texto plano no pase por un archivo temporal de nginx, y un 413 propio en español). El `.conf` va dentro de la imagen: el `docker compose build django nginx` del paso 5 ya lo cubre, pero un `up -d` o un `nginx -s reload` **no**. Comprobar después: `docker exec sysadmin_nginx nginx -t` → `syntax is ok` / `test is successful`.
+- **El cron no se toca**: `deploy/instalar_cron_limpieza.sh` no cambió y no hay que reinstalarlo. Lo que cambió es el comando que ya corría semanalmente: `limpiar_historial` ahora borra además las sesiones vencidas (ahí quedan las vistas previas de importación abandonadas). Para verlo sin borrar nada: `docker exec sysadmin_django python manage.py limpiar_historial --dias 365 --media-dias 30 --dry-run`.
+
 **Verificación posterior**
 - La orden correctiva vieja (formato 1, cerrada, con `estado_partes`) abre en el detalle, la hoja de vida y su PDF.
 - Existen las 2 plantillas de checklist (portátil y escritorio) en `/mantenimiento/checklists/`.
 - Descargar el acta de una orden cerrada de prueba y comprobar que sale en una sola hoja.
 - La hoja de vida y su PDF muestran el resumen del checklist y los enlaces al acta: el PDF los arma con `QR_BASE_URL`, que debe estar en el `.env` del servidor (hoy `https://192.168.1.250:6060`); si está vacío, los enlaces del PDF salen relativos y no se pueden abrir.
+- Importar contraseñas: subir un `.xlsx` de prueba con una columna "Servidor" de nombres sin dominio (`SRV-DC01`) → **no** se bloquea el archivo y esas filas salen con el aviso "Revisa: «Servidor» no es una dirección y quedó como nota sin cifrar". Subir uno de más de 5 MB → la página "El archivo pasa de 5 MB" (la da nginx con un 413 propio si pasa de 6 MB, o Django si está entre 5 y 6 MB).
 
 **Datos de producción al 2026-10-23**: 1 orden correctiva cerrada con `estado_partes` (queda en formato 1) y 1 plan sin uso (se elimina con 0015).
 
-**Tests**: **679 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
+**Tests**: **711 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
 
 ---
 
@@ -1830,4 +1835,4 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 
 ---
 
-*Última actualización: 2026-10-27 · v1.13 · Mantenimiento v2 (679 tests OK, pendiente de despliegue; en producción sigue v1.12.1)*
+*Última actualización: 2026-10-27 · v1.13 · Mantenimiento v2 (711 tests OK, pendiente de despliegue; en producción sigue v1.12.1)*
