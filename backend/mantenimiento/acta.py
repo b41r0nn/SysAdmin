@@ -31,6 +31,12 @@ def url_hoja_de_vida(request, activo):
     return request.build_absolute_uri(path)
 
 
+def url_absoluta(path):
+    """``path`` con el prefijo de ``QR_BASE_URL`` (sin petición, para los PDF); sin prefijo, el mismo ``path``."""
+    base = (settings.QR_BASE_URL or "").strip()
+    return f"{base.rstrip('/')}{path}" if base else path
+
+
 def fotos_acta(orden):
     """Las fotos marcadas para el acta o, si no hay ninguna, las primeras. Máximo 3."""
     fotos = orden.fotos.order_by("fecha_creacion", "pk")

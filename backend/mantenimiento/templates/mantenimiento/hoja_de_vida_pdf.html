@@ -289,7 +289,8 @@
     <div class="seccion">
       <div class="t">Checklist</div>
       {{ item.nuevo.resumen.bien }} bien · {{ item.nuevo.resumen.falla }} con falla · {{ item.nuevo.resumen.na }} no aplica
-      {% if item.orden.acta_firmada %}<br>Acta firmada: sí{% if item.orden.acta_firmada_desactualizada %} (desactualizada){% endif %}{% endif %}
+      {% if item.enlaces.acta %}<br>Acta: <a href="{{ item.enlaces.acta }}">{{ item.enlaces.acta }}</a>{% endif %}
+      {% if item.enlaces.firmada %}<br>Acta firmada{% if item.orden.acta_firmada_desactualizada %} (desactualizada){% endif %}: <a href="{{ item.enlaces.firmada }}">{{ item.enlaces.firmada }}</a>{% endif %}
       {% for falla in item.nuevo.fallas %}
       <p style="margin-top:1mm;">{{ falla }}</p>
       {% endfor %}
