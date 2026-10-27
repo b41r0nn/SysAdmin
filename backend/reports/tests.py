@@ -84,6 +84,47 @@ class ReportsExcelTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("spreadsheetml", resp["Content-Type"])
 
+    def test_excel_mantenimiento_columnas_nuevas(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from mantenimiento.models import OrdenMantenimiento
+
+        hoy = timezone.localdate()
+        tecnico = CustomUser.objects.create_user(
+            username="rpt_tecnico_excel", password="x", rol="tecnico", first_name="Ana", last_name="Técnica"
+        )
+        activo = Activo.objects.create(
+            serial="SN-XLS-1", tipo_dispositivo="portatil", marca="HP", modelo="ProBook", estado="disponible"
+        )
+        OrdenMantenimiento.objects.create(
+            activo=activo, tipo="preventivo", estado="cerrada", fecha_apertura=hoy, fecha_cierre=hoy,
+            en_garantia=True, tecnico=tecnico, estado_final="operativo", costo_real=150000,
+        )
+        OrdenMantenimiento.objects.create(
+            activo=activo, tipo="correctivo", estado="cerrada", fecha_apertura=hoy - timedelta(days=1),
+            fecha_cierre=hoy, tecnico_asignado="Pedro Viejo", costo_estimado=80000,
+        )
+
+        resp = self.client.get(reverse("reports:mantenimiento_excel"))
+        self.assertEqual(resp.status_code, 200)
+        ws = load_workbook(BytesIO(resp.content)).active
+        encabezados = [
+            "Fecha apertura", "Fecha cierre", "Tipo", "En garantía", "Estado", "Estado final",
+            "Prioridad", "Activo", "Serial", "Técnico", "Costo estimado", "Costo real",
+        ]
+        self.assertEqual([c.value for c in ws[6]], encabezados)
+        preventivo = [c.value for c in ws[7]]
+        correctivo = [c.value for c in ws[8]]
+        self.assertEqual(preventivo[2:10], ["Preventivo", "Sí", "Cerrada", "Operativo", "Media", "HP ProBook", "SN-XLS-1", "Ana Técnica"])
+        self.assertEqual(preventivo[11], 150000)
+        self.assertEqual(ws.cell(row=7, column=12).number_format, "$#,##0.00")
+        self.assertEqual(correctivo[3], "No")
+        self.assertEqual(correctivo[9], "Pedro Viejo")
+        self.assertEqual(correctivo[10], 80000)
+        self.assertEqual(ws.cell(row=8, column=11).number_format, "$#,##0.00")
+
 
 class ReportsPDFTests(TestCase):
     def setUp(self):

@@ -105,7 +105,7 @@
       <td class="etiqueta">Prioridad</td>
       <td>{{ orden.get_prioridad_display }}</td>
       <td class="etiqueta">Técnico</td>
-      <td>{{ orden.tecnico_asignado|default:"—" }}</td>
+      <td>{% firstof orden.tecnico.get_full_name orden.tecnico_asignado "—" %}</td>
     </tr>
     <tr>
       <td class="etiqueta">Costo estimado</td>
@@ -174,7 +174,7 @@
       <td style="width:50%;text-align:center;vertical-align:bottom;">
         <div style="border-top:1px solid #0f172a;width:80%;margin:0 auto;padding-top:1.5mm;">
           <strong>Técnico</strong><br>
-          <span class="small">{{ orden.tecnico_asignado|default:"________________" }}</span>
+          <span class="small">{% firstof orden.tecnico.get_full_name orden.tecnico_asignado "________________" %}</span>
         </div>
       </td>
       <td style="width:50%;text-align:center;vertical-align:bottom;">

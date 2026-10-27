@@ -43,14 +43,13 @@ class CrearCorrectivoTests(CorrectivosBase):
     def test_crear_correctivo_formato_actual_sin_checklist(self):
         resp = self.client.post(
             reverse("mantenimiento:crear_orden"),
-            self._datos(tipo="preventivo", estado="en_proceso", formato=1, plan=""),
+            self._datos(tipo="preventivo", estado="en_proceso", formato=1),
         )
         self.assertEqual(resp.status_code, 302)
         orden = OrdenMantenimiento.objects.get(activo=self.pc)
         self.assertEqual(orden.tipo, "correctivo")
         self.assertEqual(orden.estado, "abierta")
         self.assertEqual(orden.formato, 2)
-        self.assertIsNone(orden.plan)
         self.assertEqual(orden.checklist_items.count(), 0)
         self.assertEqual(orden.tecnico_asignado, "")
 
@@ -58,12 +57,11 @@ class CrearCorrectivoTests(CorrectivosBase):
         form = OrdenForm()
         for nombre in form.fields:
             self.assertFalse(nombre.startswith(("accion_", "parte_")), nombre)
-        for prohibido in ("plan", "tipo", "estado", "fecha_cierre", "tecnico_asignado"):
+        for prohibido in ("tipo", "estado", "fecha_cierre", "tecnico_asignado"):
             self.assertNotIn(prohibido, form.fields)
         self.assertEqual(form.fields["acciones"].label, "Solución / acciones realizadas")
         resp = self.client.get(reverse("mantenimiento:crear_orden"))
         self.assertEqual(resp.status_code, 200)
-        self.assertNotContains(resp, "Plan asociado")
         self.assertNotContains(resp, "Estado general de partes")
 
     def test_crear_con_estado_cerrada_no_cierra(self):
@@ -240,7 +238,7 @@ class DetalleTests(CorrectivosBase):
         orden = OrdenMantenimiento.objects.create(
             activo=self.pc, tipo="preventivo", formato=1, estado="cerrada", fecha_apertura=HOY
         )
-        ChecklistItem.objects.create(orden=orden, descripcion="Revisión visual vieja", completado=True)
+        ChecklistItem.objects.create(orden=orden, descripcion="Revisión visual vieja")
         resp = self.client.get(reverse("mantenimiento:detalle_orden", args=[orden.pk]))
         self.assertContains(resp, "Revisión visual vieja")
         self.assertNotContains(resp, "Agregar item al checklist")

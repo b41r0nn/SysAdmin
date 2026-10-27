@@ -42,11 +42,6 @@ def _foto_formset(*args, **kwargs):
     return FotoFormSet(*args, prefix="fotos", **kwargs)
 
 
-def _parte_fields(form):
-    # Solo lo usa la vista heredada ``estado_partes_partial`` (se borra en la Tarea 11).
-    return [field for field in form if field.name.startswith("parte_")]
-
-
 AVISO_CERRADA ="Un mantenimiento cerrado no se modifica. Reábrelo si necesitas cambiarlo."
 
 
@@ -64,7 +59,7 @@ def _si_esta_cerrada(request, orden):
 
 @requiere_permiso("mantenimiento", "lectura")
 def lista_ordenes(request):
-    qs = OrdenMantenimiento.objects.select_related("activo", "plan")
+    qs = OrdenMantenimiento.objects.select_related("activo", "tecnico")
 
     tipo = request.GET.get("tipo", "").strip()
     estado = request.GET.get("estado", "").strip()
@@ -86,6 +81,8 @@ def lista_ordenes(request):
             | Q(activo__marca__icontains=q)
             | Q(activo__modelo__icontains=q)
             | Q(tecnico_asignado__icontains=q)
+            | Q(tecnico__first_name__icontains=q)
+            | Q(tecnico__last_name__icontains=q)
         )
 
     stats = {
@@ -176,7 +173,7 @@ def crear_orden(request):
                         form.cleaned_data["software_snapshot_text"] = [
                             s.get("name") for s in software if s.get("name")
                         ]
-            # Un correctivo nuevo: sin plan ni checklist, y solo se cierra por el cierre.
+            # Un correctivo nuevo: sin checklist, y solo se cierra por el cierre.
             form.instance.tipo = "correctivo"
             form.instance.estado = "abierta"
             form.instance.formato = FORMATO_ACTUAL

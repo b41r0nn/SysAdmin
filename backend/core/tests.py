@@ -83,6 +83,30 @@ class DashboardTests(TestCase):
         resp = self.client.get(reverse("core:dashboard"))
         self.assertEqual(resp.status_code, 200)
 
+    def test_dashboard_muestra_equipos_que_les_toca(self):
+        from inventario.models import Activo
+
+        hoy = timezone.localdate()
+        for serial in ("SN-D1", "SN-D2"):
+            # Garantía vencida hace un año: le toca desde que venció.
+            Activo.objects.create(
+                serial=serial, tipo_dispositivo="escritorio", marca="HP", modelo="Pro",
+                estado="disponible", fecha_compra=hoy - timedelta(days=730), garantia_fabrica_meses=12,
+            )
+        Activo.objects.create(
+            serial="SN-D3", tipo_dispositivo="escritorio", marca="HP", modelo="Pro",
+            estado="disponible", fecha_compra=hoy - timedelta(days=30), garantia_fabrica_meses=24,
+        )
+        resp = self.client.get(reverse("core:dashboard"))
+        self.assertEqual(resp.context["les_toca_mantenimiento"], 2)
+        self.assertContains(resp, "Les toca mantenimiento")
+        self.assertContains(resp, "bi-tools")
+        self.assertNotContains(resp, "Ordenes atrasadas")
+        self.assertNotContains(resp, "ALERTA")
+        tarjeta = resp.content.decode().split("Les toca mantenimiento")[0].rsplit("sa-stat-card", 1)[1]
+        self.assertIn("text-warning", tarjeta)
+        self.assertNotIn("danger", tarjeta)
+
 
 def _cerrar_archivo(resp):
     """Libera el handle del archivo de un FileResponse antes de borrar tmpdir.
@@ -383,8 +407,8 @@ class SmokeVistasTests(TestCase):
         "reports:index", "reports:activos_por_usuario", "reports:inventario_excel",
         "reports:movimientos_excel", "reports:usuarios_excel", "reports:costos_excel",
         "reports:mantenimiento_excel",
-        "mantenimiento:inicio", "mantenimiento:lista_ordenes", "mantenimiento:lista_planes", "mantenimiento:calendario",
-        "mantenimiento:calendario_eventos", "mantenimiento:reportar", "mantenimiento:crear_plan",
+        "mantenimiento:inicio", "mantenimiento:lista_ordenes", "mantenimiento:calendario",
+        "mantenimiento:calendario_eventos", "mantenimiento:reportar",
         "mantenimiento:crear_orden", "mantenimiento:nuevo", "mantenimiento:hoja_de_vida_buscar",
         "mantenimiento:lista_plantillas", "mantenimiento:crear_plantilla",
         "passwords:index", "passwords:vault_crear", "passwords:importar_plantilla",

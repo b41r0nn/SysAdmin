@@ -1,4 +1,5 @@
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -12,10 +13,9 @@ from django.utils import timezone
 from inventario.models import Activo
 from mantenimiento.forms import ReporteFallaForm
 from mantenimiento.models import (
-    ChecklistItem,
     FotoMantenimiento,
     OrdenMantenimiento,
-    PlanMantenimiento,
+    ProgramacionMantenimiento,
     Repuesto,
 )
 from notificaciones.models import Notificacion
@@ -43,12 +43,6 @@ def _activo(serial="SN-MT-001"):
     )
 
 
-def _plan(tipo_dispositivo="escritorio", **kw):
-    defaults = {"tipo": "preventivo", "estado": "activo"}
-    defaults.update(kw)
-    return PlanMantenimiento.objects.create(tipo_dispositivo=tipo_dispositivo, **defaults)
-
-
 def _orden(activo, **kw):
     defaults = {
         "tipo": "correctivo",
@@ -58,74 +52,6 @@ def _orden(activo, **kw):
     }
     defaults.update(kw)
     return OrdenMantenimiento.objects.create(activo=activo, **defaults)
-
-
-# ─── Planes ────────────────────────────────────────────────────────
-
-
-class PlanesLoginTests(TestCase):
-    def test_lista_requiere_login(self):
-        resp = self.client.get(reverse("mantenimiento:lista_planes"))
-        self.assertEqual(resp.status_code, 302)
-
-
-class PlanesCRUDTests(TestCase):
-    def setUp(self):
-        self.user = _user("superadmin")
-        self.client = Client()
-        self.client.force_login(self.user)
-        self.activo = _activo()
-
-    def test_lista_returns_200(self):
-        resp = self.client.get(reverse("mantenimiento:lista_planes"))
-        self.assertEqual(resp.status_code, 200)
-
-    def test_detalle_returns_200(self):
-        p = _plan()
-        resp = self.client.get(reverse("mantenimiento:detalle_plan", args=[p.pk]))
-        self.assertEqual(resp.status_code, 200)
-
-    def test_crear_plan_post(self):
-        resp = self.client.post(
-            reverse("mantenimiento:crear_plan"),
-            {
-                "tipo_dispositivo": "escritorio",
-                "tipo": "preventivo",
-                "criticidad": "alta",
-                "frecuencia_dias": 30,
-                "estado": "activo",
-            },
-        )
-        self.assertEqual(resp.status_code, 302)
-        self.assertTrue(PlanMantenimiento.objects.filter(tipo_dispositivo="escritorio").exists())
-
-    def test_toggle_plan(self):
-        p = _plan(estado="activo")
-        resp = self.client.post(reverse("mantenimiento:toggle_plan", args=[p.pk]))
-        self.assertEqual(resp.status_code, 302)
-        p.refresh_from_db()
-        self.assertEqual(p.estado, "pausado")
-
-    def test_eliminar_plan_sin_ordenes(self):
-        p = _plan()
-        resp = self.client.post(reverse("mantenimiento:eliminar_plan", args=[p.pk]))
-        self.assertEqual(resp.status_code, 302)
-        self.assertFalse(PlanMantenimiento.objects.filter(pk=p.pk).exists())
-
-    def test_eliminar_plan_con_ordenes_fallido(self):
-        p = _plan()
-        _orden(self.activo, plan=p)
-        resp = self.client.post(reverse("mantenimiento:eliminar_plan", args=[p.pk]))
-        self.assertEqual(resp.status_code, 302)
-        self.assertTrue(PlanMantenimiento.objects.filter(pk=p.pk).exists())
-
-
-class PlanesPermisosTests(TestCase):
-    def test_lectura_no_puede_crear(self):
-        user = _user("lectura")
-        self.client.force_login(user)
-        resp = self.client.get(reverse("mantenimiento:crear_plan"))
-        self.assertEqual(resp.status_code, 302)
 
 
 # ─── Ordenes ───────────────────────────────────────────────────────
@@ -244,74 +170,6 @@ class RepuestosTests(TestCase):
         self.assertFalse(Repuesto.objects.filter(pk=r.pk).exists())
 
 
-# ─── Fase 3: Checklist ─────────────────────────────────────────────
-
-
-class ChecklistTests(TestCase):
-    def setUp(self):
-        self.user = _user("superadmin")
-        self.client = Client()
-        self.client.force_login(self.user)
-        self.activo = _activo()
-
-    def _plan_con_checklist(self, descripciones):
-        plan = _plan()
-        for i, d in enumerate(descripciones):
-            ChecklistItem.objects.create(plan=plan, descripcion=d, posicion=i)
-        return plan
-
-    def test_crear_orden_ignora_el_plan_y_no_copia_checklist(self):
-        # El correctivo nuevo no lleva plan: aunque llegue uno, no se usa.
-        plan = self._plan_con_checklist(["Inspeccion visual", "Pruebas de encendido"])
-        resp = self.client.post(
-            reverse("mantenimiento:crear_orden"),
-            {
-                "plan": plan.pk,
-                "activo": self.activo.pk,
-                "prioridad": "media",
-                "fecha_apertura": HOY,
-            },
-        )
-        self.assertEqual(resp.status_code, 302)
-        orden = OrdenMantenimiento.objects.get(activo=self.activo)
-        self.assertIsNone(orden.plan)
-        self.assertEqual(orden.checklist_items.count(), 0)
-
-    def test_crear_orden_sin_plan_no_genera_items(self):
-        resp = self.client.post(
-            reverse("mantenimiento:crear_orden"),
-            {
-                "activo": self.activo.pk,
-                "tipo": "correctivo",
-                "estado": "abierta",
-                "prioridad": "alta",
-                "fecha_apertura": HOY,
-            },
-        )
-        self.assertEqual(resp.status_code, 302)
-        orden = OrdenMantenimiento.objects.get(activo=self.activo)
-        self.assertEqual(orden.checklist_items.count(), 0)
-
-    def test_toggle_checklist_marca_y_desmarca(self):
-        plan = self._plan_con_checklist(["Inspeccion visual"])
-        orden = _orden(self.activo, plan=plan)
-        item = ChecklistItem.objects.create(orden=orden, descripcion="Inspeccion visual")
-
-        resp = self.client.post(reverse("mantenimiento:toggle_checklist", args=[item.pk]))
-        self.assertEqual(resp.status_code, 200)
-        item.refresh_from_db()
-        self.assertTrue(item.completado)
-
-        resp = self.client.post(reverse("mantenimiento:toggle_checklist", args=[item.pk]))
-        self.assertEqual(resp.status_code, 200)
-        item.refresh_from_db()
-        self.assertFalse(item.completado)
-
-    def test_plantilla_del_plan_no_usa_estado_orden(self):
-        plan = self._plan_con_checklist(["A", "B", "C"])
-        self.assertEqual(plan.checklist_items.filter(orden__isnull=True).count(), 3)
-
-
 # ─── Fase 3: Command notificaciones ────────────────────────────────
 
 
@@ -323,15 +181,14 @@ class CommandNotificacionesMantenimientoTests(TestCase):
         user_super = _user("superadmin")
         user_tecnico = _user("tecnico")
         user_lectura = _user("lectura")
-        plan = _plan(proxima_ejecucion=HOY + timedelta(days=3))
+        # Sin garantía calculable le toca desde el día en que se registró (hoy).
+        objetokey = f"mant:toca:{self.activo.pk}:{HOY.isoformat()}"
 
-        call_command("generar_notificaciones_mantenimiento")
-        call_command("generar_notificaciones_mantenimiento")
+        call_command("generar_notificaciones_mantenimiento", stdout=StringIO())
+        call_command("generar_notificaciones_mantenimiento", stdout=StringIO())
 
         for user in (user_super, user_tecnico, user_lectura):
-            notif = list(
-                user.notificaciones.filter(tipo="mantenimiento", objetokey=f"mantenimiento:{plan.pk}")
-            )
+            notif = list(user.notificaciones.filter(tipo="mantenimiento", objetokey=objetokey))
             self.assertEqual(len(notif), 1)
 
 
@@ -468,15 +325,15 @@ class CalendarioTests(TestCase):
         resp = self.client.get(reverse("mantenimiento:calendario"))
         self.assertEqual(resp.status_code, 200)
 
-    def test_eventos_incluyen_ordenes_y_planes(self):
+    def test_eventos_incluyen_ordenes_y_fechas_programadas(self):
         orden = _orden(self.activo, tipo="correctivo", estado="abierta")
-        _plan(tipo="preventivo", proxima_ejecucion=HOY + timedelta(days=5))
+        ProgramacionMantenimiento.objects.create(activo=self.activo, fecha_programada=HOY + timedelta(days=5))
         resp = self.client.get(reverse("mantenimiento:calendario_eventos"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         titulos = [e["title"] for e in data]
         self.assertTrue(any(f"Orden #{orden.id}" in t for t in titulos))
-        self.assertTrue(any("Plan Preventivo" in t for t in titulos))
+        self.assertIn(f"Programado · {self.activo.serial}", titulos)
 
 
 # ─── Fase 4: Snapshot software + fotos + hoja de vida ─────────────
@@ -587,83 +444,6 @@ class FotoMantenimientoTests(TestCase):
         resp = self.client.post(reverse("mantenimiento:eliminar_foto", args=[foto.pk]))
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(FotoMantenimiento.objects.filter(pk=foto.pk).exists())
-
-
-class ChecklistEditableTests(TestCase):
-    def setUp(self):
-        self.user = _user("superadmin")
-        self.client = Client()
-        self.client.force_login(self.user)
-        self.activo = _activo()
-
-    def test_crear_item_checklist_en_orden(self):
-        orden = _orden(self.activo)
-        resp = self.client.post(
-            reverse("mantenimiento:crear_item_checklist", args=[orden.pk]),
-            {"descripcion": "Verificar cableado"},
-        )
-        self.assertEqual(resp.status_code, 302)
-        self.assertTrue(
-            ChecklistItem.objects.filter(orden=orden, descripcion="Verificar cableado").exists()
-        )
-
-
-class OrdenAccionesYPartesTests(TestCase):
-    def setUp(self):
-        self.user = _user("superadmin")
-        self.client = Client()
-        self.client.force_login(self.user)
-        self.activo_portatil = Activo.objects.create(
-            serial="SN-PT-001",
-            tipo_dispositivo="portatil",
-            marca="Lenovo",
-            modelo="ThinkPad",
-            estado="disponible",
-        )
-
-    def test_crear_orden_ignora_acciones_y_estado_partes(self):
-        # Los campos del formato anterior ya no se guardan en las órdenes nuevas.
-        resp = self.client.post(
-            reverse("mantenimiento:crear_orden"),
-            {
-                "activo": self.activo_portatil.pk,
-                "prioridad": "media",
-                "fecha_apertura": HOY,
-                "accion_limpieza_general": "on",
-                "accion_cambio_parte": "on",
-                "accion_cambio_parte_detalle": "",
-                "parte_teclado": "mal",
-            },
-        )
-        self.assertEqual(resp.status_code, 302)
-        orden = OrdenMantenimiento.objects.get(activo=self.activo_portatil)
-        self.assertFalse(orden.accion_limpieza_general)
-        self.assertFalse(orden.accion_cambio_parte)
-        self.assertEqual(orden.estado_partes, {})
-
-    def test_partial_estado_partes_cambia_segun_tipo_activo(self):
-        activo_monitor = Activo.objects.create(
-            serial="SN-MN-001",
-            tipo_dispositivo="monitor",
-            marca="Dell",
-            modelo="P2419",
-            estado="disponible",
-        )
-        resp_portatil = self.client.get(
-            reverse("mantenimiento:estado_partes_partial"),
-            {"activo": self.activo_portatil.pk},
-        )
-        self.assertEqual(resp_portatil.status_code, 200)
-        self.assertContains(resp_portatil, "Teclado")
-        self.assertContains(resp_portatil, "Touchpad")
-
-        resp_monitor = self.client.get(
-            reverse("mantenimiento:estado_partes_partial"),
-            {"activo": activo_monitor.pk},
-        )
-        self.assertEqual(resp_monitor.status_code, 200)
-        self.assertContains(resp_monitor, "Puerto de video")
-        self.assertNotContains(resp_monitor, "Teclado")
 
 
 class HojaDeVidaTests(TestCase):

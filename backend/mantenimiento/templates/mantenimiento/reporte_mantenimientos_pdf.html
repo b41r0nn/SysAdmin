@@ -106,7 +106,7 @@
         <td>{{ o.activo.marca }} {{ o.activo.modelo }}</td>
         <td>{{ o.activo.numero_interno|default:"—" }}</td>
         <td>{{ o.get_tipo_display }}</td>
-        <td>{{ o.tecnico_asignado|default:"—" }}</td>
+        <td>{% firstof o.tecnico.get_full_name o.tecnico_asignado "—" %}</td>
         <td>${{ o.costo_real|floatformat:2|default:"0.00" }}</td>
         <td>
           <span class="estado"
