@@ -36,6 +36,7 @@
 
 - **Campos de fecha**: todo `forms.DateInput(attrs={"type": "date"})` debe llevar `format="%Y-%m-%d"`. Sin eso, con `es-co` se renderiza `DD/MM/AAAA`, el navegador vacía el campo y al editar se borra la fecha guardada. Lo vigila `core.tests.CamposFechaFormatoISOTests`.
 - **Imports dentro de `inventario/views/<módulo>.py`**: los modelos y forms de la app se importan con `..` (`from ..models import ...`), no con `.`. `core.tests.SmokeVistasTests` abre las páginas de cada módulo; agregar ahí las rutas nuevas.
+- **Respuestas streaming en tests (`FileResponse`)**: nunca `resp.close()`. Hay que **consumir** el contenido (`b"".join(resp.streaming_content)`), que es lo que libera el handle del archivo en Windows. El `close()` directo dispara `request_finished` con `close_old_connections` conectado y, **en PostgreSQL**, cierra la conexión de BD dentro del `atomic` del `TestCase`: los tests siguientes de esa clase mueren con `InterfaceError: connection already closed`. En SQLite no se ve porque la base de pruebas vive en memoria y Django ignora el `close()`, así que esto **solo lo caza el job `test-postgres`** (corre en PR a master). Patrón en `core.tests._cerrar_archivo`.
 - **Dependencias**: si `pip-audit` falla en CI por un CVE nuevo, subir la versión, correr la suite y probar QR/PDF/Excel con la imagen real en un contenedor aislado (`--network none`) antes de desplegar.
 
 ## Mantenimiento v2 (2026-10, rama `feat/mantenimiento-v2`)
