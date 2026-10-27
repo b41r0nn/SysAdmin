@@ -62,6 +62,9 @@ class ConfiguracionSistema(models.Model):
     smtp_password_cifrado = models.TextField(blank=True, verbose_name="Contraseña SMTP")
     smtp_usa_tls = models.BooleanField(default=True, verbose_name="Usar STARTTLS")
     smtp_usa_ssl = models.BooleanField(default=False, verbose_name="Usar SSL")
+    # Encabezado y pie del acta de mantenimiento; vacíos, el acta muestra "—".
+    acta_mant_codigo = models.CharField("Código del acta de mantenimiento", max_length=30, blank=True)
+    acta_mant_version = models.CharField("Versión del acta de mantenimiento", max_length=10, blank=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
     class Meta:

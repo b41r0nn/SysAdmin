@@ -10,3 +10,5 @@ class CustomUser(AbstractUser):
         ("lectura", "Solo lectura"),
     ]
     rol = models.CharField(max_length=20, choices=ROL_CHOICES, default="tecnico")
+    # Sale en las actas que firma la cuenta (p. ej. el técnico de un mantenimiento).
+    cargo = models.CharField(max_length=150, blank=True)

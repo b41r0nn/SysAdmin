@@ -77,7 +77,7 @@ class RequierePermisoTests(TestCase):
         for url in [
             reverse("usuarios:crear"),
             reverse("inventario:crear"),
-            reverse("mantenimiento:crear_plan"),
+            reverse("mantenimiento:nuevo"),
             reverse("passwords:vault_crear"),
             reverse("administracion:configuracion"),
             reverse("documentos:crear"),

@@ -83,6 +83,30 @@ class DashboardTests(TestCase):
         resp = self.client.get(reverse("core:dashboard"))
         self.assertEqual(resp.status_code, 200)
 
+    def test_dashboard_muestra_equipos_que_les_toca(self):
+        from inventario.models import Activo
+
+        hoy = timezone.localdate()
+        for serial in ("SN-D1", "SN-D2"):
+            # Garantía vencida hace un año: le toca desde que venció.
+            Activo.objects.create(
+                serial=serial, tipo_dispositivo="escritorio", marca="HP", modelo="Pro",
+                estado="disponible", fecha_compra=hoy - timedelta(days=730), garantia_fabrica_meses=12,
+            )
+        Activo.objects.create(
+            serial="SN-D3", tipo_dispositivo="escritorio", marca="HP", modelo="Pro",
+            estado="disponible", fecha_compra=hoy - timedelta(days=30), garantia_fabrica_meses=24,
+        )
+        resp = self.client.get(reverse("core:dashboard"))
+        self.assertEqual(resp.context["les_toca_mantenimiento"], 2)
+        self.assertContains(resp, "Les toca mantenimiento")
+        self.assertContains(resp, "bi-tools")
+        self.assertNotContains(resp, "Ordenes atrasadas")
+        self.assertNotContains(resp, "ALERTA")
+        tarjeta = resp.content.decode().split("Les toca mantenimiento")[0].rsplit("sa-stat-card", 1)[1]
+        self.assertIn("text-warning", tarjeta)
+        self.assertNotIn("danger", tarjeta)
+
 
 def _cerrar_archivo(resp):
     """Libera el handle del archivo de un FileResponse antes de borrar tmpdir.
@@ -347,6 +371,29 @@ class LimpiarHistorialCommandTests(TestCase):
             self.assertTrue(referenciada.exists())
             self.assertFalse(huerfana.exists())
 
+    def test_borra_sesiones_vencidas(self):
+        # Las vistas previas de importación abandonadas viven en django_session con
+        # las claves cifradas: no deben quedar para siempre (ni tras rotar la clave).
+        from django.contrib.sessions.backends.db import SessionStore
+        from django.contrib.sessions.models import Session
+
+        vencida = SessionStore()
+        vencida["importar_credenciales:1"] = {"nuevas": [{"secreto_cifrado": "gAAAA-ejemplo"}]}
+        vencida.create()
+        Session.objects.filter(pk=vencida.session_key).update(expire_date=timezone.now() - timedelta(minutes=1))
+        vigente = SessionStore()
+        vigente["dato"] = 1
+        vigente.create()
+
+        out = StringIO()
+        call_command("limpiar_historial", dias=365, dry_run=True, stdout=out)
+        self.assertIn("Sesiones vencidas: 1", out.getvalue())
+        self.assertEqual(Session.objects.count(), 2)
+
+        call_command("limpiar_historial", dias=365, stdout=StringIO())
+        self.assertFalse(Session.objects.filter(pk=vencida.session_key).exists())
+        self.assertTrue(Session.objects.filter(pk=vigente.session_key).exists())
+
 
 class GuardarExcelTests(TestCase):
     def test_texto_con_igual_no_queda_como_formula(self):
@@ -383,10 +430,11 @@ class SmokeVistasTests(TestCase):
         "reports:index", "reports:activos_por_usuario", "reports:inventario_excel",
         "reports:movimientos_excel", "reports:usuarios_excel", "reports:costos_excel",
         "reports:mantenimiento_excel",
-        "mantenimiento:lista_ordenes", "mantenimiento:lista_planes", "mantenimiento:calendario",
-        "mantenimiento:calendario_eventos", "mantenimiento:reportar", "mantenimiento:crear_plan",
-        "mantenimiento:crear_orden", "mantenimiento:hoja_de_vida_buscar",
-        "passwords:index", "passwords:vault_crear",
+        "mantenimiento:inicio", "mantenimiento:lista_ordenes", "mantenimiento:calendario",
+        "mantenimiento:calendario_eventos", "mantenimiento:reportar",
+        "mantenimiento:crear_orden", "mantenimiento:nuevo", "mantenimiento:hoja_de_vida_buscar",
+        "mantenimiento:lista_plantillas", "mantenimiento:crear_plantilla",
+        "passwords:index", "passwords:vault_crear", "passwords:importar_plantilla",
         "yule:index", "yule:configuracion", "yule:equipos_lista", "yule:equipos_sin_match",
         "yule:historial",
         "documentos:lista", "documentos:crear", "documentos:categorias_lista",
@@ -409,7 +457,12 @@ class SmokeVistasTests(TestCase):
             serial="SN-SMOKE", tipo_dispositivo="escritorio", marca="HP",
             modelo="X", estado="disponible",
         )
+        from mantenimiento.models import OrdenMantenimiento
+
+        orden = OrdenMantenimiento.objects.create(activo=activo, tipo="correctivo", estado="abierta")
         rutas = [(r, []) for r in self.RUTAS] + [
+            ("mantenimiento:detalle_orden", [orden.pk]),
+            ("mantenimiento:cerrar_orden", [orden.pk]),
             ("inventario:detalle", [activo.pk]),
             ("inventario:software", [activo.pk]),
             ("inventario:editar", [activo.pk]),

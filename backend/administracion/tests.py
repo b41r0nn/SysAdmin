@@ -61,6 +61,25 @@ class ConfiguracionSistemaTests(TestCase):
         self.assertEqual(config.nit, "900123456")
         self.assertEqual(config.email_contacto, "sistemas@redihos.test")
 
+    def test_vista_configuracion_guarda_codigo_y_version_del_acta(self):
+        self.client.force_login(crear_usuario("superadmin", "sa_cfg3"))
+        response = self.client.get(reverse("administracion:configuracion"))
+        self.assertContains(response, "Acta de mantenimiento")
+        self.assertContains(response, 'name="acta_mant_codigo"')
+        self.assertContains(response, 'name="acta_mant_version"')
+
+        response = self.client.post(
+            reverse("administracion:configuracion"),
+            {
+                "nombre_empresa": "REDIHOS TEST S.A.S",
+                "acta_mant_codigo": "FT-TI-002",
+                "acta_mant_version": "01",
+            },
+        )
+        self.assertRedirects(response, reverse("administracion:configuracion"))
+        config = ConfiguracionSistema.get_config()
+        self.assertEqual((config.acta_mant_codigo, config.acta_mant_version), ("FT-TI-002", "01"))
+
     def test_no_autenticado_redirige_a_login(self):
         response = self.client.get(reverse("administracion:configuracion"))
         self.assertEqual(response.status_code, 302)
@@ -151,6 +170,45 @@ class AdministracionCuentasTests(TestCase):
         self.assertRedirects(resp, reverse("administracion:cuentas"))
         self.assertTrue(CustomUser.objects.filter(username="nuevo_cta").exists())
         self.assertContains(resp, "Contraseña temporal")
+
+    def test_crear_cuenta_con_nombre_y_cargo(self):
+        resp = self.client.get(reverse("administracion:crear_cuenta"))
+        self.assertContains(resp, 'name="first_name"')
+        self.assertContains(resp, 'name="cargo"')
+        self.client.post(
+            reverse("administracion:crear_cuenta"),
+            {
+                "username": "ana_cta",
+                "first_name": "Ana",
+                "last_name": "Técnica Ruiz",
+                "cargo": "Analista de Sistemas",
+                "email": "ana@example.com",
+                "rol": "tecnico",
+            },
+        )
+        cuenta = CustomUser.objects.get(username="ana_cta")
+        self.assertEqual(
+            (cuenta.first_name, cuenta.last_name, cuenta.cargo),
+            ("Ana", "Técnica Ruiz", "Analista de Sistemas"),
+        )
+
+    def test_editar_cuenta_cambia_nombre_cargo_y_rol(self):
+        cuenta = crear_usuario("tecnico", "editar_cta")
+        resp = self.client.get(reverse("administracion:cambiar_rol", args=[cuenta.pk]))
+        self.assertContains(resp, "Editar cuenta")
+        self.assertContains(resp, "Nombres")
+        self.assertContains(resp, "Apellidos")
+        self.assertContains(resp, "Cargo")
+        resp = self.client.post(
+            reverse("administracion:cambiar_rol", args=[cuenta.pk]),
+            {"first_name": "Luis", "last_name": "Pérez", "cargo": "Coordinador de TI", "rol": "admin"},
+        )
+        self.assertRedirects(resp, reverse("administracion:cuentas"))
+        cuenta.refresh_from_db()
+        self.assertEqual(
+            (cuenta.first_name, cuenta.last_name, cuenta.cargo, cuenta.rol),
+            ("Luis", "Pérez", "Coordinador de TI", "admin"),
+        )
 
     def test_staff_y_superuser_solo_para_superadmin(self):
         self.client.post(

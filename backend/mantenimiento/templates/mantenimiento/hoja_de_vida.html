@@ -55,7 +55,7 @@
   <div class="col-12 col-lg-7">
     <div class="sa-card p-4">
       <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
-        Historial de mantenimientos ({{ ordenes.count }})
+        Historial de mantenimientos ({{ ordenes|length }})
       </h6>
       {% if ordenes %}
       <div class="table-responsive">
@@ -65,7 +65,8 @@
               <th>Fecha</th>
               <th>Tipo</th>
               <th>Estado</th>
-              <th>Description</th>
+              <th>Estado final</th>
+              <th>Descripción</th>
               <th></th>
             </tr>
           </thead>
@@ -75,6 +76,7 @@
               <td>{{ orden.fecha_apertura|date:"d/m/Y" }}</td>
               <td>{{ orden.get_tipo_display }}</td>
               <td><span class="sa-badge {% if orden.estado == 'cerrada' %}success{% elif orden.estado == 'en_proceso' %}warning{% elif orden.estado == 'reportada' %}danger{% else %}secondary{% endif %}">{{ orden.get_estado_display }}</span></td>
+              <td>{% if orden.estado_final %}{{ orden.get_estado_final_display }}{% else %}—{% endif %}</td>
               <td class="text-truncate" style="max-width:180px;">{{ orden.descripcion|default:"—" }}</td>
               <td class="text-end">
                 <a href="{% url 'mantenimiento:detalle_orden' orden.pk %}" class="btn btn-sm btn-outline-secondary">
@@ -82,6 +84,26 @@
                 </a>
               </td>
             </tr>
+            {% if orden.nuevo %}
+            <tr>
+              <td colspan="6" class="small border-top-0 pt-0">
+                <span class="text-success">{{ orden.nuevo.resumen.bien }} bien</span>
+                · <span class="{% if orden.nuevo.resumen.falla %}text-danger fw-semibold{% else %}text-muted{% endif %}">{{ orden.nuevo.resumen.falla }} con falla</span>
+                · <span class="text-muted">{{ orden.nuevo.resumen.na }} no aplica</span>
+                {% if orden.en_garantia %}· <span class="sa-badge info">En garantía</span>{% endif %}
+                {% if orden.nuevo.acta %}
+                · <a href="{% url 'mantenimiento:acta_pdf' orden.pk %}" target="_blank">Acta</a>
+                {% endif %}
+                {% if orden.acta_firmada %}
+                · <a href="{{ orden.acta_firmada.url }}" target="_blank">Acta firmada</a>
+                {% if orden.acta_firmada_desactualizada %}<span class="sa-badge warning">desactualizada</span>{% endif %}
+                {% endif %}
+                {% for falla in orden.nuevo.fallas %}
+                <div class="text-danger">{{ falla }}</div>
+                {% endfor %}
+              </td>
+            </tr>
+            {% endif %}
             {% endfor %}
           </tbody>
         </table>

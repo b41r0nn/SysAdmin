@@ -117,21 +117,26 @@ def crear_cuenta(request):
 
 @requiere_permiso("administracion", "escritura")
 def cambiar_rol_cuenta(request, pk):
+    """Editar una cuenta: nombres, apellidos, cargo y rol."""
     cuenta = get_object_or_404(CustomUser, pk=pk)
     if request.method == "POST":
         form = CuentaRolForm(request.POST, instance=cuenta)
         if form.is_valid():
             nuevo_rol = form.cleaned_data["rol"]
             if cuenta.pk == request.user.pk and nuevo_rol != "superadmin":
+                # is_valid() ya copió los datos a la instancia: se vuelve a lo guardado.
+                cuenta.refresh_from_db()
                 messages.error(request, "No puedes quitarte el rol Super Administrador a ti mismo.")
             else:
                 cuenta.rol = nuevo_rol
                 cuenta.is_superuser = nuevo_rol == "superadmin"
                 cuenta.is_staff = nuevo_rol == "superadmin"
-                cuenta.save(update_fields=["rol", "is_superuser", "is_staff"])
+                cuenta.save(
+                    update_fields=["first_name", "last_name", "cargo", "rol", "is_superuser", "is_staff"]
+                )
                 messages.success(
                     request,
-                    f"Rol de «{cuenta.username}» actualizado a {cuenta.get_rol_display()}.",
+                    f"Cuenta «{cuenta.username}» actualizada · rol {cuenta.get_rol_display()}.",
                 )
                 return redirect("administracion:cuentas")
     else:

@@ -4,6 +4,7 @@ import os
 from django.conf import settings
 from django.db.models import Max
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 
 from yule.client import build_client, OCSClientException
@@ -129,8 +130,8 @@ def hoja_de_vida_pdf_bytes(activo):
 
     ordenes = (
         OrdenMantenimiento.objects.filter(activo=activo)
-        .select_related("plan", "activo")
-        .prefetch_related("fotos")
+        .select_related("activo", "tecnico")
+        .prefetch_related("fotos", "checklist_items")
         .order_by("-fecha_apertura", "-fecha_creacion")
     )
     ultima = ordenes.first()
@@ -156,9 +157,21 @@ def hoja_de_vida_pdf_bytes(activo):
                 for s in software_ultimo
             ]
 
+    from .acta import detalle_formato_nuevo, url_absoluta  # import local: acta importa services
+
+    def enlaces(o, nuevo):
+        if not nuevo:
+            return {}
+        return {
+            "acta": url_absoluta(reverse("mantenimiento:acta_pdf", args=[o.pk])) if nuevo["acta"] else "",
+            "firmada": url_absoluta(o.acta_firmada.url) if o.acta_firmada else "",
+        }
+
     ordenes_detalle = [
         {
             "orden": o,
+            "nuevo": nuevo,
+            "enlaces": enlaces(o, nuevo),
             "acciones": _acciones_marcadas(o),
             "estado_partes": _estado_partes_etiquetado(activo, o),
             "fotos": [
@@ -166,7 +179,7 @@ def hoja_de_vida_pdf_bytes(activo):
                 for f in o.fotos.all()
             ],
         }
-        for o in ordenes
+        for o, nuevo in ((o, detalle_formato_nuevo(o)) for o in ordenes)
     ]
 
     html = render_to_string("mantenimiento/hoja_de_vida_pdf.html", {

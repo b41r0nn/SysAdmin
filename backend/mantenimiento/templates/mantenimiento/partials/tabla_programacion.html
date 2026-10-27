@@ -1,0 +1,45 @@
+{% load permisos_extras %}
+{% tiene_permiso 'mantenimiento' 'escritura' as puede_escribir %}
+{% if error %}
+<div class="alert alert-warning">{{ error }}</div>
+{% endif %}
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3"><div class="sa-card p-3"><div class="fs-3 fw-bold text-warning-emphasis">{{ conteos.le_toca }}</div><div class="text-muted small">Le toca</div></div></div>
+  <div class="col-6 col-md-3"><div class="sa-card p-3"><div class="fs-3 fw-bold text-primary">{{ conteos.programado }}</div><div class="text-muted small">Programados</div></div></div>
+  <div class="col-6 col-md-3"><div class="sa-card p-3"><div class="fs-3 fw-bold" style="color:#6d28d9;">{{ conteos.en_garantia }}</div><div class="text-muted small">En garantía</div></div></div>
+  <div class="col-6 col-md-3"><div class="sa-card p-3"><div class="fs-3 fw-bold text-success">{{ conteos.al_dia }}</div><div class="text-muted small">Al día</div></div></div>
+</div>
+
+<ul class="nav nav-tabs mb-0">
+  <li class="nav-item"><a class="nav-link {% if tab == 'por_hacer' %}active{% endif %}" href="{% url 'mantenimiento:inicio' %}?tab=por_hacer">Por hacer ({{ totales.por_hacer }})</a></li>
+  <li class="nav-item"><a class="nav-link {% if tab == 'en_garantia' %}active{% endif %}" href="{% url 'mantenimiento:inicio' %}?tab=en_garantia">En garantía ({{ totales.en_garantia }})</a></li>
+  <li class="nav-item"><a class="nav-link {% if tab == 'al_dia' %}active{% endif %}" href="{% url 'mantenimiento:inicio' %}?tab=al_dia">Al día ({{ totales.al_dia }})</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}">Historial</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'mantenimiento:lista_ordenes' %}?fallas=1">Fallas reportadas ({{ fallas }})</a></li>
+</ul>
+
+<div class="sa-card overflow-hidden">
+  {% if filas %}
+  <div class="table-responsive">
+    <table class="table table-hover sa-table mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Equipo</th>
+          <th>Responsable</th>
+          <th>Último mantenimiento</th>
+          <th>Estado</th>
+          {% if puede_escribir %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}{% with s=fila.s responsable=fila.responsable %}
+        {% include "mantenimiento/partials/fila_programacion.html" %}{% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="p-4 text-center text-muted">No hay equipos en esta lista.</div>
+  {% endif %}
+</div>

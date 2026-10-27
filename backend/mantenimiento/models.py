@@ -1,16 +1,14 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.utils import timezone
+
+from inventario.models import _ver_tipo
 
 
 TIPOS_MANTENIMIENTO = [
     ("preventivo", "Preventivo"),
     ("correctivo", "Correctivo"),
-]
-
-ESTADOS_PLAN = [
-    ("activo", "Activo"),
-    ("pausado", "Pausado"),
 ]
 
 ESTADOS_ORDEN = [
@@ -27,46 +25,46 @@ PRIORIDADES = [
     ("alta", "Alta"),
 ]
 
-CRITICIDADES = [
-    ("baja", "Baja"),
-    ("media", "Media"),
-    ("alta", "Alta"),
+# Secciones que se ofrecen al agregar un punto a un checklist. Es solo una
+# sugerencia: la sección de un punto es texto libre.
+SECCIONES_SUGERIDAS = ["Hardware", "Limpieza", "Mantenimiento lógico"]
+
+# Formato de una orden: 1 es el de antes del rediseño (checklist fijo y estado
+# de partes); 2 es el actual (checklist copiado de la plantilla).
+FORMATO_ANTERIOR = 1
+FORMATO_ACTUAL = 2
+
+# Resultado de un punto del checklist de un preventivo.
+RESULTADOS_PUNTO = [("bien", "Bien"), ("falla", "Con falla"), ("na", "No aplica")]
+LIMITE_OBS_PUNTO = 150
+
+# Estado en que queda el equipo al cerrar el mantenimiento.
+ESTADOS_FINALES = [
+    ("operativo", "Operativo"),
+    ("operativo_obs", "Operativo con observaciones"),
+    ("fuera_servicio", "Fuera de servicio"),
 ]
+# Máximo de caracteres de observaciones, diagnóstico y solución: el acta es de una hoja.
+LIMITE_TEXTO_ACTA = 600
 
 
-class PlanMantenimiento(models.Model):
-    tipo_dispositivo = models.CharField(
-        max_length=50,
-        verbose_name="Categoría de equipo",
-    )
-    tipo = models.CharField(max_length=20, choices=TIPOS_MANTENIMIENTO)
-    criticidad = models.CharField(max_length=20, choices=CRITICIDADES, default="media")
-    frecuencia_dias = models.PositiveIntegerField(null=True, blank=True)
-    fecha_inicio = models.DateField(null=True, blank=True)
-    proxima_ejecucion = models.DateField(null=True, blank=True)
-    estado = models.CharField(max_length=20, choices=ESTADOS_PLAN, default="activo")
-    responsable = models.CharField(max_length=150, blank=True)
-    observaciones = models.TextField(blank=True)
-    fecha_creacion = models.DateTimeField(auto_now_add=True)
-    fecha_actualizacion = models.DateTimeField(auto_now=True)
+CRLF, CR, LF = "\r\n", "\r", "\n"
 
-    class Meta:
-        ordering = ["-fecha_creacion"]
-        verbose_name = "Plan de Mantenimiento"
-        verbose_name_plural = "Planes de Mantenimiento"
 
-    def __str__(self):
-        return f"{self.get_tipo_display()} · {self.tipo_dispositivo}"
+def normalizar_saltos(texto):
+    """Cuenta cada salto de línea como un carácter.
+
+    El navegador cuenta un salto como 1 carácter pero lo envía como CRLF (2 para
+    Django), así que se normaliza antes de comprobar los límites.
+    """
+    return (texto or "").replace(CRLF, LF).replace(CR, LF)
+
+
+# Fotos que caben en el acta.
+MAX_FOTOS_ACTA = 3
 
 
 class OrdenMantenimiento(models.Model):
-    plan = models.ForeignKey(
-        PlanMantenimiento,
-        on_delete=models.SET_NULL,
-        related_name="ordenes",
-        null=True,
-        blank=True,
-    )
     ticket = models.ForeignKey(
         "soporte.Ticket",
         on_delete=models.SET_NULL,
@@ -118,6 +116,36 @@ class OrdenMantenimiento(models.Model):
         blank=True,
         verbose_name="Software instalado (snapshot OCS)",
     )
+    en_garantia = models.BooleanField(
+        default=False,
+        verbose_name="En garantía",
+        help_text="Preventivo hecho mientras el equipo estaba en garantía: no cuenta como preventivo completo.",
+    )
+    formato = models.PositiveSmallIntegerField(default=FORMATO_ACTUAL, verbose_name="Formato")
+    tecnico = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="mantenimientos_cerrados",
+        null=True,
+        blank=True,
+        verbose_name="Técnico",
+        help_text="La cuenta que cerró el mantenimiento.",
+    )
+    estado_final = models.CharField(
+        max_length=30, choices=ESTADOS_FINALES, blank=True, verbose_name="Estado final del equipo"
+    )
+    observaciones = models.TextField(blank=True)
+    # Lo que imprime el acta y no es parte de la orden (equipo, responsable,
+    # técnico, garantía, próximo), congelado al cerrar. Vacío si no está cerrada.
+    datos_acta = models.JSONField(default=dict, blank=True, verbose_name="Datos del acta")
+    acta_firmada = models.FileField(
+        upload_to="mantenimiento/actas/", null=True, blank=True, verbose_name="Acta firmada"
+    )
+    acta_firmada_desactualizada = models.BooleanField(
+        default=False,
+        verbose_name="Acta firmada de una versión anterior",
+        help_text="Se reabrió el mantenimiento después de subir el acta firmada.",
+    )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -128,10 +156,6 @@ class OrdenMantenimiento(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} · {self.activo.serial}"
-
-    @property
-    def checklist_items_completados(self):
-        return self.checklist_items.filter(completado=True).count()
 
 
 class Repuesto(models.Model):
@@ -157,14 +181,6 @@ class Repuesto(models.Model):
 
 
 class ChecklistItem(models.Model):
-    plan = models.ForeignKey(
-        PlanMantenimiento,
-        on_delete=models.CASCADE,
-        related_name="checklist_items",
-        null=True,
-        blank=True,
-        verbose_name="Plan (plantilla)",
-    )
     orden = models.ForeignKey(
         OrdenMantenimiento,
         on_delete=models.CASCADE,
@@ -173,8 +189,10 @@ class ChecklistItem(models.Model):
         blank=True,
         verbose_name="Orden (copia)",
     )
+    seccion = models.CharField(max_length=60, blank=True)
     descripcion = models.CharField(max_length=250)
-    completado = models.BooleanField(default=False)
+    resultado = models.CharField(max_length=10, choices=RESULTADOS_PUNTO, blank=True)
+    observacion = models.CharField(max_length=LIMITE_OBS_PUNTO, blank=True)
     posicion = models.PositiveIntegerField(default=0)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
@@ -196,6 +214,9 @@ class FotoMantenimiento(models.Model):
     )
     foto = models.ImageField(upload_to="mantenimiento/fotos/", verbose_name="Foto")
     descripcion = models.CharField(max_length=200, blank=True)
+    # Elegida para el acta (hasta MAX_FOTOS_ACTA). Si no hay ninguna elegida,
+    # el acta lleva las primeras.
+    en_acta = models.BooleanField(default=False, verbose_name="En el acta")
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -205,3 +226,83 @@ class FotoMantenimiento(models.Model):
 
     def __str__(self):
         return self.descripcion or f"Foto #{self.pk}"
+
+
+class PlantillaChecklist(models.Model):
+    """Checklist de un preventivo. Hay uno por tipo de equipo.
+
+    Los tipos que tienen plantilla son los que entran en la programación. Al
+    iniciar un preventivo se copian a la orden los puntos activos; cambiar la
+    plantilla después no toca las órdenes ya iniciadas.
+    """
+
+    # Sin choices a propósito (igual que Activo): también hay tipos creados a mano.
+    tipo_dispositivo = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Tipo de equipo",
+    )
+    frecuencia_meses = models.PositiveSmallIntegerField(
+        default=12,
+        validators=[MinValueValidator(1)],
+        verbose_name="Frecuencia (meses)",
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["tipo_dispositivo"]
+        verbose_name = "Checklist"
+        verbose_name_plural = "Checklists"
+
+    def __str__(self):
+        return f"Checklist · {self.get_tipo_dispositivo_display()}"
+
+    def get_tipo_dispositivo_display(self):
+        return _ver_tipo(self.tipo_dispositivo)
+
+
+class PuntoPlantilla(models.Model):
+    """Un punto de un checklist: sección, texto y si aplica en garantía."""
+
+    plantilla = models.ForeignKey(
+        PlantillaChecklist,
+        on_delete=models.CASCADE,
+        related_name="puntos",
+    )
+    seccion = models.CharField(max_length=60, verbose_name="Sección")
+    descripcion = models.CharField(max_length=150, verbose_name="Descripción")
+    posicion = models.PositiveIntegerField(default=0, verbose_name="Posición")
+    aplica_en_garantia = models.BooleanField(default=False, verbose_name="Aplica en garantía")
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["posicion", "id"]
+        verbose_name = "Punto de checklist"
+        verbose_name_plural = "Puntos de checklist"
+
+    def __str__(self):
+        return f"{self.seccion} · {self.descripcion}"
+
+
+class ProgramacionMantenimiento(models.Model):
+    """Fecha en que se acordó hacerle el preventivo a un equipo.
+
+    Es opcional: sin fila (o con la fecha vacía) el equipo se rige por la regla
+    de "le toca desde" de ``mantenimiento.programacion``.
+    """
+
+    activo = models.OneToOneField(
+        "inventario.Activo",
+        on_delete=models.CASCADE,
+        related_name="programacion_mantenimiento",
+    )
+    fecha_programada = models.DateField(null=True, blank=True, verbose_name="Fecha programada")
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Programación de mantenimiento"
+        verbose_name_plural = "Programaciones de mantenimiento"
+
+    def __str__(self):
+        return f"Programación · {self.activo.serial}"

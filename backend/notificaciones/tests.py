@@ -11,15 +11,17 @@ from django.utils import timezone
 from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Asignacion, Activo
 from licencias.models import LicenciaSoftware
-from mantenimiento.models import PlanMantenimiento
+from mantenimiento.models import OrdenMantenimiento, ProgramacionMantenimiento
+from mantenimiento.programacion import fecha_le_toca
 from notificaciones.models import Notificacion, NotificacionEmail
 from notificaciones.services import (
     _detectar_actas,
     _detectar_garantias,
     _detectar_licencias,
-    _detectar_mantenimiento,
     _detectar_ocs,
+    _detectar_programacion,
     encolar_email,
+    generar_mantenimiento,
     generar_notificaciones,
     procesar_cola_email,
 )
@@ -178,41 +180,85 @@ class DetectarGarantiasTests(TestCase):
         self.assertEqual(count_after_first, count_after_second)
 
 
-class DetectarMantenimientoTests(TestCase):
-    def _crear_plan(self, proxima_ejecucion, estado="activo"):
-        return PlanMantenimiento.objects.create(
-            tipo_dispositivo="escritorio",
-            tipo="preventivo",
-            proxima_ejecucion=proxima_ejecucion,
-            estado=estado,
+def _le_toca(serial="SN-TOCA"):
+    """Equipo con la garantía vencida hace un año: le toca desde que venció."""
+    return _activo(serial, fecha_compra=HOY - timedelta(days=730), garantia_fabrica_meses=12)
+
+
+def _avisos(user):
+    return Notificacion.objects.filter(usuario=user, tipo="mantenimiento")
+
+
+class DetectarProgramacionTests(TestCase):
+    def test_aviso_le_toca_una_vez_por_ciclo(self):
+        u = _user("superadmin")
+        activo = _le_toca()
+        desde = activo.fecha_vencimiento_garantia
+
+        self.assertEqual(_detectar_programacion(u, hoy=HOY), 1)
+        self.assertEqual(_detectar_programacion(u, hoy=HOY), 0)
+        self.assertEqual(_detectar_programacion(u, hoy=HOY + timedelta(days=1)), 0)
+        aviso = _avisos(u).get()
+        self.assertEqual(aviso.titulo, "Le toca mantenimiento · SN-TOCA")
+        self.assertEqual(
+            aviso.mensaje,
+            f"A {activo.get_tipo_dispositivo_display()} HP Pro le toca mantenimiento desde el {desde:%d/%m/%Y}.",
+        )
+        self.assertEqual(aviso.link, reverse("mantenimiento:inicio"))
+        self.assertEqual(aviso.objetokey, f"mant:toca:{activo.pk}:{desde.isoformat()}")
+
+        # Se hace el preventivo: el ciclo siguiente avisa otra vez, con otra clave.
+        OrdenMantenimiento.objects.create(
+            activo=activo, tipo="preventivo", estado="cerrada", fecha_apertura=HOY, fecha_cierre=HOY
+        )
+        self.assertEqual(_detectar_programacion(u, hoy=HOY + timedelta(days=30)), 0)
+        siguiente = HOY + timedelta(days=400)
+        self.assertEqual(_detectar_programacion(u, hoy=siguiente), 1)
+        self.assertEqual(_avisos(u).count(), 2)
+        nuevo_desde = fecha_le_toca(activo)
+        self.assertGreater(nuevo_desde, desde)
+        self.assertEqual(
+            _avisos(u).exclude(pk=aviso.pk).get().objetokey, f"mant:toca:{activo.pk}:{nuevo_desde.isoformat()}"
         )
 
-    def test_plan_atrasado_genera_notificacion(self):
+    def test_aviso_programado_manana(self):
         u = _user("superadmin")
-        self._crear_plan(HOY - timedelta(days=5))
-        _detectar_mantenimiento(u)
-        self.assertEqual(Notificacion.objects.filter(usuario=u, tipo="mantenimiento").count(), 1)
+        manana = _le_toca("SN-MANANA")
+        ProgramacionMantenimiento.objects.create(activo=manana, fecha_programada=HOY + timedelta(days=1))
+        pasado = _le_toca("SN-PASADO")
+        ProgramacionMantenimiento.objects.create(activo=pasado, fecha_programada=HOY + timedelta(days=2))
 
-    def test_proximo_genera_notificacion(self):
-        u = _user("superadmin")
-        self._crear_plan(HOY + timedelta(days=3))
-        _detectar_mantenimiento(u)
-        self.assertEqual(Notificacion.objects.filter(usuario=u, tipo="mantenimiento").count(), 1)
+        self.assertEqual(_detectar_programacion(u, hoy=HOY), 1)
+        self.assertEqual(_detectar_programacion(u, hoy=HOY), 0)
+        aviso = _avisos(u).get()
+        fecha = HOY + timedelta(days=1)
+        self.assertEqual(aviso.titulo, "Mañana: mantenimiento de SN-MANANA")
+        self.assertIn(f"{fecha:%d/%m/%Y}", aviso.mensaje)
+        self.assertEqual(aviso.link, reverse("mantenimiento:inicio"))
+        self.assertEqual(aviso.objetokey, f"mant:prog:{manana.pk}:{fecha.isoformat()}")
+        # Un programado no recibe además el aviso de "le toca".
+        self.assertFalse(_avisos(u).filter(objetokey__startswith="mant:toca:").exists())
 
-    def test_plan_pausado_no_genera(self):
+    def test_sin_aviso_en_garantia_ni_al_dia(self):
         u = _user("superadmin")
-        self._crear_plan(HOY - timedelta(days=5), estado="pausado")
-        _detectar_mantenimiento(u)
-        self.assertFalse(Notificacion.objects.filter(usuario=u, tipo="mantenimiento").exists())
+        _activo("SN-GARANTIA", fecha_compra=HOY - timedelta(days=30), garantia_fabrica_meses=24)
+        al_dia = _le_toca("SN-AL-DIA")
+        OrdenMantenimiento.objects.create(
+            activo=al_dia, tipo="preventivo", estado="cerrada", fecha_apertura=HOY, fecha_cierre=HOY
+        )
+        # Un tipo sin checklist no entra en la programación.
+        _activo("SN-MONITOR", tipo_dispositivo="monitor")
 
-    def test_idempotencia(self):
-        u = _user("superadmin")
-        self._crear_plan(HOY - timedelta(days=5))
-        _detectar_mantenimiento(u)
-        count1 = Notificacion.objects.filter(usuario=u, tipo="mantenimiento").count()
-        _detectar_mantenimiento(u)
-        count2 = Notificacion.objects.filter(usuario=u, tipo="mantenimiento").count()
-        self.assertEqual(count1, count2)
+        self.assertEqual(_detectar_programacion(u, hoy=HOY), 0)
+        self.assertFalse(_avisos(u).exists())
+
+    def test_sin_permiso_de_mantenimiento_no_avisa(self):
+        u = _user("tecnico")
+        u.rol = "sin_rol"
+        u.save(update_fields=["rol"])
+        _le_toca()
+        self.assertEqual(generar_mantenimiento(u), 0)
+        self.assertFalse(_avisos(u).exists())
 
 
 class DetectarLicenciasTests(TestCase):
@@ -540,24 +586,27 @@ class GenerarNotificacionesMantenimientoCommandTests(TestCase):
         call_command("generar_notificaciones_mantenimiento", stdout=out)
         self.assertIn("creadas: 0", out.getvalue())
 
-    def test_comando_crea_notificacion_y_es_idempotente(self):
+    def test_comando_genera_avisos_de_programacion(self):
         usuario = _user("superadmin")
-        PlanMantenimiento.objects.create(
-            tipo_dispositivo="escritorio",
-            tipo="preventivo",
-            proxima_ejecucion=HOY + timedelta(days=3),
-            estado="activo",
+        toca = _le_toca("SN-CMD-TOCA")
+        manana = _le_toca("SN-CMD-MANANA")
+        ProgramacionMantenimiento.objects.create(activo=manana, fecha_programada=HOY + timedelta(days=1))
+
+        out = StringIO()
+        call_command("generar_notificaciones_mantenimiento", stdout=out)
+        self.assertIn("creadas: 2", out.getvalue())
+        self.assertEqual(
+            set(_avisos(usuario).values_list("objetokey", flat=True)),
+            {
+                f"mant:toca:{toca.pk}:{toca.fecha_vencimiento_garantia.isoformat()}",
+                f"mant:prog:{manana.pk}:{(HOY + timedelta(days=1)).isoformat()}",
+            },
         )
 
-        call_command("generar_notificaciones_mantenimiento", stdout=StringIO())
-        self.assertEqual(
-            Notificacion.objects.filter(usuario=usuario, tipo="mantenimiento").count(), 1
-        )
-
-        call_command("generar_notificaciones_mantenimiento", stdout=StringIO())
-        self.assertEqual(
-            Notificacion.objects.filter(usuario=usuario, tipo="mantenimiento").count(), 1
-        )
+        out = StringIO()
+        call_command("generar_notificaciones_mantenimiento", stdout=out)
+        self.assertIn("creadas: 0", out.getvalue())
+        self.assertEqual(_avisos(usuario).count(), 2)
 
 
 class GenerarNotificacionesMantenimientoCommandNotificacionesTests(TestCase):
@@ -572,12 +621,7 @@ class GenerarNotificacionesMantenimientoCommandNotificacionesTests(TestCase):
         )
 
         usuario = _user("superadmin")
-        PlanMantenimiento.objects.create(
-            tipo_dispositivo="escritorio",
-            tipo="preventivo",
-            proxima_ejecucion=HOY + timedelta(days=3),
-            estado="activo",
-        )
+        _le_toca("SN-HANDLE")
 
         comando = Comando()
         comando.stdout = StringIO()
@@ -632,3 +676,48 @@ class CampanaThrottleTests(TestCase):
             self.client.get(reverse("notificaciones:cantidad"))
             self.client.get(reverse("notificaciones:cantidad"))
         self.assertEqual(gen.call_count, 1)
+
+
+class DetectarActasMantenimientoTests(TestCase):
+    def _orden(self, serial="SN-AM-1", **kw):
+        from mantenimiento.models import OrdenMantenimiento
+
+        return OrdenMantenimiento.objects.create(
+            activo=_activo(serial),
+            tipo="preventivo",
+            estado="cerrada",
+            formato=2,
+            fecha_cierre=HOY,
+            **kw,
+        )
+
+    def test_aviso_acta_mantenimiento_sin_firmar(self):
+        from notificaciones.services import _detectar_actas_mantenimiento
+
+        u = _user("tecnico")
+        orden = self._orden()
+        _detectar_actas_mantenimiento(u)
+        n = Notificacion.objects.get(usuario=u, tipo="mantenimiento", objetokey=f"acta_mant:{orden.pk}")
+        self.assertEqual(n.titulo, f"Acta de mantenimiento sin firmar · N° {orden.pk:04d}")
+        self.assertEqual(n.mensaje, "El acta del equipo SN-AM-1 aún no tiene la firma escaneada.")
+        self.assertEqual(n.link, reverse("mantenimiento:detalle_orden", args=[orden.pk]))
+
+    def test_sin_aviso_si_ya_tiene_firmada(self):
+        from notificaciones.services import _detectar_actas_mantenimiento
+
+        u = _user("tecnico")
+        self._orden(acta_firmada="mantenimiento/actas/x.pdf")
+        _detectar_actas_mantenimiento(u)
+        self.assertFalse(Notificacion.objects.filter(usuario=u, objetokey__startswith="acta_mant:").exists())
+
+    def test_aviso_si_esta_desactualizada(self):
+        from notificaciones.services import _detectar_actas_mantenimiento, generar_mantenimiento
+
+        u = _user("tecnico")
+        orden = self._orden(acta_firmada="mantenimiento/actas/x.pdf", acta_firmada_desactualizada=True)
+        generar_mantenimiento(u)
+        self.assertTrue(
+            Notificacion.objects.filter(usuario=u, objetokey=f"acta_mant:{orden.pk}").exists()
+        )
+        _detectar_actas_mantenimiento(u)
+        self.assertEqual(Notificacion.objects.filter(usuario=u, objetokey=f"acta_mant:{orden.pk}").count(), 1)

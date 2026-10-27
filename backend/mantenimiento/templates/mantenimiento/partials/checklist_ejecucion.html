@@ -1,0 +1,68 @@
+{% load permisos_extras %}{% tiene_permiso 'mantenimiento' 'escritura' as puede_escribir %}
+<div class="sa-card p-4 mt-4" id="card-checklist-{{ orden.id }}">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h6 class="fw-semibold mb-0 text-muted text-uppercase" style="font-size:.8rem;letter-spacing:.08em;">
+      Checklist del preventivo{% if orden.en_garantia %} · en garantía{% endif %}
+    </h6>
+    <span class="fw-semibold" style="font-size:.9rem;">{{ marcados }} de {{ total }} marcados</span>
+  </div>
+  <div class="progress mb-3" style="height:.55rem;">
+    <div class="progress-bar {% if marcados == total and total %}bg-success{% endif %}"
+         role="progressbar"
+         style="width:{% if total %}{% widthratio marcados total 100 %}{% else %}0{% endif %}%"></div>
+  </div>
+
+  {% regroup items by seccion as secciones %}
+  {% for grupo in secciones %}
+  <div class="mb-3">
+    {% if grupo.grouper %}
+    <div class="fw-semibold text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.06em;">{{ grupo.grouper }}</div>
+    {% endif %}
+    <ul class="list-group list-group-flush">
+      {% for item in grupo.list %}
+      <li class="list-group-item px-0">
+        {% if editable and puede_escribir %}
+        <form method="post"
+              action="{% url 'mantenimiento:marcar_punto' item.pk %}"
+              hx-target="#card-checklist-{{ orden.id }}"
+              hx-swap="outerHTML"
+              class="mb-0">
+          {% csrf_token %}
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="flex-grow-1 fw-medium" style="min-width:12rem;">{{ item.descripcion }}</div>
+            <div class="btn-group" role="group" aria-label="Resultado de {{ item.descripcion }}">
+              <button type="submit" name="resultado" value="bien"
+                      hx-post="{% url 'mantenimiento:marcar_punto' item.pk %}"
+                      class="btn {% if item.resultado == 'bien' %}btn-success{% else %}btn-outline-success{% endif %}">Bien</button>
+              <button type="submit" name="resultado" value="falla"
+                      hx-post="{% url 'mantenimiento:marcar_punto' item.pk %}"
+                      class="btn {% if item.resultado == 'falla' %}btn-warning{% else %}btn-outline-warning{% endif %}">Con falla</button>
+              <button type="submit" name="resultado" value="na"
+                      hx-post="{% url 'mantenimiento:marcar_punto' item.pk %}"
+                      class="btn {% if item.resultado == 'na' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">No aplica</button>
+            </div>
+          </div>
+          <input type="text" name="observacion" maxlength="150"
+                 class="form-control form-control-sm mt-2"
+                 placeholder="Observación (obligatoria si hay falla)"
+                 value="{% if item.pk == error_item %}{{ obs_tecleada }}{% else %}{{ item.observacion }}{% endif %}">
+          {% if item.pk == error_item and error %}
+          <div class="text-danger small mt-1" role="alert">{{ error }}</div>
+          {% endif %}
+        </form>
+        {% else %}
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <div class="flex-grow-1">{{ item.descripcion }}</div>
+          {% if item.resultado == 'bien' %}<span class="badge text-bg-success">BIEN</span>
+          {% elif item.resultado == 'falla' %}<span class="badge text-bg-warning">FALLA</span>
+          {% elif item.resultado == 'na' %}<span class="badge text-bg-secondary">N/A</span>
+          {% else %}<span class="badge text-bg-light border text-muted">—</span>{% endif %}
+        </div>
+        {% if item.observacion %}<div class="text-muted small">{{ item.observacion }}</div>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+</div>

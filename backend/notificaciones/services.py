@@ -12,7 +12,8 @@ from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Activo
 from inventario.services import acta_pdf_bytes
 from licencias.models import DIAS_AVISO_VENCIMIENTO, LicenciaSoftware
-from mantenimiento.models import PlanMantenimiento
+from mantenimiento import programacion
+from mantenimiento.models import OrdenMantenimiento
 from notificaciones.models import Notificacion, NotificacionEmail
 from yule.models import EquipoOCS
 
@@ -21,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 
 DIAS_GARANTIA = 30
-DIAS_MANTENIMIENTO = 7
 
 
 def _puede_ver(user, modulo):
@@ -76,37 +76,36 @@ def _detectar_garantias(user):
             )
 
 
-def _detectar_mantenimiento(user):
-    hoy = timezone.localdate()
-    limite = hoy + timedelta(days=DIAS_MANTENIMIENTO)
-    planes = (
-        PlanMantenimiento.objects.filter(
-            estado="activo",
-            proxima_ejecucion__isnull=False,
-        )
-    )
+def _detectar_programacion(user, hoy=None):
+    """Avisa de los equipos que les toca mantenimiento y de los programados para mañana.
+
+    El aviso de "le toca" lleva en la clave la fecha desde la que le toca: sale
+    una vez por ciclo y vuelve a salir cuando, tras el preventivo, le toca de nuevo.
+    """
+    hoy = hoy or timezone.localdate()
+    manana = hoy + timedelta(days=1)
+    link = reverse("mantenimiento:inicio")
     creadas = 0
-    for plan in planes:
-        link = reverse("mantenimiento:lista_planes")
-        if plan.proxima_ejecucion < hoy:
+    for s in programacion.tablero(hoy)["por_hacer"]:
+        activo = s.activo
+        equipo = f"{activo.get_tipo_dispositivo_display()} {activo.marca} {activo.modelo}"
+        if s.estado == programacion.LE_TOCA:
             creadas += _crear(
                 user,
                 "mantenimiento",
-                f"Mantenimiento atrasado · {plan.tipo_dispositivo}",
-                f"El plan {plan.get_tipo_display()} de la categoría {plan.tipo_dispositivo} "
-                f"debía ejecutarse el {plan.proxima_ejecucion:%d/%m/%Y}.",
+                f"Le toca mantenimiento · {activo.serial}",
+                f"A {equipo} le toca mantenimiento desde el {s.le_toca_desde:%d/%m/%Y}.",
                 link=link,
-                objetokey=f"mantenimiento:{plan.pk}",
+                objetokey=f"mant:toca:{activo.pk}:{s.le_toca_desde.isoformat()}",
             )
-        elif plan.proxima_ejecucion <= limite:
+        if s.fecha_programada == manana:
             creadas += _crear(
                 user,
                 "mantenimiento",
-                f"Mantenimiento próximo · {plan.tipo_dispositivo}",
-                f"El plan {plan.get_tipo_display()} de la categoría {plan.tipo_dispositivo} "
-                f"está programado para el {plan.proxima_ejecucion:%d/%m/%Y}.",
+                f"Mañana: mantenimiento de {activo.serial}",
+                f"El mantenimiento de {equipo} está programado para mañana, {s.fecha_programada:%d/%m/%Y}.",
                 link=link,
-                objetokey=f"mantenimiento:{plan.pk}",
+                objetokey=f"mant:prog:{activo.pk}:{s.fecha_programada.isoformat()}",
             )
     return creadas
 
@@ -173,9 +172,30 @@ def _detectar_licencias(user):
             )
 
 
+def _detectar_actas_mantenimiento(user):
+    """Avisa de los mantenimientos cerrados (formato 2) sin acta firmada escaneada o con una desactualizada."""
+    ordenes = (
+        OrdenMantenimiento.objects.filter(estado="cerrada", formato=2)
+        .filter(Q(acta_firmada="") | Q(acta_firmada__isnull=True) | Q(acta_firmada_desactualizada=True))
+        .select_related("activo")
+    )
+    creadas = 0
+    for orden in ordenes:
+        creadas += _crear(
+            user,
+            "mantenimiento",
+            f"Acta de mantenimiento sin firmar · N° {orden.pk:04d}",
+            f"El acta del equipo {orden.activo.serial} aún no tiene la firma escaneada.",
+            link=reverse("mantenimiento:detalle_orden", args=[orden.pk]),
+            objetokey=f"acta_mant:{orden.pk}",
+        )
+    return creadas
+
+
 def generar_mantenimiento(user):
+    """Avisos de mantenimiento del usuario; devuelve cuántos son nuevos."""
     if _puede_ver(user, "mantenimiento"):
-        return _detectar_mantenimiento(user)
+        return _detectar_programacion(user) + _detectar_actas_mantenimiento(user)
     return 0
 
 
