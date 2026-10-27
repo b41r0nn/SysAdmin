@@ -29,7 +29,8 @@
         <div>
           <h5 class="fw-bold mb-0">Vista previa — {{ nombre_archivo }}</h5>
           <p class="text-muted mb-0" style="font-size:.8rem;">
-            {{ resumen.total }} filas leídas. Las contraseñas ya están cifradas y aquí nunca se muestran.
+            {{ resumen.total }} fila{{ resumen.total|pluralize }} leída{{ resumen.total|pluralize }} de la hoja «{{ hoja }}» (la primera del archivo).
+            Las contraseñas ya están cifradas y aquí nunca se muestran.
             Solo se importan las filas nuevas.
           </p>
         </div>
@@ -128,7 +129,7 @@
           {% csrf_token %}
           <input type="hidden" name="lote" value="{{ lote }}">
           <button type="submit" class="btn btn-success px-4">
-            <i class="bi bi-check2-all me-2"></i>Importar {{ resumen.nuevas }} contraseñas
+            <i class="bi bi-check2-all me-2"></i>Importar {{ resumen.nuevas }} contraseña{{ resumen.nuevas|pluralize }}
           </button>
         </form>
         {% endif %}

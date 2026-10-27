@@ -3,12 +3,15 @@ import secrets
 from datetime import date
 
 from cryptography.fernet import InvalidToken
+from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
+from django.core.files.uploadhandler import MemoryFileUploadHandler
 from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from openpyxl import Workbook
 
 from . import importacion
@@ -332,12 +335,37 @@ def _clave_sesion_importacion(vault):
     return f"importar_credenciales:{vault.pk}"
 
 
+def _cuantas(numero, singular, plural):
+    return f"{numero} {singular if numero == 1 else plural}"
+
+
+def _largo_del_cuerpo(request):
+    try:
+        return int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        return 0
+
+
+# CSRF se revisa en _previsualizar_importacion: el middleware leería el cuerpo
+# antes que la vista, con los manejadores que escriben a disco lo que pasa de
+# FILE_UPLOAD_MAX_MEMORY_SIZE. El Excel trae las claves en texto plano.
+@csrf_exempt
 @requiere_permiso("passwords", "escritura")
 def credenciales_importar(request, vault_id):
     vault = get_object_or_404(Vault, pk=vault_id)
     if request.method != "POST":
         return render(request, "passwords/importar.html", {"vault": vault})
+    if _largo_del_cuerpo(request) > settings.FILE_UPLOAD_MAX_MEMORY_SIZE:
+        # Se rechaza sin leer el cuerpo: no se acepta nada y no hace falta el token.
+        messages.error(request, "El archivo pasa de 5 MB.")
+        return redirect("passwords:credenciales_importar", vault_id=vault.id)
+    # Solo en memoria: sin el manejador de archivos temporales nada llega a disco.
+    request.upload_handlers = [MemoryFileUploadHandler(request)]
+    return _previsualizar_importacion(request, vault)
 
+
+@csrf_protect
+def _previsualizar_importacion(request, vault):
     volver = redirect("passwords:credenciales_importar", vault_id=vault.id)
     archivo = request.FILES.get("archivo")
     if not archivo:
@@ -350,7 +378,7 @@ def credenciales_importar(request, vault_id):
         messages.error(request, "El archivo pasa de 5 MB.")
         return volver
     try:
-        filas, advertencias = importacion.leer_credenciales(archivo, vault)
+        filas, advertencias, hoja = importacion.leer_credenciales(archivo, vault)
     except importacion.ArchivoInvalido as exc:
         messages.error(request, str(exc))
         return volver
@@ -362,12 +390,23 @@ def credenciales_importar(request, vault_id):
 
     # En la sesión solo quedan las filas que se van a crear, con la clave cifrada.
     lote = secrets.token_urlsafe(12)
-    request.session[_clave_sesion_importacion(vault)] = {
+    datos = {
         "archivo": archivo.name,
         "lote": lote,
         "total": len(filas),
         "nuevas": [f for f in filas if f["resultado"] == "nueva"],
     }
+    # La sesión vive en la BD y se reescribe en cada petición: un archivo pequeño
+    # con notas o claves enormes la volvería de decenas de MB.
+    if importacion.tamano_en_sesion(datos) > importacion.MAX_BYTES_SESION:
+        megas = round(importacion.MAX_BYTES_SESION / 2**20)
+        messages.error(
+            request,
+            f"Los datos a importar ocupan más de {megas} MB (en promedio 2 KB por fila): hay notas o "
+            "contraseñas muy largas. Divide el archivo o acórtalas; no se importó nada.",
+        )
+        return volver
+    request.session[_clave_sesion_importacion(vault)] = datos
     for advertencia in advertencias:
         messages.warning(request, advertencia)
     return render(request, "passwords/importar_preview.html", {
@@ -375,6 +414,7 @@ def credenciales_importar(request, vault_id):
         "filas": filas,
         "resumen": importacion.resumen(filas),
         "nombre_archivo": archivo.name,
+        "hoja": hoja,
         "lote": lote,
     })
 
@@ -432,8 +472,13 @@ def credenciales_importar_confirmar(request, vault_id):
         omitidas = datos["total"] - creadas
         _log_action(
             vault, request.user, "importacion_excel",
-            detalle=f"{datos['archivo']}: {creadas} creadas, {omitidas} omitidas",
+            detalle=f"{datos['archivo']}: {_cuantas(creadas, 'creada', 'creadas')}, "
+                    f"{_cuantas(omitidas, 'omitida', 'omitidas')}",
         )
-    messages.success(request, f"Importación terminada: {creadas} contraseñas creadas, {omitidas} omitidas.")
+    messages.success(
+        request,
+        f"Importación terminada: {_cuantas(creadas, 'contraseña creada', 'contraseñas creadas')}, "
+        f"{_cuantas(omitidas, 'omitida', 'omitidas')}.",
+    )
     messages.warning(request, "Borra el Excel de tu PC y de la papelera: tiene las contraseñas en texto plano.")
     return redirect("passwords:credenciales_lista", vault_id=vault.id)

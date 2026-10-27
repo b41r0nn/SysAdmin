@@ -371,6 +371,29 @@ class LimpiarHistorialCommandTests(TestCase):
             self.assertTrue(referenciada.exists())
             self.assertFalse(huerfana.exists())
 
+    def test_borra_sesiones_vencidas(self):
+        # Las vistas previas de importación abandonadas viven en django_session con
+        # las claves cifradas: no deben quedar para siempre (ni tras rotar la clave).
+        from django.contrib.sessions.backends.db import SessionStore
+        from django.contrib.sessions.models import Session
+
+        vencida = SessionStore()
+        vencida["importar_credenciales:1"] = {"nuevas": [{"secreto_cifrado": "gAAAA-ejemplo"}]}
+        vencida.create()
+        Session.objects.filter(pk=vencida.session_key).update(expire_date=timezone.now() - timedelta(minutes=1))
+        vigente = SessionStore()
+        vigente["dato"] = 1
+        vigente.create()
+
+        out = StringIO()
+        call_command("limpiar_historial", dias=365, dry_run=True, stdout=out)
+        self.assertIn("Sesiones vencidas: 1", out.getvalue())
+        self.assertEqual(Session.objects.count(), 2)
+
+        call_command("limpiar_historial", dias=365, stdout=StringIO())
+        self.assertFalse(Session.objects.filter(pk=vencida.session_key).exists())
+        self.assertTrue(Session.objects.filter(pk=vigente.session_key).exists())
+
 
 class GuardarExcelTests(TestCase):
     def test_texto_con_igual_no_queda_como_formula(self):
