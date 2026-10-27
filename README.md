@@ -412,16 +412,23 @@ Generación de reportes y exportación de datos.
 
 ---
 
-### 4. Mantenimiento (Etapa 5)
+### 4. Mantenimiento (Etapa 5, rediseñado en v1.13)
 
-Gestión de órdenes de mantenimiento preventivo y correctivo.
+Programación del preventivo por equipo, checklists por tipo, correctivos y acta de mantenimiento de una hoja.
 
 **Características:**
-- Planes de mantenimiento por equipo
-- Órdenes con estado y prioridad
-- Seguimiento de repuestos
-- Costos estimados vs reales
-- Historial completo
+- **Pantalla principal por equipo** (`/mantenimiento/`): tarjetas Le toca, Programados, En garantía y Al día; pestañas Por hacer (los que les toca, los programados y los que les toca en los próximos 30 días), En garantía, Al día, Historial y Fallas reportadas. Cada fila muestra el equipo, el responsable (o "No asignado"), el último mantenimiento con su acta y el estado; acciones Programar / Cambiar fecha e Iniciar
+- **Checklists por tipo** (`/mantenimiento/checklists/`): una plantilla por tipo de equipo (hoy portátil y escritorio), editable desde la app (agregar, quitar y reordenar puntos; sección; si aplica en garantía; frecuencia en meses, 12 por defecto). Un tipo con plantilla entra en la programación. Los activos dados de baja no aparecen
+- **Programación**: al equipo le toca el preventivo a los 12 meses del último preventivo completo (cerrado y fuera de garantía); si nunca tuvo uno, cuando vence la garantía; sin garantía calculable, desde que se registró el equipo. Los correctivos y los preventivos en garantía no mueven la fecha. La fecha programada es opcional, por equipo, y gana sobre todo lo demás. **Sin rojos**: "Le toca desde dd/mm/aaaa" va en ámbar
+- **Hacer un preventivo**: Iniciar copia a la orden los puntos de la plantilla (todos fuera de garantía; solo los que aplican en garantía si el equipo está en garantía ese día). Cada punto se marca al instante (HTMX) como Bien, Con falla o No aplica; "Con falla" exige observación (150 caracteres). Fotos (hasta 3 en el acta), repuestos, observaciones y estado final (Operativo, Operativo con observaciones, Fuera de servicio). Un equipo no puede tener dos preventivos abiertos
+- **Cerrar y reabrir**: cerrar exige todos los puntos con resultado, las fallas con observación y el estado final; el técnico es la cuenta que cierra (si no tiene nombre completo y cargo, el formulario los pide una vez y los guarda). La fecha de cierre puede ser pasada, nunca futura. Una orden cerrada no se edita; con permiso de escritura se puede **Reabrir** (descongela el acta)
+- **Correctivos**: portal "Reportar falla", escalamiento desde Soporte o creación a mano, para cualquier tipo de equipo. Sin checklist: llevan Diagnóstico y Solución (600 caracteres cada uno), fotos, repuestos y estado final
+- **Acta de mantenimiento (PDF)**: una sola hoja carta (fuente DejaVu Sans) con encabezado (código y versión desde Administración › Configuración), datos del equipo, QR a la hoja de vida, responsable de la asignación activa, checklist en dos columnas con resumen, hasta 3 fotos, repuestos, cuadro de observaciones y firmas. Se genera siempre desde los datos congelados al cerrar (`datos_acta`), así no cambia aunque después cambie el activo, la asignación o la cuenta
+- **Acta firmada**: se imprime, se firma a mano y se sube en el detalle de la orden (PDF, JPG o PNG, hasta 10 MB). La campana avisa de las actas de mantenimiento cerradas sin firmar. Si se reabre la orden, el acta firmada se conserva marcada "de una versión anterior"
+- **Órdenes de formato anterior**: las creadas antes de v1.13 se ven en solo lectura (checklist viejo, estado de partes, PDF anterior)
+- **Avisos, calendario, dashboard y Excel con la programación**: la campana avisa "Le toca mantenimiento" (una vez por ciclo) y "Mañana: mantenimiento de ..."; el calendario muestra órdenes y equipos programados; el dashboard muestra "Les toca mantenimiento"; el Excel de mantenimiento trae En garantía, Estado final y Técnico
+- **Planes de mantenimiento por categoría: retirados** (modelo, pantallas, rutas, avisos y eventos de calendario)
+- Hoja de vida y reportes PDF con el resumen del checklist, las fallas, el estado final y los enlaces al acta y al acta firmada
 
 **Acceso:** `https://192.168.1.250:6060/mantenimiento/`
 
@@ -579,6 +586,17 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-10-27 — v1.13 · Mantenimiento v2 + importación de contraseñas desde Excel (rama `feat/mantenimiento-v2`, pendiente de despliegue)
+
+- ✅ **Mantenimiento rediseñado por equipo**: pantalla principal con tarjetas y pestañas (Por hacer, En garantía, Al día, Historial, Fallas reportadas), programación (garantía + ciclo de 12 meses desde el último preventivo completo, fecha programada opcional, sin rojos), checklists por tipo editables desde la app (`PlantillaChecklist`, `PuntoPlantilla`; portátil y escritorio precargados) y preventivo con puntos Bien / Con falla / No aplica
+- ✅ **Acta de mantenimiento de una hoja carta** (PDF con QR, checklist en dos columnas, hasta 3 fotos y firmas) generada desde los datos congelados al cerrar (`datos_acta`); **acta firmada** subible (PDF/JPG/PNG, 10 MB) y aviso de las que faltan; Reabrir una orden cerrada
+- ✅ Correctivos con formulario nuevo (Diagnóstico y Solución, estado final); técnico = cuenta que cierra (`CustomUser.cargo`); código y versión del acta en Administración › Configuración
+- ✅ **Planes por categoría retirados**; avisos de la campana, calendario, dashboard ("Les toca mantenimiento"), Excel (En garantía, Estado final, Técnico), hoja de vida y PDF de reportes usan la programación y el checklist
+- ✅ Órdenes anteriores en solo lectura (formato 1)
+- ✅ Incluye la **importación de contraseñas desde Excel** (Etapa A, ver entrada del 2026-10-23)
+- ✅ Migraciones `mantenimiento/0009` a `0015`, `accounts/0003_customuser_cargo`, `administracion/0004_acta_mantenimiento`
+- ✅ Suite **511 OK** al cierre de la rama de contraseñas; el total de v1.13 se actualiza tras la suite final
 
 ### 2026-10-23 — Importación de contraseñas desde Excel (rama `feat/importar-contrasenas`, pendiente de despliegue)
 
