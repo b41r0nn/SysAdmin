@@ -880,9 +880,37 @@ class ImportacionColumnasCruzadasTests(TestCase):
         self.assertIn("Revisa", filas[0]["detalle"])
         self.assertIn("URL", filas[0]["detalle"])
 
+    def test_valor_de_url_que_queda_como_nota_pide_revisar(self):
+        # Residuo de la auditoría: con Contraseña y Servidor intercambiadas, una clave
+        # sin símbolos (Casa2024) tiene la misma forma que un nombre de equipo, así que
+        # no bloquea el archivo y la clave real queda en notas, un TextField sin cifrar.
+        # No se puede bloquear (volvería el falso positivo I1), pero la fila avisa.
+        filas, avisos = self._leer([
+            ("Wifi casa", "", "casa.example.com", "Casa2024"),
+        ], encabezados=("Título", "Usuario", "Contraseña", "Servidor"))
+        self.assertEqual(avisos, [])
+        self.assertEqual(filas[0]["resultado"], "nueva")
+        self.assertEqual(filas[0]["notas"], "Sitio: Casa2024")
+        self.assertIn("Revisa", filas[0]["detalle"])
+        self.assertIn("«Servidor»", filas[0]["detalle"])
+        self.assertIn("nota", filas[0]["detalle"].lower())
+        self.assertNotIn("Casa2024", filas[0]["detalle"])
+
+    def test_descripcion_con_espacios_que_queda_como_nota_no_pide_revisar(self):
+        # "Oficina principal" no puede ser una contraseña corrida de columna: lleva
+        # espacios. Queda como nota, sin aviso, para no llenar de avisos un archivo bueno.
+        filas, _ = self._leer([
+            ("Caja fuerte", "u1", "Caja-1", "Oficina principal"),
+        ], encabezados=("Título", "Usuario", "Contraseña", "Sitio"))
+        self.assertEqual(filas[0]["resultado"], "nueva")
+        self.assertEqual(filas[0]["notas"], "Sitio: Oficina principal")
+        self.assertEqual(filas[0]["detalle"], "")
+
     def test_urls_normales_no_piden_revisar(self):
+        # SRV-DC01 salió de esta lista: no es una dirección válida, queda como nota sin
+        # cifrar y por eso ahora pide revisar (ver el test del residuo, arriba).
         urls = ["nas.local", "fw.example.com", "outlook.office.com", "192.168.1.1", "erp.empresa.co",
-                "https://intranet.empresa", "localhost:8080", "SRV-DC01"]
+                "https://intranet.empresa", "localhost:8080"]
         filas, avisos = self._leer([(f"T{i}", "u", f"Clave-{i}", url) for i, url in enumerate(urls)])
         self.assertEqual(avisos, [])
         self.assertEqual([f["detalle"] for f in filas], [""] * len(urls))
