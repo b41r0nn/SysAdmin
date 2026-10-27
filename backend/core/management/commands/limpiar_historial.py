@@ -7,7 +7,7 @@ from django.utils import timezone
 
 
 class Command(BaseCommand):
-    help = "Limpia logs, auditoría y archivos de media antiguos."
+    help = "Limpia logs, auditoría, sesiones vencidas y archivos de media antiguos."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -70,6 +70,18 @@ class Command(BaseCommand):
         self.stdout.write(f"Emails enviados: {email_borrados}")
         if not dry_run and email_borrados:
             NotificacionEmail.objects.filter(enviado=True, fecha_enviado__lt=corte).delete()
+
+        # Sesiones vencidas (lo que hace clearsessions). Incluyen vistas previas de
+        # importación de contraseñas abandonadas: claves cifradas con la clave del
+        # vault de ese momento, que rotar_clave_vault no re-cifra.
+        from django.contrib.sessions.models import Session
+
+        vencidas = Session.objects.filter(expire_date__lt=timezone.now())
+        sesiones_borradas = vencidas.count()
+        total_borrados += sesiones_borradas
+        self.stdout.write(f"Sesiones vencidas: {sesiones_borradas}")
+        if not dry_run and sesiones_borradas:
+            vencidas.delete()
 
         # Archivos huérfanos de media
         huérfanos = self._limpiar_media_huerfana(corte_media, dry_run)
