@@ -78,5 +78,10 @@ class SubirActaFirmadaTests(TestCase):
         self._subir(orden, _pdf())
         orden.refresh_from_db()
         r = self.client.get(f"/media/{orden.acta_firmada.name}")
-        r.close()  # el archivo queda abierto hasta cerrar la respuesta (Windows no deja borrarlo)
         self.assertEqual(r.status_code, 200)
+        # El archivo queda abierto hasta cerrar la respuesta (Windows no deja borrar
+        # el tmpdir con el handle abierto), pero se cierra CONSUMIENDO el streaming:
+        # el wrapper del test client lo cierra con close_old_connections desconectado.
+        # Un r.close() directo dispara request_finished y, en PostgreSQL, cierra la
+        # conexión de BD dentro del atomic del TestCase (ver core.tests._cerrar_archivo).
+        self.assertEqual(b"".join(r.streaming_content), b"%PDF-1.4 firmada")
