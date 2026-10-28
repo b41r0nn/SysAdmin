@@ -6,7 +6,8 @@ El cierre y la reapertura están en ``views/ejecucion.py``.
 from django import forms
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import DecimalField, F, Q, Sum
+from django.db.models import CharField, DecimalField, F, Q, Sum, Value
+from django.db.models.functions import Coalesce, Concat
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -76,13 +77,21 @@ def lista_ordenes(request):
     if prioridad:
         qs = qs.filter(prioridad=prioridad)
     if q:
-        qs = qs.filter(
+        # El nombre completo se arma en la consulta: buscar "Nombre Apellido" no
+        # encontraba nada, porque first_name y last_name se miraban por separado.
+        qs = qs.annotate(
+            nombre_del_tecnico=Concat(
+                Coalesce("tecnico__first_name", Value("")),
+                Value(" "),
+                Coalesce("tecnico__last_name", Value("")),
+                output_field=CharField(),
+            )
+        ).filter(
             Q(activo__serial__icontains=q)
             | Q(activo__marca__icontains=q)
             | Q(activo__modelo__icontains=q)
             | Q(tecnico_asignado__icontains=q)
-            | Q(tecnico__first_name__icontains=q)
-            | Q(tecnico__last_name__icontains=q)
+            | Q(nombre_del_tecnico__icontains=q)
         )
 
     stats = {

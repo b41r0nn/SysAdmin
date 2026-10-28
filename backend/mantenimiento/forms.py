@@ -256,6 +256,8 @@ class CerrarOrdenForm(forms.Form):
 
 EXTENSIONES_ACTA = {".pdf", ".jpg", ".jpeg", ".png"}
 LIMITE_ACTA_BYTES = 10 * 1024 * 1024
+# Primeros bytes de cada formato (PDF, JPEG, PNG): la extensión se renombra, esto no.
+FIRMAS_ACTA = (b"%PDF", bytes.fromhex("ffd8ff"), bytes.fromhex("89504e470d0a1a0a"))
 
 
 class SubirActaFirmadaForm(forms.Form):
@@ -273,6 +275,10 @@ class SubirActaFirmadaForm(forms.Form):
             raise forms.ValidationError("Sube un PDF, JPG o PNG.")
         if archivo.size > LIMITE_ACTA_BYTES:
             raise forms.ValidationError("El archivo pasa de 10 MB.")
+        cabecera = archivo.read(8)
+        archivo.seek(0)
+        if not cabecera.startswith(FIRMAS_ACTA):
+            raise forms.ValidationError("El archivo no es un PDF, JPG o PNG de verdad.")
         return archivo
 
 

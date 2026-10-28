@@ -8,6 +8,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from inventario.models import Activo
+
 from .models import (
     ESTADOS_FINALES,
     FORMATO_ACTUAL,
@@ -37,6 +39,12 @@ def esta_en_garantia(activo, hoy):
     return vencimiento is not None and hoy <= vencimiento
 
 
+def _preventivo_abierto(activo, excluyendo=None):
+    """Preventivos sin cerrar de ese equipo (los que impiden abrir o reabrir otro)."""
+    qs = OrdenMantenimiento.objects.filter(activo=activo, tipo="preventivo", estado__in=ESTADOS_ABIERTOS)
+    return qs.exclude(pk=excluyendo.pk) if excluyendo is not None else qs
+
+
 def iniciar_preventivo(activo, usuario, hoy: date | None = None):
     """Abre un preventivo en proceso con los puntos de la plantilla copiados."""
     hoy = hoy or timezone.localdate()
@@ -47,14 +55,22 @@ def iniciar_preventivo(activo, usuario, hoy: date | None = None):
         raise ValidationError("No hay checklist para este tipo de equipo.")
     en_garantia = esta_en_garantia(activo, hoy)
 
+    # Chequeo rápido antes de nada: si ya hay uno abierto no vale la pena ir a OCS.
+    if _preventivo_abierto(activo).exists():
+        raise ValidationError("Este equipo ya tiene un mantenimiento preventivo abierto.")
+
+    # OCS tarda hasta ~45 s cuando está caído: va FUERA de la transacción, para no
+    # dejar tomada la fila del activo todo ese tiempo.
+    software = [s["name"] for s in snapshot_software_ocs(activo) if s.get("name")]
+
     with transaction.atomic():
-        abierto = OrdenMantenimiento.objects.filter(
-            activo=activo, tipo="preventivo", estado__in=ESTADOS_ABIERTOS
-        ).exists()
-        if abierto:
+        # Bloquea la fila del activo: con dos clics simultáneos en Iniciar, el
+        # segundo espera aquí y luego ve la orden del primero (en SQLite no
+        # bloquea, pero ahí no hay concurrencia real).
+        Activo.objects.select_for_update().filter(pk=activo.pk).exists()
+        if _preventivo_abierto(activo).exists():
             raise ValidationError("Este equipo ya tiene un mantenimiento preventivo abierto.")
 
-        software = [s["name"] for s in snapshot_software_ocs(activo) if s.get("name")]
         orden = OrdenMantenimiento.objects.create(
             activo=activo,
             tipo="preventivo",
@@ -314,6 +330,8 @@ def reabrir_orden(orden):
     """
     if orden.estado != "cerrada":
         raise ValidationError("El mantenimiento no está cerrado.")
+    if orden.tipo == "preventivo" and _preventivo_abierto(orden.activo, excluyendo=orden).exists():
+        raise ValidationError("Este equipo ya tiene un mantenimiento preventivo abierto.")
     orden.estado = "en_proceso"
     orden.fecha_cierre = None
     orden.datos_acta = {}

@@ -1819,6 +1819,11 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 
 **Datos de producción al 2026-10-23**: 1 orden correctiva cerrada con `estado_partes` (queda en formato 1) y 1 plan sin uso (se elimina con 0015).
 
+**Pendientes tras el despliegue del 2026-10-27**
+- **Acta real sin verificar**: producción no tiene todavía ninguna orden de formato 2 cerrada, así que el acta en PDF no se ha descargado con datos reales. Al cerrar el primer preventivo, bajarla y comprobar que sale en **una sola hoja carta**.
+- **Backup al NAS (§8 de la guía): pendiente** — las carpetas del NAS aún no están creadas. Por ahora el `.dump` del despliegue vive solo en `/opt/sysadmin/app/backups/2026-10-27-1754/`.
+- **Ramas viejas en GitHub**: `feat/mantenimiento-v2` y las tres `fix/auditoria-*` están contenidas en `master` y se pueden borrar en el remoto (las locales ya se borraron).
+
 **Tests**: **711 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
 
 ---
