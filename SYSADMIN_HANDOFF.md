@@ -1769,12 +1769,13 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ## v1.13.1 (2026-10-28) — Robustez, acta dinámica y borrado en la bóveda
 
-Dos despliegues el mismo día, ambos con backup previo y CI verde. Sin migraciones en ninguno.
+Tres despliegues el mismo día, todos con backup previo y sin migraciones. Los dos primeros con CI verde; el tercero solo llevó documentación.
 
 | Orden | Commit en `master` | Qué llevó | Backup previo (hora del servidor) |
 | --- | --- | --- | --- |
 | 1.º | `6519f0e` (PR #2) | 6 arreglos de robustez de mantenimiento | `backups/2026-10-28-0722/db.dump` (191 K) |
 | 2.º | `c671972` (PR #3) | Acta dinámica + 500 al borrar en la bóveda | `backups/2026-10-28-1230/db.dump` (196 K) |
+| 3.º | `ba112a8` | Documentación de v1.13.1 y el renombre de un test del acta (**cero código de la app**) | `backups/2026-10-28-1716/db.dump` (196 K) |
 
 ### Error 500 al borrar en la bóveda (lo que reportó el usuario)
 
@@ -1810,10 +1811,13 @@ Dos despliegues el mismo día, ambos con backup previo y CI verde. Sin migracion
 - Historial con búsqueda de nombre completo, calendario, pantalla principal, detalle de la orden de formato 1 y hoja de vida en PDF: todos 200.
 - Muestras `acta_tipica.pdf` y `acta_maxima.pdf` regeneradas y revisadas a la vista: una sola hoja carta, sin blanco antes de las firmas.
 
+**Tercer despliegue (`ba112a8`, 17:20)**: se hizo para que el servidor no quedara con los `.md` y el nombre viejo del test (`test_contenido_tipico_sale_en_escala_0`), que es el que se ve al correr la suite dentro del contenedor. No cambia el comportamiento de la app. Verificado: `nginx -t` ok, `/` 302 a login y login 200, `mantenimiento.test_acta` **25 OK** en el contenedor con WeasyPrint 70 real (el test ya corre con su nombre nuevo), humo con el test client en `/`, inventario, mantenimiento, calendario, bóveda, soporte y licencias (todos 200), `sysadmin_django` healthy y logs sin errores.
+
 ### Pendientes tras estos despliegues
 
 - **El acta todavía no se ha generado con datos reales**: producción no tiene ninguna orden de formato 2 cerrada. Al cerrar el primer preventivo, descargarla y comprobar que sale en una sola hoja.
-- **Backup al NAS**: pendiente, las carpetas del NAS no están creadas.
+- **Backup al NAS**: pendiente, las carpetas del NAS no están creadas. Los `.dump` fechados viven solo en `/opt/sysadmin/app/backups/` (2026-10-27-1754, 2026-10-28-0722, 2026-10-28-1230 y 2026-10-28-1716).
+- **Rama `fix/acta-dinamica-y-vault` en GitHub**: ya está contenida en `master` (merge `c671972`) y se puede borrar en el remoto; es la única que queda aparte de `master`. El entorno de Claude deniega tanto `git push --delete` como `gh api -X DELETE .../git/refs/heads/...`, así que lo tiene que correr el usuario.
 
 ---
 
@@ -1872,7 +1876,7 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 **Pendientes tras el despliegue del 2026-10-27**
 - **Acta real sin verificar**: producción no tiene todavía ninguna orden de formato 2 cerrada, así que el acta en PDF no se ha descargado con datos reales. Al cerrar el primer preventivo, bajarla y comprobar que sale en **una sola hoja carta**.
 - **Backup al NAS (§8 de la guía): pendiente** — las carpetas del NAS aún no están creadas. Por ahora el `.dump` del despliegue vive solo en `/opt/sysadmin/app/backups/2026-10-27-1754/`.
-- **Ramas viejas en GitHub**: `feat/mantenimiento-v2` y las tres `fix/auditoria-*` están contenidas en `master` y se pueden borrar en el remoto (las locales ya se borraron).
+- **Ramas viejas en GitHub**: `feat/mantenimiento-v2` y las tres `fix/auditoria-*` ya se borraron del remoto (al 2026-10-28 solo quedaba `fix/acta-dinamica-y-vault`, ver los pendientes de v1.13.1).
 
 **Tests**: **711 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
 
