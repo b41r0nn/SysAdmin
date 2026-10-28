@@ -53,7 +53,7 @@ def calendario_eventos(request):
     # La fecha acordada de cada equipo; los que no tienen fecha no salen.
     programadas = ProgramacionMantenimiento.objects.filter(
         fecha_programada__isnull=False
-    ).select_related("activo")
+    ).exclude(activo__estado="dado_de_baja").select_related("activo")
     for programada in programadas:
         eventos.append({
             "title": f"Programado · {programada.activo.serial}",
