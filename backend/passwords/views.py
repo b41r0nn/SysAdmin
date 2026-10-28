@@ -11,6 +11,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from openpyxl import Workbook
 
@@ -109,8 +110,9 @@ def vault_eliminar(request, pk):
     return render(request, "passwords/confirm_delete.html", {
         "titulo": "Eliminar vault",
         "mensaje": f"Eliminar vault '{vault.nombre}' y todas sus credenciales?",
-        "volver_url": "passwords:index",
-        "volver_kwargs": {},
+        # La URL se resuelve aquí: el {% url %} de la plantilla no sabe
+        # desempaquetar kwargs y reventaba la página de confirmación.
+        "volver_href": reverse("passwords:index"),
     })
 
 
@@ -204,8 +206,7 @@ def credencial_eliminar(request, vault_id, pk):
     return render(request, "passwords/confirm_delete.html", {
         "titulo": "Eliminar credencial",
         "mensaje": f"Eliminar credencial '{credencial.titulo}'?",
-        "volver_url": "passwords:credenciales_lista",
-        "volver_kwargs": {"vault_id": vault.id},
+        "volver_href": reverse("passwords:credenciales_lista", kwargs={"vault_id": vault.id}),
     })
 
 
