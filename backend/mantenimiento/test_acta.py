@@ -23,8 +23,10 @@ from PIL import Image, ImageDraw
 
 from administracion.models import ConfiguracionSistema
 from mantenimiento.acta import (
+    _render,
     columnas_checklist,
     contexto_acta,
+    documento_acta,
     fotos_acta,
     observaciones_acta,
     renderizar_acta,
@@ -235,7 +237,7 @@ class ArmadoActaTests(MediaTemporal, TestCase):
             "23/10/2026",
             "Ninguno",
             "Operativo",
-            'class="escala-0"',
+            'class="escala-3"',
         ):
             self.assertIn(texto, html)
         self.assertNotIn(">Observación<", html)
@@ -504,6 +506,13 @@ class ActaUnaHojaTests(MediaTemporal, TestCase):
         html = render_to_string("mantenimiento/acta_pdf.html", contexto_acta(orden, self.request, escala=escala))
         return weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).render()
 
+    def _hueco_mm(self, documento):
+        """Blanco entre el final de las observaciones y el comienzo de las firmas."""
+        pagina = documento.pages[0]
+        _, cuadro_abajo = _extremos_mm(pagina, "cuadro")
+        firmas_arriba, _ = _extremos_mm(pagina, "firmas")
+        return firmas_arriba - cuadro_abajo
+
     def _comprobar_firmas_al_pie(self, documento):
         """Una hoja; firmas en el tercio inferior, sin tapar las observaciones; pie pegado al margen de abajo."""
         self.assertEqual(len(documento.pages), 1)
@@ -551,8 +560,32 @@ class ActaUnaHojaTests(MediaTemporal, TestCase):
         pdf, escala = renderizar_acta(orden, self.request)
         _guardar_muestra("acta_tipica.pdf", pdf)
         self.assertTrue(pdf.startswith(b"%PDF"))
-        self.assertEqual(escala, 0)
-        self._comprobar_firmas_al_pie(self._documento(orden, escala))
+        documento, _escala = documento_acta(orden, self.request)
+        self._comprobar_firmas_al_pie(documento)
+        # Dinámico: la elegida cabe y la anterior (letra más grande) ya no.
+        if escala > 0:
+            self.assertGreater(
+                len(self._documento(orden, escala - 1).pages), 1,
+                f"la escala {escala - 1} también cabía: se eligió letra más chica de la necesaria",
+            )
+
+    def test_un_acta_corta_llena_la_hoja_y_no_deja_hueco(self):
+        """Lo que motivó el cambio: un acta corta dejaba ~5 cm de blanco antes de las firmas."""
+        tecnico = crear_usuario(first_name="Ana", last_name="Pérez Díaz", cargo="Técnica de Soporte")
+        pc = crear_pc("SN-CORTA-1", nombre_equipo="REDIHOS-PT20", modelo="ProBook 440 G8")
+        asignar(pc)
+        orden = iniciar_preventivo(pc, tecnico, HOY)
+        orden = _cerrar_preventivo(orden, tecnico, observaciones="Sin novedades.")
+
+        documento, escala = documento_acta(orden, self.request)
+        self.assertEqual(len(documento.pages), 1)
+        self._comprobar_firmas_al_pie(documento)
+        hueco = self._hueco_mm(documento)
+        self.assertLessEqual(hueco, 8, f"quedaron {hueco:.1f} mm de blanco antes de las firmas")
+
+        # Y sin estirar el cuadro el hueco era grande: así se ve que el paso 2 sirve.
+        sin_estirar = _render(contexto_acta(orden, self.request, escala=escala), escala)
+        self.assertGreater(self._hueco_mm(sin_estirar), 20)
 
     def test_contenido_maximo_cabe_en_una_hoja(self):
         tecnico = crear_usuario(first_name="María Fernanda", last_name="Restrepo Villalobos",
@@ -562,7 +595,9 @@ class ActaUnaHojaTests(MediaTemporal, TestCase):
         pdf, escala = renderizar_acta(orden, self.request)
         _guardar_muestra("acta_maxima.pdf", pdf)
         self.assertTrue(pdf.startswith(b"%PDF"))
-        self._comprobar_firmas_al_pie(self._documento(orden, escala))
+        documento, _escala = documento_acta(orden, self.request)
+        self._comprobar_firmas_al_pie(documento)
+        self.assertGreaterEqual(escala, 3, "el contenido máximo debería necesitar letra chica")
 
     def test_nombres_de_dos_renglones_no_tapan_las_observaciones(self):
         # Nombre y cargo se parten en dos renglones en las dos firmas: el bloque
