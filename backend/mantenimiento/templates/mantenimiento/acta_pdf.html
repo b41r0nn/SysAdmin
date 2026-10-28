@@ -5,19 +5,27 @@
 <title>Acta de mantenimiento N° {{ numero }}</title>
 <style>
   /* Una sola hoja carta. Las secciones van en tablas (no flex) para WeasyPrint.
-     La clase escala-N del body achica letra y fotos si el contenido no cabe. */
+     La clase escala-N del body fija letra y fotos: la 0 es la mas grande y la 6
+     la mas chica. acta.py elige la mas grande que entre en una hoja y, si queda
+     blanco antes de las firmas, estira el cuadro de observaciones (alto_obs_mm). */
   @page { size: letter; margin: 10mm 12mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body { font-family: "DejaVu Sans", sans-serif; color: #1e293b; background: #fff; line-height: 1.2; }
-  body.escala-0 { font-size: 8.5pt; }
-  body.escala-1 { font-size: 8pt; }
-  body.escala-2 { font-size: 7.4pt; }
-  body.escala-3 { font-size: 6.8pt; }
-  .escala-0 .foto { height: 34mm; }
-  .escala-1 .foto { height: 30mm; }
-  .escala-2 .foto { height: 26mm; }
-  .escala-3 .foto { height: 22mm; }
+  body.escala-0 { font-size: 11pt; }
+  body.escala-1 { font-size: 10.2pt; }
+  body.escala-2 { font-size: 9.4pt; }
+  body.escala-3 { font-size: 8.5pt; }
+  body.escala-4 { font-size: 8pt; }
+  body.escala-5 { font-size: 7.4pt; }
+  body.escala-6 { font-size: 6.8pt; }
+  .escala-0 .foto { height: 46mm; }
+  .escala-1 .foto { height: 42mm; }
+  .escala-2 .foto { height: 38mm; }
+  .escala-3 .foto { height: 34mm; }
+  .escala-4 .foto { height: 30mm; }
+  .escala-5 .foto { height: 26mm; }
+  .escala-6 .foto { height: 22mm; }
 
   table { width: 100%; border-collapse: collapse; }
   td, th { border: 0.6pt solid #cbd5e1; padding: 0.22em 0.5em; vertical-align: middle; text-align: left; overflow-wrap: anywhere; }
@@ -38,10 +46,10 @@
   .chk td { padding-top: 0.14em; padding-bottom: 0.14em; }
   /* Escalas 2 y 3: además, menos aire en las celdas y entre secciones. Van
      antes de las reglas de las tablas de acomodo, que quitan todo el relleno. */
-  .escala-2 td, .escala-2 th, .escala-3 td, .escala-3 th { padding-top: 0.1em; padding-bottom: 0.1em; }
-  .escala-2 .chk td, .escala-3 .chk td { padding-top: 0.06em; padding-bottom: 0.06em; }
-  .escala-2 .sec, .escala-3 .sec { margin: 0.4em 0 0.18em; }
-  .escala-2 .cuadro, .escala-3 .cuadro { padding: 0.25em 0.5em; }
+  .escala-5 td, .escala-5 th, .escala-6 td, .escala-6 th { padding-top: 0.1em; padding-bottom: 0.1em; }
+  .escala-5 .chk td, .escala-6 .chk td { padding-top: 0.06em; padding-bottom: 0.06em; }
+  .escala-5 .sec, .escala-6 .sec { margin: 0.4em 0 0.18em; }
+  .escala-5 .cuadro, .escala-6 .cuadro { padding: 0.25em 0.5em; }
 
   /* Tablas que solo acomodan bloques lado a lado: sin bordes ni relleno. */
   td.marco { border: none; padding: 0; vertical-align: top; }
@@ -197,7 +205,7 @@
 </table>
 
 <div class="sec">{% if fotos %}6{% else %}5{% endif %}. OBSERVACIONES</div>
-<div class="cuadro">
+<div class="cuadro"{% if alto_obs_mm %} style="min-height: {{ alto_obs_mm }}mm"{% endif %}>
   {% for linea in observaciones %}
   <div{% if forloop.counter <= resumen.falla %} class="linea-falla"{% endif %}>{{ linea|linebreaksbr }}</div>
   {% empty %}
@@ -205,7 +213,7 @@
   {% endfor %}
 </div>
 
-<div class="reserva"></div>
+<div class="reserva"{% if alto_reserva_mm %} style="height: {{ alto_reserva_mm }}mm"{% endif %}></div>
 <div class="pie-hoja">
 <table class="firmas">
   <tr>

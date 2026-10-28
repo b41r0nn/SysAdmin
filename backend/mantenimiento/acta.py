@@ -5,6 +5,8 @@ cerrar, más lo que ya es de la orden (checklist, fotos, repuestos, textos). Si
 el contenido no cabe en una hoja, se prueba con letra más pequeña (``escala``).
 """
 
+import logging
+
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -15,9 +17,21 @@ from inventario.views.qr import _qr_data_uri
 from . import services
 from .models import FORMATO_ACTUAL, MAX_FOTOS_ACTA
 
+logger = logging.getLogger(__name__)
+
 PLANTILLA = "mantenimiento/acta_pdf.html"
-# 0 es la letra normal; cada escala achica la letra y las fotos (ver la plantilla).
-ESCALAS = (0, 1, 2, 3)
+# Escalas de la letra y las fotos, de la MAS GRANDE a la mas chica (ver la
+# plantilla). Gana la primera que entre en una hoja: un acta corta aprovecha la
+# hoja y una larga se achica. La 3 es la letra que usaba el acta antes (8,5 pt).
+ESCALAS = (0, 1, 2, 3, 4, 5, 6)
+ESCALA_BASE = 3
+# Debajo de este sobrante no vale la pena re-renderizar para estirar el cuadro.
+SOBRA_MINIMA_MM = 4
+# Colchon al estirar, para no empujar las firmas a una segunda hoja.
+COLCHON_MM = 3
+# Aire entre el final del contenido y las firmas, ya con la reserva ajustada.
+AIRE_RESERVA_MM = 2
+MM_POR_PX = 25.4 / 96
 PARES_POR_FILA = 3
 VACIO = "—"
 
@@ -136,7 +150,7 @@ def filas_equipo(datos, es_correctivo):
     return filas
 
 
-def contexto_acta(orden, request, escala: int = 0):
+def contexto_acta(orden, request, escala: int = ESCALA_BASE, alto_obs_mm=None, alto_reserva_mm=None):
     items = list(orden.checklist_items.all())
     datos = orden.datos_acta
     es_correctivo = orden.tipo == "correctivo"
@@ -155,22 +169,132 @@ def contexto_acta(orden, request, escala: int = 0):
         "repuestos": [f"{r.nombre} × {r.cantidad}" for r in orden.repuestos.order_by("nombre", "pk")],
         "observaciones": observaciones_acta(orden),
         "escala": escala,
+        # Altos en mm (texto ya formateado con punto, no con coma) para repartir
+        # el blanco de la hoja. None: los altos normales de la plantilla.
+        "alto_obs_mm": alto_obs_mm,
+        "alto_reserva_mm": alto_reserva_mm,
     }
 
 
-def renderizar_acta(orden, request):
-    """PDF del acta en una hoja, con la primera escala que cabe (o la última).
+def _render(contexto, escala, medidas=None):
+    """Documento de WeasyPrint del acta con esa escala (sin escribir el PDF).
 
-    Devuelve ``(bytes_del_pdf, escala)``.
+    ``medidas`` son las de ``_medidas_para_llenar_la_hoja``: sin ellas el acta
+    sale con el alto normal del cuadro y de la reserva.
     """
     import weasyprint  # import local: en Windows dev se simula en las pruebas
 
-    contexto = contexto_acta(orden, request)
-    documento = None
-    for escala in ESCALAS:
-        contexto["escala"] = escala
-        html = render_to_string(PLANTILLA, contexto)
-        documento = weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).render()
+    html = render_to_string(PLANTILLA, {**contexto, "escala": escala, **(medidas or {})})
+    return weasyprint.HTML(string=html, base_url=str(settings.BASE_DIR)).render()
+
+
+def _caja(caja, clase):
+    """Primera caja de WeasyPrint cuyo elemento tenga esa clase, o None.
+
+    Se recorre a mano porque las cajas con ``position: fixed`` (el pie y las
+    firmas) vienen envueltas en un ``AbsolutePlaceholder`` que guarda la caja
+    real en ``_box``. Son internos de WeasyPrint, que va fijo en 70.0.
+    """
+    caja = getattr(caja, "_box", caja)
+    elemento = getattr(caja, "element", None)
+    if elemento is not None and clase in (elemento.get("class") or "").split():
+        return caja
+    for hija in getattr(caja, "children", None) or ():
+        encontrada = _caja(hija, clase)
+        if encontrada is not None:
+            return encontrada
+    return None
+
+
+def _medidas_para_llenar_la_hoja(documento):
+    """``{"alto_obs_mm", "alto_reserva_mm"}`` para que el acta llene la hoja, o None.
+
+    Dos cosas se miden sobre la página ya maquetada:
+
+    - El **pie real** (firmas + pie de página). La reserva del flujo es de
+      11,6 em para el peor caso (nombre y cargo en dos renglones en las dos
+      firmas); cuando el pie mide menos, esa diferencia es blanco regalado en
+      todas las actas, así que la reserva se ajusta al pie medido más un aire.
+    - El **sobrante al final de la hoja**, que junto con lo que libera la
+      reserva se le suma al cuadro de observaciones, que es donde sirve
+      (ahí se escribe a mano).
+
+    Devuelve None si no hay nada que ganar o si no se pudo medir; en ese caso el
+    acta sale con la disposición de siempre.
+    """
+    pagina = documento.pages[0]
+    if not hasattr(pagina, "_page_box"):
+        return None  # documento simulado en las pruebas de Windows
+    try:
+        caja_pagina = pagina._page_box
+        cuadro = _caja(caja_pagina, "cuadro")
+        reserva = _caja(caja_pagina, "reserva")
+        pie = _caja(caja_pagina, "pie-hoja")
+        if cuadro is None or reserva is None or pie is None:
+            return None
+        fondo = caja_pagina.content_box_y() + caja_pagina.height
+        reserva_nueva = pie.margin_height() + AIRE_RESERVA_MM / MM_POR_PX
+        libre = fondo - (reserva.position_y + reserva.margin_height())
+        gana = libre + (reserva.margin_height() - reserva_nueva)
+        alto_cuadro = cuadro.margin_height()
+    except Exception:  # noqa: BLE001 - medir es opcional, el acta no depende de esto
+        logger.warning("No se pudo medir el acta para repartir el blanco", exc_info=True)
+        return None
+    if gana * MM_POR_PX < SOBRA_MINIMA_MM:
+        return None
+    return {
+        "alto_obs_mm": f"{(alto_cuadro + gana) * MM_POR_PX - COLCHON_MM:.1f}",
+        "alto_reserva_mm": f"{reserva_nueva * MM_POR_PX:.1f}",
+    }
+
+
+def _escala_que_cabe(contexto):
+    """``(escala, documento)`` de la escala más grande que entra en una hoja.
+
+    Búsqueda binaria (3 renders en vez de 7): entrar en una hoja es monótono
+    respecto del tamaño de la letra. Si no cabe ni con la letra más chica,
+    devuelve esa y el acta sale en dos hojas.
+    """
+    izquierda, derecha = 0, len(ESCALAS) - 1
+    mejor = None
+    while izquierda <= derecha:
+        medio = (izquierda + derecha) // 2
+        documento = _render(contexto, ESCALAS[medio])
         if len(documento.pages) == 1:
-            break
+            mejor = (ESCALAS[medio], documento)
+            derecha = medio - 1
+        else:
+            izquierda = medio + 1
+    if mejor is None:
+        logger.warning(
+            "El acta N° %s no cabe en una hoja ni con la letra más chica", contexto.get("numero")
+        )
+        mejor = (ESCALAS[-1], _render(contexto, ESCALAS[-1]))
+    return mejor
+
+
+def documento_acta(orden, request):
+    """``(documento, escala)`` del acta ya acomodada, sin escribir el PDF todavía.
+
+    Dos pasos: primero la escala (``_escala_que_cabe``) y después, si entre las
+    observaciones y las firmas quedó blanco, se estira el cuadro de observaciones
+    para repartirlo. Si al estirar se pasara a dos hojas, se queda el del primer
+    paso. Las pruebas miden sobre este documento, que es el que se imprime.
+    """
+    contexto = contexto_acta(orden, request)
+    escala, documento = _escala_que_cabe(contexto)
+    medidas = _medidas_para_llenar_la_hoja(documento)
+    if medidas is not None:
+        estirado = _render(contexto, escala, medidas=medidas)
+        if len(estirado.pages) == 1:
+            documento = estirado
+    return documento, escala
+
+
+def renderizar_acta(orden, request):
+    """PDF del acta en una hoja, con la letra más grande que entra y sin blanco al medio.
+
+    Devuelve ``(bytes_del_pdf, escala)``.
+    """
+    documento, escala = documento_acta(orden, request)
     return documento.write_pdf(), escala

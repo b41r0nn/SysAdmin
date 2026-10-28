@@ -164,6 +164,23 @@ class VaultCRUDTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(Vault.objects.filter(pk=v.pk).exists())
 
+    def test_la_pagina_de_confirmar_borrado_del_vault_abre(self):
+        """Daba 500 en produccion: la plantilla usaba {% url x **kwargs %}, que Django no soporta."""
+        v = _vault()
+        resp = self.client.get(reverse("passwords:vault_eliminar", args=[v.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Eliminar vault")
+        self.assertContains(resp, v.nombre)
+        self.assertContains(resp, f'href="{reverse("passwords:index")}"')
+        self.assertTrue(Vault.objects.filter(pk=v.pk).exists())
+
+    def test_la_pagina_de_confirmar_borrado_de_una_credencial_abre(self):
+        v = _vault()
+        cred = Credencial.objects.create(vault=v, titulo="T", usuario="u")
+        resp = self.client.get(reverse("passwords:credencial_eliminar", args=[v.pk, cred.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f'href="{reverse("passwords:credenciales_lista", args=[v.pk])}"')
+
     def test_vault_crear_log(self):
         self.client.post(
             reverse("passwords:vault_crear"),
