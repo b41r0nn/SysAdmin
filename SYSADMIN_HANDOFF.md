@@ -1,5 +1,5 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-10-27 · v1.13 (mantenimiento v2 + importación de contraseñas) · 711 tests OK · **desplegado en producción el 2026-10-27**
+> Documento actualizado: 2026-10-28 · v1.13.1 (mantenimiento v2 + contraseñas + robustez y acta dinámica) · 723 tests OK · **desplegado en producción el 2026-10-28**
 
 ---
 
@@ -1767,6 +1767,56 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
+## v1.13.1 (2026-10-28) — Robustez, acta dinámica y borrado en la bóveda
+
+Dos despliegues el mismo día, ambos con backup previo y CI verde. Sin migraciones en ninguno.
+
+| Orden | Commit en `master` | Qué llevó | Backup previo (hora del servidor) |
+| --- | --- | --- | --- |
+| 1.º | `6519f0e` (PR #2) | 6 arreglos de robustez de mantenimiento | `backups/2026-10-28-0722/db.dump` (191 K) |
+| 2.º | `c671972` (PR #3) | Acta dinámica + 500 al borrar en la bóveda | `backups/2026-10-28-1230/db.dump` (196 K) |
+
+### Error 500 al borrar en la bóveda (lo que reportó el usuario)
+
+- **Síntoma**: `GET /passwords/vaults/<id>/eliminar/` → 500 (visto en el log de nginx). El borrado en sí no fallaba: fallaba **mostrar la confirmación**. La página de borrar una credencial estaba igual de rota.
+- **Causa**: `passwords/templates/passwords/confirm_delete.html` usaba `{% url volver_url **volver_kwargs %}`. El tag `{% url %}` de Django **no** desempaqueta diccionarios, así que la plantilla no compila: `TemplateSyntaxError: Could not parse the remainder: '**volver_kwargs'`.
+- **Arreglo**: la URL de "Cancelar" se resuelve en la vista (`volver_href = reverse(...)`) y la plantilla solo la imprime.
+- **Por qué la suite no lo vio**: las pruebas de esas rutas solo hacían `POST`, que redirige sin renderizar la plantilla. Se agregaron dos que hacen `GET` (`passwords.tests.VaultCRUDTests`).
+
+### Acta de mantenimiento: tamaño dinámico (`mantenimiento/acta.py`)
+
+- `ESCALAS = (0..6)`: de 11 pt (escala 0, fotos de 46 mm) a 6,8 pt (escala 6, fotos de 22 mm). La 3 es la letra que usaba el acta antes. `ESCALA_BASE = 3` es el valor por defecto de `contexto_acta()`.
+- `_escala_que_cabe()` elige **por bisección** la escala más grande que entra en una hoja: 3 renders en vez de 7. Si no cabe ni con la más chica, lo registra con `logger.warning` y el acta sale en dos hojas.
+- `_medidas_para_llenar_la_hoja()` mide la página ya maquetada y devuelve dos altos: `alto_reserva_mm` (la reserva del flujo, ajustada al **pie real medido** más 2 mm de aire; antes eran 11,6 em fijos para el peor caso, con un pie real de 8,6 em) y `alto_obs_mm` (el cuadro de observaciones estirado con todo lo que se libera, menos 3 mm de colchón).
+- `documento_acta()` arma y mide; `renderizar_acta()` solo escribe el PDF. **Red de seguridad**: si no se puede medir (documento simulado, o si cambian los internos de WeasyPrint) o si el estirado diera dos hojas, se usa el documento del primer paso.
+- Los altos van a la plantilla como **texto ya formateado con punto** (`f"{x:.1f}"`): con `es-co`, un float se renderizaría con coma y rompería el CSS.
+- La medición usa internos de WeasyPrint (`pagina._page_box`, `caja._box` para las cajas `position: fixed`), que va fijo en **70.0** en `requirements.txt`.
+
+### Robustez de mantenimiento (PR #2)
+
+| Arreglo | Dónde |
+| --- | --- |
+| `select_for_update` de la fila del activo al iniciar: dos clics simultáneos no abren dos preventivos | `ejecucion.iniciar_preventivo` |
+| El snapshot de software de OCS salió fuera del `atomic` (con OCS caído tardaba hasta ~45 s con los bloqueos tomados) y no se llama si ya hay un preventivo abierto | `ejecucion.iniciar_preventivo` |
+| Acta firmada validada por los primeros bytes (PDF/JPEG/PNG), no solo por la extensión | `forms.SubirActaFirmadaForm`, `FIRMAS_ACTA` |
+| Reabrir no deja dos preventivos abiertos del mismo equipo | `ejecucion.reabrir_orden` |
+| El calendario no muestra programaciones de equipos dados de baja | `views/reportes.calendario_eventos` |
+| Buscar "Nombre Apellido" encuentra las órdenes del técnico (`Concat` + `Coalesce`, portable entre SQLite y PostgreSQL) | `views/ordenes.lista_ordenes` |
+
+### Verificación hecha en producción
+
+- Las dos páginas que daban 500 responden **200**, con su botón de Cancelar, y no borran nada al abrirlas.
+- `mantenimiento.test_acta`: **25 pruebas en verde dentro del contenedor de producción** (`docker exec -e SECURE_SSL_REDIRECT=False -e DEBUG=True sysadmin_django python manage.py test mantenimiento.test_acta`), con el WeasyPrint 70 real de la imagen.
+- Historial con búsqueda de nombre completo, calendario, pantalla principal, detalle de la orden de formato 1 y hoja de vida en PDF: todos 200.
+- Muestras `acta_tipica.pdf` y `acta_maxima.pdf` regeneradas y revisadas a la vista: una sola hoja carta, sin blanco antes de las firmas.
+
+### Pendientes tras estos despliegues
+
+- **El acta todavía no se ha generado con datos reales**: producción no tiene ninguna orden de formato 2 cerrada. Al cerrar el primer preventivo, descargarla y comprobar que sale en una sola hoja.
+- **Backup al NAS**: pendiente, las carpetas del NAS no están creadas.
+
+---
+
 ## MANTENIMIENTO V2 · v1.13 (en `master`, desplegado el 2026-10-27)
 
 Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.md` (Parte B). Incluye también la importación de contraseñas desde Excel (Etapa A, ver README).
@@ -1840,4 +1890,4 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 
 ---
 
-*Última actualización: 2026-10-27 · v1.13 · Mantenimiento v2 (711 tests OK, desplegado en producción el 2026-10-27)*
+*Última actualización: 2026-10-28 · v1.13.1 · Robustez, acta dinámica y arreglo del borrado en la bóveda (723 tests OK, desplegado en producción el 2026-10-28)*
