@@ -59,7 +59,7 @@
 | 🔒 HTTPS interno (nginx + cert autofirmado) | infraestructura | ✅ Completa | Fase 7 |
 | 🧯 Auditoría de seguridad y hardening (2026-10-19) | todas | ✅ Completa | Auditoría |
 
-**Producción** (2026-10-27, v1.13): 26 activos · Django 5.2 LTS · contenedor sin root · **711 tests en verde** (SQLite y PostgreSQL, en CI). Incluye mantenimiento v2 y la importación de contraseñas desde Excel. Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
+**Producción** (2026-10-28, v1.13.1): 26 activos · Django 5.2 LTS · contenedor sin root · **723 tests en verde** (SQLite y PostgreSQL, en CI). Incluye mantenimiento v2, la importación de contraseñas desde Excel y los arreglos de robustez del 28-oct. Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
 
 ---
 
@@ -423,7 +423,7 @@ Programación del preventivo por equipo, checklists por tipo, correctivos y acta
 - **Hacer un preventivo**: Iniciar copia a la orden los puntos de la plantilla (todos fuera de garantía; solo los que aplican en garantía si el equipo está en garantía ese día). Cada punto se marca al instante (HTMX) como Bien, Con falla o No aplica; "Con falla" exige observación (150 caracteres). Fotos (hasta 3 en el acta), repuestos, observaciones y estado final (Operativo, Operativo con observaciones, Fuera de servicio). Un equipo no puede tener dos preventivos abiertos
 - **Cerrar y reabrir**: cerrar exige todos los puntos con resultado, las fallas con observación y el estado final; el técnico es la cuenta que cierra (si no tiene nombre completo y cargo, el formulario los pide una vez y los guarda). La fecha de cierre puede ser pasada, nunca futura. Una orden cerrada no se edita; con permiso de escritura se puede **Reabrir** (descongela el acta)
 - **Correctivos**: portal "Reportar falla", escalamiento desde Soporte o creación a mano, para cualquier tipo de equipo. Sin checklist: llevan Diagnóstico y Solución (600 caracteres cada uno), fotos, repuestos y estado final
-- **Acta de mantenimiento (PDF)**: una sola hoja carta (fuente DejaVu Sans) con encabezado (código y versión desde Administración › Configuración), datos del equipo, QR a la hoja de vida, responsable de la asignación activa, checklist en dos columnas con resumen, hasta 3 fotos, repuestos, cuadro de observaciones y firmas. Se genera siempre desde los datos congelados al cerrar (`datos_acta`), así no cambia aunque después cambie el activo, la asignación o la cuenta
+- **Acta de mantenimiento (PDF)**: una sola hoja carta (fuente DejaVu Sans) con encabezado (código y versión desde Administración › Configuración), datos del equipo, QR a la hoja de vida, responsable de la asignación activa, checklist en dos columnas con resumen, hasta 3 fotos, repuestos, cuadro de observaciones y firmas. Se genera siempre desde los datos congelados al cerrar (`datos_acta`), así no cambia aunque después cambie el activo, la asignación o la cuenta. **El tamaño se acomoda solo**: elige la letra más grande que entre en la hoja (de 11 pt a 6,8 pt) y, si sobra espacio, estira el cuadro de observaciones hasta las firmas en vez de dejar un blanco al medio
 - **Acta firmada**: se imprime, se firma a mano y se sube en el detalle de la orden (PDF, JPG o PNG, hasta 10 MB). La campana avisa de las actas de mantenimiento cerradas sin firmar, y vuelve a avisar si la orden se reabrió después de subirla. Si se reabre la orden, el acta firmada se conserva marcada "de una versión anterior"
 - **Órdenes de formato anterior**: las creadas antes de v1.13 se ven en solo lectura (checklist viejo, estado de partes, PDF anterior)
 - **Avisos, calendario, dashboard y Excel con la programación**: la campana avisa "Le toca mantenimiento" (una vez por ciclo) y "Mañana: mantenimiento de ..."; el calendario muestra órdenes y equipos programados; el dashboard muestra "Les toca mantenimiento"; el Excel de mantenimiento trae En garantía, Estado final y Técnico
@@ -586,6 +586,26 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-10-28 — v1.13.1 · Robustez, acta que aprovecha la hoja y arreglo del borrado en la bóveda (en producción desde el 2026-10-28)
+
+**Acta de mantenimiento: tamaño dinámico.** Antes el acta arrancaba en 8,5 pt y solo sabía achicarse; con poco contenido dejaba un bloque de ~5 cm en blanco antes de las firmas. Ahora:
+- 7 escalas (11 pt → 6,8 pt) y gana **la más grande que entra en una sola hoja**, buscada por bisección (3 renders en vez de 7, para no alargar la descarga).
+- Un segundo render **reparte el blanco**: mide la página ya maquetada y estira el cuadro de observaciones hasta las firmas, que es donde el espacio sirve para escribir a mano.
+- La reserva del pie era de 11,6 em fijos (el peor caso: nombre y cargo en dos renglones en ambas firmas) con un pie real de 8,6 em; ahora se ajusta **al pie medido de cada acta**.
+- Si no se puede medir o si al estirar el acta se pasara a dos hojas, se usa la disposición de siempre: **la regla de una sola hoja nunca depende de esto**.
+
+**Bóveda de contraseñas: error 500 al borrar.** La página de confirmación (tanto de un vault como de una credencial) usaba `{% url volver_url **volver_kwargs %}`, y el tag `{% url %}` de Django no desempaqueta diccionarios: la plantilla no compilaba. Ahora la URL se resuelve en la vista. Las pruebas que había solo hacían `POST` (que redirige sin renderizar), por eso la suite no lo veía; se agregaron dos que **abren** ambas páginas.
+
+**Robustez de mantenimiento** (pendientes menores de las revisiones de v1.13):
+- **Iniciar**: la fila del activo se bloquea con `select_for_update`, así que dos clics simultáneos ya no abren dos preventivos del mismo equipo.
+- **Iniciar**: la consulta de software a OCS salió **fuera** de la transacción (con OCS caído tardaba hasta ~45 s con los bloqueos tomados) y no se llama si el equipo ya tiene un preventivo abierto.
+- **Acta firmada**: se valida por los primeros bytes (PDF, JPEG, PNG), no solo por la extensión.
+- **Reabrir**: no reabre si el equipo ya tiene otro preventivo abierto.
+- **Calendario**: no muestra la programación de equipos dados de baja, igual que el tablero.
+- **Historial**: buscar "Nombre Apellido" encuentra las órdenes de ese técnico (antes se miraban nombre y apellido por separado).
+
+**Pruebas**: 723 OK. Las del acta corren con WeasyPrint real en CI, en Linux y **dentro del contenedor de producción**; las de concurrencia solo en PostgreSQL (job `test-postgres` del CI).
 
 ### 2026-10-27 — v1.13 · Mantenimiento v2 + importación de contraseñas desde Excel (en producción desde el 2026-10-27)
 

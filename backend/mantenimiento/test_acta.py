@@ -543,7 +543,7 @@ class ActaUnaHojaTests(MediaTemporal, TestCase):
         return _cerrar_preventivo(orden, tecnico, fallas=fallas, observaciones=_texto(600),
                                   estado_final="operativo_obs")
 
-    def test_contenido_tipico_sale_en_escala_0(self):
+    def test_contenido_tipico_usa_la_letra_mas_grande_que_cabe(self):
         tecnico = crear_usuario(first_name="Bairon", last_name="Calle", cargo="Analista de Sistemas")
         pc = crear_pc("5CD1234XYZ", nombre_equipo="REDIHOS-PT12", procesador="Intel Core i5-1135G7", ram="16 GB",
                       disco_capacidad="512 GB", tipo_disco="SSD", sistema_operativo="Windows 11 Pro",
