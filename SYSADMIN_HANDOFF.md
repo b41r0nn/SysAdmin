@@ -1817,7 +1817,7 @@ Tres despliegues el mismo día, todos con backup previo y sin migraciones. Los d
 
 - **El acta todavía no se ha generado con datos reales**: producción no tiene ninguna orden de formato 2 cerrada. Al cerrar el primer preventivo, descargarla y comprobar que sale en una sola hoja.
 - **Backup al NAS**: pendiente, las carpetas del NAS no están creadas. Los `.dump` fechados viven solo en `/opt/sysadmin/app/backups/` (2026-10-27-1754, 2026-10-28-0722, 2026-10-28-1230 y 2026-10-28-1716).
-- **Rama `fix/acta-dinamica-y-vault` en GitHub**: ya está contenida en `master` (merge `c671972`) y se puede borrar en el remoto; es la única que queda aparte de `master`. El entorno de Claude deniega tanto `git push --delete` como `gh api -X DELETE .../git/refs/heads/...`, así que lo tiene que correr el usuario.
+- **Rama `fix/acta-dinamica-y-vault` en GitHub**: borrada del remoto el 2026-10-29 con `git push origin --delete` (estaba contenida en `master`, merge `c671972`, sin commits propios fuera de él). En GitHub ya solo queda `master`.
 
 ---
 
@@ -1876,7 +1876,7 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 **Pendientes tras el despliegue del 2026-10-27**
 - **Acta real sin verificar**: producción no tiene todavía ninguna orden de formato 2 cerrada, así que el acta en PDF no se ha descargado con datos reales. Al cerrar el primer preventivo, bajarla y comprobar que sale en **una sola hoja carta**.
 - **Backup al NAS (§8 de la guía): pendiente** — las carpetas del NAS aún no están creadas. Por ahora el `.dump` del despliegue vive solo en `/opt/sysadmin/app/backups/2026-10-27-1754/`.
-- **Ramas viejas en GitHub**: `feat/mantenimiento-v2` y las tres `fix/auditoria-*` ya se borraron del remoto (al 2026-10-28 solo quedaba `fix/acta-dinamica-y-vault`, ver los pendientes de v1.13.1).
+- **Ramas viejas en GitHub**: resuelto. `feat/mantenimiento-v2`, las tres `fix/auditoria-*` y `fix/acta-dinamica-y-vault` (esta el 2026-10-29) ya no están en el remoto: solo queda `master`. En local sigue la rama `backup-antes-limpieza`, que se deja a propósito como respaldo y nunca se sube.
 
 **Tests**: **711 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
 
