@@ -33,6 +33,10 @@ APP_A_MODULO = {
     "yule": "inventario",
 }
 
+# Matriz de fábrica. La fuente de verdad es la tabla administracion.PermisoRol,
+# que la migración de datos siembra con exactamente esto; aquí se conserva como
+# respaldo para una base vacía o caída. Nadie la lee fuera de este módulo: lo
+# vigila administracion.test_roles.PuntoUnicoDeLecturaTests.
 PERMISOS_POR_ROL = {
     "superadmin": {m: "escritura" for m in MODULOS},
     "admin": {
@@ -69,6 +73,33 @@ PERMISOS_POR_ROL = {
 ROLES_VER_SECRETOS = {"superadmin", "admin"}
 
 
+def nivel_permiso(rol: str, modulo: str) -> str:
+    """Único punto de lectura de permisos. Orden de las reglas, que importa:
+    un módulo inactivo gana sobre superadmin (así Licencias desaparece también
+    para el superadministrador), y superadmin gana sobre la tabla."""
+    # Import local: administracion.models importa MODULOS de este módulo, así
+    # que un import en la cabecera cerraría el ciclo al cargar las apps. Es el
+    # patrón de inventario.services.
+    from administracion.registro import modulo_esta_activo, nivel_de
+
+    if not modulo_esta_activo(modulo):
+        return "ninguno"
+    if rol == "superadmin":
+        return "escritura"
+    return nivel_de(rol, modulo)
+
+
+def administracion_roles_choices():
+    """``choices`` de ``CustomUser.rol``: los roles que haya en la tabla.
+
+    Envoltorio de ``administracion.registro.roles_choices``. Vive aquí para que
+    ``accounts/models.py`` no tenga que importar ``administracion``.
+    """
+    from administracion.registro import roles_choices
+
+    return roles_choices()
+
+
 def puede_ver_secretos(user):
     """True si el usuario puede revelar secretos de la bóveda."""
     if not user or not user.is_authenticated:
@@ -82,7 +113,7 @@ def tiene_permiso(user, modulo, nivel="lectura"):
         return False
     if user.is_superuser:
         return True
-    permiso = PERMISOS_POR_ROL.get(getattr(user, "rol", None), {}).get(modulo, "ninguno")
+    permiso = nivel_permiso(getattr(user, "rol", ""), modulo)
     if permiso == "ninguno":
         return False
     return nivel != "escritura" or permiso == "escritura"
@@ -93,7 +124,7 @@ def requiere_permiso(modulo, nivel="lectura"):
     Decorator que verifica permisos por rol.
 
     Args:
-        modulo: clave en PERMISOS_POR_ROL (ej. "inventario", "passwords")
+        modulo: clave de módulo (ej. "inventario", "passwords")
         nivel: "lectura" permite lectura y escritura; "escritura" exige escritura
     """
 
@@ -103,7 +134,7 @@ def requiere_permiso(modulo, nivel="lectura"):
         def envoltura(request, *args, **kwargs):
             if request.user.is_superuser:
                 return vista(request, *args, **kwargs)
-            permiso = PERMISOS_POR_ROL.get(request.user.rol, {}).get(modulo, "ninguno")
+            permiso = nivel_permiso(request.user.rol, modulo)
             if permiso == "ninguno" or (nivel == "escritura" and permiso != "escritura"):
                 messages.error(request, "No tienes permiso para acceder a esta sección.")
                 return redirect("core:dashboard")

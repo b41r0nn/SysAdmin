@@ -1,6 +1,6 @@
 from django import template
 
-from accounts.permisos import PERMISOS_POR_ROL, puede_ver_secretos as _puede_ver_secretos
+from accounts.permisos import nivel_permiso, puede_ver_secretos as _puede_ver_secretos
 
 register = template.Library()
 
@@ -11,7 +11,7 @@ def tiene_permiso(context, modulo, nivel="lectura"):
     user = context.get("user")
     if not user or not user.is_authenticated:
         return False
-    permiso = PERMISOS_POR_ROL.get(user.rol, {}).get(modulo, "ninguno")
+    permiso = nivel_permiso(user.rol, modulo)
     if permiso == "ninguno":
         return False
     if nivel == "escritura":

@@ -8,7 +8,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from administracion.models import ConfiguracionSistema
+from administracion.models import ConfiguracionSistema, Modulo
+from administracion.registro import invalidar_cache
 from inventario.models import ActaAsignacion, Asignacion, Activo
 from licencias.models import LicenciaSoftware
 from mantenimiento.models import OrdenMantenimiento, ProgramacionMantenimiento
@@ -99,6 +100,14 @@ class NotificacionModelTests(TestCase):
 
 
 class PuedeVerTests(TestCase):
+    def setUp(self):
+        # Un módulo apagado no se ve ni siendo superadmin, y licencias y
+        # préstamos nacen apagados: aquí se prueba el filtro por rol, no el
+        # apagado (eso está en administracion.test_roles).
+        Modulo.objects.update(activo=True)
+        invalidar_cache()  # update() no dispara señales
+        self.addCleanup(invalidar_cache)
+
     def test_superadmin_puede_ver_todo(self):
         from accounts.permisos import MODULOS
 

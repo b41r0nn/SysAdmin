@@ -5,10 +5,26 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from administracion.models import Modulo
+from administracion.registro import invalidar_cache
 from inventario.models import Activo
 from licencias.models import LicenciaSoftware
 
 CustomUser = get_user_model()
+
+
+def _activar_modulo(prueba):
+    """Enciende el módulo licencias, que nace apagado.
+
+    Desde que los permisos salen de la base, un módulo apagado resuelve a
+    «ninguno» para todos los roles y sus vistas redirigen. Estas pruebas cubren
+    el módulo en uso; su apagado se prueba en ``administracion.test_roles``.
+    ``update()`` no dispara señales, así que la caché se limpia a mano (y al
+    terminar, porque sobrevive al rollback de la prueba).
+    """
+    Modulo.objects.filter(clave="licencias").update(activo=True)
+    invalidar_cache()
+    prueba.addCleanup(invalidar_cache)
 
 
 class _FakeHTML:
@@ -69,6 +85,7 @@ class LicenciasLoginTests(TestCase):
 
 class LicenciasCRUDTests(TestCase):
     def setUp(self):
+        _activar_modulo(self)
         self.user = _user("superadmin")
         self.client = Client()
         self.client.force_login(self.user)
@@ -122,6 +139,9 @@ class LicenciasCRUDTests(TestCase):
 
 
 class EstadoEfectivoTests(TestCase):
+    def setUp(self):
+        _activar_modulo(self)  # el filtro de la lista abre una vista
+
     def test_sin_vencimiento_es_activa(self):
         licencia = _licencia()
         self.assertEqual(licencia.estado_efectivo, "activa")
@@ -157,6 +177,7 @@ class EstadoEfectivoTests(TestCase):
 
 class LicenciasPermisosTests(TestCase):
     def setUp(self):
+        _activar_modulo(self)
         self.user = _user("lectura")
         self.client = Client()
         self.client.force_login(self.user)
@@ -192,6 +213,7 @@ class LicenciasPermisosTests(TestCase):
 
 class ExportarLicenciasTests(TestCase):
     def setUp(self):
+        _activar_modulo(self)
         self.user = _user("superadmin")
         self.client = Client()
         self.client.force_login(self.user)

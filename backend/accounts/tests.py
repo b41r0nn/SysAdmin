@@ -24,6 +24,11 @@ class RequierePermisoTests(TestCase):
         return usuario
 
     def test_matriz_cubre_todos_los_roles_modulos(self):
+        """La matriz del código ya no es la fuente de verdad, pero sigue siendo
+        el respaldo de una base vacía: un hueco ahí daría «ninguno» por sorpresa
+        justo cuando la tabla no se puede leer. Lo que la tabla sembrada
+        reproduce esta matriz lo prueba administracion.test_roles.
+        """
         roles = dict(CustomUser.ROL_CHOICES).keys()
         for rol in roles:
             self.assertIn(rol, PERMISOS_POR_ROL, f"Falta rol {rol} en la matriz")
