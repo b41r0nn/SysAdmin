@@ -103,7 +103,9 @@ más duelen si se rompen. Cada una tiene su prueba asignada a la tarea que posee
 **Archivos:**
 - Modificar: `administracion/models.py` (añadir al final)
 - Crear: `administracion/registro.py`
-- Crear: `administracion/migrations/0003_modulo.py` (esquema) y `0004_sembrar_modulos.py` (datos)
+- Crear: dos migraciones en `administracion/migrations/` — esquema y datos. **La última
+  existente es `0004_acta_mantenimiento.py`, así que estas son `0005_*` y `0006_*`**; no
+  inventar el número, dejar que `makemigrations` lo asigne y nombrar la de datos igual
 - Modificar: `accounts/permisos.py` (añadir `APP_A_MODULO`)
 - Test: `administracion/test_registro.py`
 
