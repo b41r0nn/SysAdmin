@@ -204,10 +204,9 @@ exige que el servicio rechace el cambio, no solo que el HTML lo deshabilite.
 | passwords | Contraseñas | bi-key | passwords:index | 90 | sí | **sí** |
 | administracion | Configuración | bi-shield-lock | administracion:inicio | 100 | sí | **sí** |
 
-`administracion:inicio` todavía no existe (se crea en la Tarea 6). Hasta entonces la
-prueba `test_todo_modulo_tiene_url_resoluble` fallará para esa fila: sembrar
-`administracion:lista_auditoria` en esta tarea y cambiarlo en la Tarea 6, donde esa
-prueba vuelve a correr.
+`administracion:inicio` todavía no existe (se crea en la Tarea 6), así que esta tarea
+siembra **`administracion:lista_auditoria`**, que sí resuelve. La Tarea 6 lo cambia con
+una migración nueva. Todas las pruebas de esta tarea quedan verdes aquí.
 
 Usa `apps.get_model`, no el import directo — si no, una migración vieja se rompe al
 cambiar el modelo.
@@ -219,8 +218,11 @@ consulta `Modulo.objects.filter(activo=True)` y la guarda. **Si la tabla está v
 devuelve `set(MODULOS)`** (foco de revisión 2), y atrapa los errores de base de
 `django.db` para que una migración a medias no tumbe el login.
 `modulo_esta_activo(clave)` devuelve `False` para una clave fuera de `MODULOS`.
-`invalidar_cache()` borra las claves de caché; se conecta por `post_save` y `post_delete`
-de `Modulo` en `administracion/signals.py` (el archivo ya existe y `apps.py` ya lo carga).
+
+`invalidar_cache()` es **una sola función que limpia todas las claves de configuración**
+del proyecto, no solo las de módulos: la Tarea 2 le añade la de permisos en vez de crear
+un segundo invalidador. Se conecta por `post_save` y `post_delete` de `Modulo` en
+`administracion/signals.py` (el archivo ya existe y `apps.py` ya lo carga).
 
 - [ ] **Paso 6: `APP_A_MODULO` en `accounts/permisos.py`**
 
@@ -229,8 +231,7 @@ no coinciden por nombre (`reports` → `reportes`, `yule` → `inventario`).
 
 - [ ] **Paso 7: correr las pruebas y el lint**
 
-`... manage.py test administracion.test_registro --noinput` → PASS (salvo
-`test_todo_modulo_tiene_url_resoluble`, que se cierra en la Tarea 6).
+`... manage.py test administracion.test_registro --noinput` → PASS, las nueve.
 `../.venv/Scripts/ruff.exe check .` → sin hallazgos.
 
 - [ ] **Paso 8: commit**
@@ -309,8 +310,9 @@ class ResolvedorPermisosTests(TestCase):
         self.assertEqual(nivel_permiso("tecnico", "passwords"), "ninguno")
 
     def test_un_rol_de_sistema_no_se_puede_borrar(self):
-        with self.assertRaises(ProtectedError):
+        with self.assertRaises(ValidationError):
             Rol.objects.get(clave="superadmin").delete()
+        self.assertTrue(Rol.objects.filter(clave="superadmin").exists())
 
 
 class ChoicesDeRolTests(TestCase):
@@ -332,7 +334,9 @@ class PuntoUnicoDeLecturaTests(TestCase):
         """Si vuelve a haber una lectura directa, el apagado de modulos se la salta."""
         permitidos = {"accounts/permisos.py", "accounts/tests.py", "administracion/test_roles.py"}
         # recorre backend/**/*.py buscando "PERMISOS_POR_ROL" y afirma que
-        # todo archivo que lo menciona esta en `permitidos`
+        # todo archivo que lo menciona esta en `permitidos` o bajo
+        # administracion/migrations/ (la migracion de datos tiene que leer el
+        # dict para sembrar las 40 filas: es su unico uso legitimo)
 ```
 
 - [ ] **Paso 2: correr y ver que falla**
@@ -416,6 +420,13 @@ git commit -m "configuracion: matriz de permisos en base de datos con resolvedor
 Va antes de las pantallas porque todas la usan. Es la tarea que hace cumplible la
 anti-meta 2 de la spec; si cada vista arma su propio texto, alguna acabará concatenando
 un secreto.
+
+**`auditar_cambios` es solo para guardados por `ModelForm`** (Tareas 9, 10 y la pantalla
+de empresa). Los cambios que no tienen formulario —el interruptor de un módulo (Tarea 7),
+una celda de la matriz (Tarea 8) y la simulación de limpieza (Tarea 11)— se auditan
+llamando directamente a `registrar_auditoria(...)`, que ya existe en
+`administracion/services.py:4`, con `accion="configurar"`. No se inventa un formulario
+falso para poder auditar.
 
 - [ ] **Paso 1: escribir las pruebas que fallan**
 
@@ -542,16 +553,31 @@ Si no hay `resolver_match`, o su `app_name` está en `APPS_SIEMPRE_ABIERTAS`, o 
 
 Después de `AuthenticationMiddleware` y antes de `AxesMiddleware`.
 
-- [ ] **Paso 5: correr las pruebas y la suite completa**
+- [ ] **Paso 5: arreglar `SmokeVistasTests` en esta misma tarea**
+
+`core.tests.SmokeVistasTests` (`core/tests.py:423-447`) abre las URLs de los 10 módulos y
+ahora las de Licencias y Préstamos dan 404. Pasa a saltarse las URLs cuyo módulo está
+inactivo (resolviendo el módulo con `APP_A_MODULO` sobre el `app_name` de cada nombre), y
+se le añade la prueba del caso contrario:
+
+```python
+def test_las_urls_de_un_modulo_inactivo_dan_404(self):
+    # licencias:lista, licencias:crear, licencias:exportar_excel,
+    # prestamos:lista, prestamos:crear
+```
+
+Va aquí y no en la Tarea 5 porque la restricción global exige 0 fallos: un commit sobre
+una suite roja deja un punto del historial donde no se puede bisecar.
+
+- [ ] **Paso 6: correr las pruebas y la suite completa**
 
 `... manage.py test administracion.test_modulos --noinput` → PASS.
-Luego la suite completa: `SmokeVistasTests` **va a fallar** aquí, porque abre las URLs de
-Licencias y Préstamos. Es lo correcto y lo arregla la Tarea 5; dejarlo anotado y seguir.
+Luego la suite completa → **0 fallos**. `ruff check .` limpio.
 
-- [ ] **Paso 6: commit**
+- [ ] **Paso 7: commit**
 
 ```bash
-git add backend/administracion/middleware.py backend/administracion/test_modulos.py backend/sysadmin/settings/base.py
+git add backend/administracion backend/sysadmin/settings/base.py backend/core/tests.py
 git commit -m "configuracion: 404 en las urls de un modulo inactivo"
 ```
 
@@ -594,15 +620,9 @@ class MenuPorDatosTests(TestCase):
         self.assertIn(reverse("licencias:lista"), self.client.get(reverse("core:dashboard")).content.decode())
 ```
 
-Y en `core/tests.py`, `SmokeVistasTests` pasa a saltarse las URLs cuyo módulo está
-inactivo, más una prueba nueva:
+`SmokeVistasTests` ya quedó arreglado en la Tarea 4; esta tarea no lo toca.
 
-```python
-def test_las_urls_de_un_modulo_inactivo_dan_404(self):
-    # licencias:lista, licencias:crear, licencias:exportar_excel, prestamos:lista, prestamos:crear
-```
-
-- [ ] **Paso 2: correr y ver que falla** → FAIL: el menú trae Licencias; el humo da 404.
+- [ ] **Paso 2: correr y ver que falla** → FAIL: el menú sigue trayendo Licencias.
 
 - [ ] **Paso 3: el context processor y el bucle de la plantilla**
 
@@ -1062,9 +1082,9 @@ git commit -m "configuracion: remitente, probar envio y cola de correo"
   (def. 30, mín. 7); rutas `administracion:datos` (GET/POST) y
   `administracion:simular_limpieza` (POST).
 
-> Antes de empezar: confirmar la ruta real del comando con
-> `ls backend/*/management/commands/limpiar_historial.py`. El HANDOFF lo nombra sin
-> decir de qué app es.
+> Ruta verificada: `backend/core/management/commands/limpiar_historial.py`. Sus argumentos
+> actuales son `--dias` (`default=365`), `--media-dias` (`default=30`) y `--dry-run`, y
+> `handle()` los lee de `options` en sus tres primeras líneas.
 
 - [ ] **Paso 1: escribir las pruebas que fallan**
 
