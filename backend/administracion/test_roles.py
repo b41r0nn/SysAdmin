@@ -153,6 +153,66 @@ class ChoicesDeRolTests(TestCase):
         self.assertNotIn(("auditor", "Auditor externo"), roles_choices())
 
 
+class ValidacionAlGuardarTests(TestCase):
+    """``save()`` valida: la regla vive en el modelo y no en un formulario.
+
+    Sin ``full_clean()`` un ``nivel`` fuera de ``NIVEL_CHOICES`` llegaría a la
+    tabla, y ``tiene_permiso()`` lo trataría como una lectura concedida.
+    """
+
+    def setUp(self):
+        # Crear un Rol dispara la señal que limpia la caché, y esa caché
+        # sobrevive al rollback de cada prueba.
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
+
+    def test_rol_save_ejecuta_validacion(self):
+        rol = Rol(clave="", nombre="Sin clave", es_sistema=False, orden=60)
+        with self.assertRaises(ValidationError) as contexto:
+            rol.save()
+        self.assertIn("clave", contexto.exception.message_dict)
+        self.assertFalse(Rol.objects.filter(nombre="Sin clave").exists())
+
+    def test_permiso_rol_nivel_invalido_no_se_guarda(self):
+        rol = Rol.objects.create(clave="auditor", nombre="Auditor externo", es_sistema=False, orden=50)
+        permiso = PermisoRol(rol=rol, modulo="inventario", nivel="basura")
+        with self.assertRaises(ValidationError) as contexto:
+            permiso.save()
+        self.assertIn("nivel", contexto.exception.message_dict)
+        self.assertFalse(PermisoRol.objects.filter(rol=rol).exists())
+
+
+class SiembraDeFabricaTests(TestCase):
+    def test_la_migracion_siembra_las_40_celdas_de_fabrica(self):
+        """Lee la tabla tal cual, sin pasar por el resolvedor.
+
+        ``test_la_matriz_sembrada_reproduce_la_del_codigo`` pasa por
+        ``nivel_permiso``: no ve las celdas de licencias y préstamos (módulos
+        apagados) y, con la tabla vacía, responde con el dict del código y
+        pasaría igual. La migración 0008 lleva su propia copia congelada de la
+        matriz; esta prueba es la que detecta una errata en esa copia.
+        """
+        sembradas = {
+            (rol, modulo): nivel
+            for rol, modulo, nivel in PermisoRol.objects.values_list("rol__clave", "modulo", "nivel")
+        }
+        de_fabrica = {
+            (rol, modulo): nivel
+            for rol, permisos in PERMISOS_POR_ROL.items()
+            for modulo, nivel in permisos.items()
+        }
+        self.assertEqual(len(de_fabrica), 40)
+        self.assertEqual(PermisoRol.objects.count(), 40)
+        # Solo las celdas que difieren: con 40 pares, el diff completo de dos
+        # diccionarios sale truncado y no dice cuál es la errata.
+        diferencias = {
+            celda: {"tabla": sembradas.get(celda), "codigo": de_fabrica.get(celda)}
+            for celda in sembradas.keys() | de_fabrica.keys()
+            if sembradas.get(celda) != de_fabrica.get(celda)
+        }
+        self.assertEqual(diferencias, {}, "Celdas (rol, módulo) donde la tabla no coincide con el código.")
+
+
 class PuntoUnicoDeLecturaTests(TestCase):
     def test_nadie_lee_PERMISOS_POR_ROL_fuera_del_resolvedor(self):
         """Si vuelve a haber una lectura directa, el apagado de modulos se la salta."""
@@ -170,9 +230,11 @@ class PuntoUnicoDeLecturaTests(TestCase):
         infractores = []
         for archivo in raiz.rglob("*.py"):
             rel = archivo.relative_to(raiz).as_posix()
-            # La migración de datos tiene que leer el dict para sembrar las 40
-            # filas: es su único uso legítimo fuera del resolvedor.
-            if rel in permitidos or rel.startswith("administracion/migrations/"):
+            # Las migraciones tampoco están exentas: la 0008 siembra desde una
+            # copia congelada de las 40 celdas. Si importara el dict en vivo,
+            # `migrate` sobre una base nueva fallaría el día que el dict cambie
+            # o se borre.
+            if rel in permitidos:
                 continue
             if "PERMISOS_POR_ROL" in archivo.read_text(encoding="utf-8"):
                 infractores.append(rel)

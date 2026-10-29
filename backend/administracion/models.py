@@ -167,6 +167,13 @@ class Rol(models.Model):
     def __str__(self):
         return self.nombre
 
+    def save(self, *args, **kwargs):
+        # La validación vive en el modelo y no en un formulario: sin
+        # full_clean() una clave vacía llegaría a la tabla y, de ahí, a los
+        # choices de CustomUser.rol.
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def delete(self, *args, **kwargs):
         # La regla vive en el modelo y no en un formulario. Se lanza
         # ValidationError, y no ProtectedError, por coherencia con Modulo.
@@ -205,3 +212,9 @@ class PermisoRol(models.Model):
 
     def __str__(self):
         return f"{self.rol.clave}/{self.modulo} = {self.nivel}"
+
+    def save(self, *args, **kwargs):
+        # Sin full_clean() un nivel fuera de NIVEL_CHOICES (p. ej. "admin") se
+        # guardaría, y tiene_permiso() lo trataría como una lectura concedida.
+        self.full_clean()
+        super().save(*args, **kwargs)

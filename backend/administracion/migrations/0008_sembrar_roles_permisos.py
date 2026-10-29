@@ -1,10 +1,5 @@
 from django.db import migrations
 
-# La matriz del código es el origen de las 40 filas. Es la única lectura de
-# PERMISOS_POR_ROL que queda fuera del resolvedor, y es legítima: sin ella la
-# tabla nacería vacía y todos los roles caerían al respaldo.
-from accounts.permisos import PERMISOS_POR_ROL
-
 # (clave, nombre, orden). Los nombres son los de CustomUser.ROL_CHOICES. Los
 # cuatro son de sistema: borrar uno dejaría cuentas con un rol inexistente.
 ROLES_INICIALES = [
@@ -13,6 +8,61 @@ ROLES_INICIALES = [
     ("tecnico", "Técnico", 30),
     ("lectura", "Solo lectura", 40),
 ]
+
+# {rol: {módulo: nivel}}: las 40 celdas de fábrica. Copia congelada de la
+# matriz que tenía el código al escribir esta migración: no importa nada de la
+# aplicación, para que `migrate` sobre una base nueva siga corriendo igual
+# aunque esa matriz cambie o desaparezca después.
+PERMISOS_INICIALES = {
+    "superadmin": {
+        "usuarios": "escritura",
+        "inventario": "escritura",
+        "mantenimiento": "escritura",
+        "passwords": "escritura",
+        "reportes": "escritura",
+        "documentos": "escritura",
+        "administracion": "escritura",
+        "soporte": "escritura",
+        "licencias": "escritura",
+        "prestamos": "escritura",
+    },
+    "admin": {
+        "usuarios": "escritura",
+        "inventario": "escritura",
+        "mantenimiento": "escritura",
+        "passwords": "lectura",
+        "reportes": "escritura",
+        "documentos": "escritura",
+        "administracion": "ninguno",
+        "soporte": "escritura",
+        "licencias": "escritura",
+        "prestamos": "escritura",
+    },
+    "tecnico": {
+        "usuarios": "lectura",
+        "inventario": "escritura",
+        "mantenimiento": "escritura",
+        "passwords": "ninguno",
+        "reportes": "lectura",
+        "documentos": "lectura",
+        "administracion": "ninguno",
+        "soporte": "escritura",
+        "licencias": "lectura",
+        "prestamos": "escritura",
+    },
+    "lectura": {
+        "usuarios": "lectura",
+        "inventario": "lectura",
+        "mantenimiento": "lectura",
+        "passwords": "lectura",
+        "reportes": "lectura",
+        "documentos": "lectura",
+        "administracion": "ninguno",
+        "soporte": "lectura",
+        "licencias": "lectura",
+        "prestamos": "lectura",
+    },
+}
 
 
 def sembrar_roles(apps, schema_editor):
@@ -23,7 +73,7 @@ def sembrar_roles(apps, schema_editor):
             clave=clave,
             defaults={"nombre": nombre, "es_sistema": True, "orden": orden},
         )
-        for modulo, nivel in PERMISOS_POR_ROL[clave].items():
+        for modulo, nivel in PERMISOS_INICIALES[clave].items():
             PermisoRol.objects.get_or_create(
                 rol=rol,
                 modulo=modulo,
