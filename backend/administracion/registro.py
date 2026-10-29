@@ -5,12 +5,16 @@ clave de caché que dependa de la configuración editable se limpia aquí, para 
 quien cambie algo no tenga que acordarse de cuál borrar.
 """
 
+import logging
+
 from django.core.cache import cache
 from django.db import DatabaseError
 
 from accounts.permisos import MODULOS
 
 from .models import Modulo
+
+logger = logging.getLogger(__name__)
 
 CLAVE_CACHE_MODULOS = "sysadmin:modulos_activos"
 
@@ -37,7 +41,13 @@ def modulos_activos():
     try:
         filas = list(Modulo.objects.values_list("clave", "activo"))
     except DatabaseError:
-        # Tabla inexistente o base caída: que el login no se caiga por esto.
+        # Tabla inexistente o base caída: que el login no se caiga por esto. Pero
+        # es un fallo abierto (reactiva los módulos que el administrador apagó),
+        # así que no puede pasar en silencio.
+        logger.warning(
+            "No se pudo leer el catálogo de módulos; se tratan todos como activos.",
+            exc_info=True,
+        )
         return set(MODULOS)
     if not filas:
         return set(MODULOS)
