@@ -94,13 +94,19 @@ class CacheDeModulosTests(TestCase):
         with self.assertNumQueries(0):
             self.assertEqual(modulos_activos(), modulos_activos())
 
-    def test_un_error_de_base_devuelve_todos_los_modulos(self):
-        """Una migración a medias no puede tumbar el login."""
-        with mock.patch(
-            "administracion.registro.Modulo.objects.values_list",
-            side_effect=OperationalError("no such table"),
-        ):
-            self.assertEqual(modulos_activos(), set(MODULOS))
+    def test_un_error_de_base_devuelve_todos_los_modulos_y_queda_registrado(self):
+        """Una migración a medias no puede tumbar el login, pero el fallo abierto deja traza."""
+        with self.assertLogs("administracion.registro", level="WARNING") as registros:
+            with mock.patch(
+                "administracion.registro.Modulo.objects.values_list",
+                side_effect=OperationalError("no such table"),
+            ):
+                self.assertEqual(modulos_activos(), set(MODULOS))
+        self.assertEqual(len(registros.records), 1)
+        registro = registros.records[0]
+        self.assertEqual(registro.levelname, "WARNING")
+        # exc_info lleva el error original: sin él no se sabría qué falló.
+        self.assertIsInstance(registro.exc_info[1], OperationalError)
 
     def test_la_respuesta_de_tabla_vacia_no_se_guarda_en_cache(self):
         """Si se cacheara, sembrar filas sin señales (migración) dejaría todo activo."""
