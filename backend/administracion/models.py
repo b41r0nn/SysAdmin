@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from accounts.permisos import MODULOS
@@ -88,3 +89,51 @@ class ConfiguracionSistema(models.Model):
         if not self.smtp_password_cifrado:
             return ""
         return build_fernet().decrypt(self.smtp_password_cifrado.encode()).decode()
+
+
+class Modulo(models.Model):
+    """Catálogo de módulos de la aplicación.
+
+    Es la fuente de verdad de qué módulos están encendidos y de cómo se pintan
+    en el menú. Las claves son las de ``accounts.permisos.MODULOS``.
+    """
+
+    clave = models.CharField(max_length=30, unique=True)
+    nombre = models.CharField(max_length=60)
+    icono = models.CharField(
+        max_length=60,
+        help_text="Clase de bootstrap-icons, por ejemplo bi-laptop.",
+    )
+    url_nombre = models.CharField(
+        max_length=100,
+        verbose_name="Nombre de la URL",
+        help_text="Nombre con namespace que acepta reverse(), por ejemplo inventario:lista.",
+    )
+    orden = models.PositiveIntegerField()
+    activo = models.BooleanField(default=True)
+    es_esencial = models.BooleanField(
+        default=False,
+        verbose_name="Es esencial",
+        help_text="Un módulo esencial no se puede desactivar.",
+    )
+
+    class Meta:
+        ordering = ["orden", "nombre"]
+        verbose_name = "Módulo"
+        verbose_name_plural = "Módulos"
+
+    def __str__(self):
+        return self.nombre
+
+    def clean(self):
+        super().clean()
+        if self.es_esencial and not self.activo:
+            raise ValidationError(
+                {"activo": f"El módulo «{self.nombre}» es esencial y no se puede desactivar."}
+            )
+
+    def save(self, *args, **kwargs):
+        # La regla vive en el modelo y no en un formulario: una validación que
+        # solo está en el HTML no es una validación.
+        self.full_clean()
+        super().save(*args, **kwargs)

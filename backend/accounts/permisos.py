@@ -16,6 +16,23 @@ MODULOS = [
     "prestamos",
 ]
 
+# app_name de la URL -> clave de módulo. Casi todas coinciden por nombre; las dos
+# que no (reports y yule) se mapean a mano.
+APP_A_MODULO = {
+    "usuarios": "usuarios",
+    "inventario": "inventario",
+    "mantenimiento": "mantenimiento",
+    "passwords": "passwords",
+    "reportes": "reportes",
+    "documentos": "documentos",
+    "administracion": "administracion",
+    "soporte": "soporte",
+    "licencias": "licencias",
+    "prestamos": "prestamos",
+    "reports": "reportes",
+    "yule": "inventario",
+}
+
 PERMISOS_POR_ROL = {
     "superadmin": {m: "escritura" for m in MODULOS},
     "admin": {
