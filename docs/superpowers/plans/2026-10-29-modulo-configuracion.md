@@ -555,12 +555,17 @@ Si no hay `resolver_match`, o su `app_name` está en `APPS_SIEMPRE_ABIERTAS`, o 
 
 Después de `AuthenticationMiddleware` y antes de `AxesMiddleware`.
 
-- [ ] **Paso 5: arreglar `SmokeVistasTests` en esta misma tarea**
+- [ ] **Paso 5: la prueba del caso contrario en `core/tests.py`**
 
-`core.tests.SmokeVistasTests` (`core/tests.py:423-447`) abre las URLs de los 10 módulos y
-ahora las de Licencias y Préstamos dan 404. Pasa a saltarse las URLs cuyo módulo está
-inactivo (resolviendo el módulo con `APP_A_MODULO` sobre el `app_name` de cada nombre), y
-se le añade la prueba del caso contrario:
+**`SmokeVistasTests` ya quedó resuelto en la Tarea 2 y no hay que volver a tocarlo**: su
+`setUp` (`core/tests.py:453-460`) enciende los 10 módulos con
+`Modulo.objects.update(activo=True)` + `invalidar_cache()` + `addCleanup`, así que sigue
+abriendo las URLs de todos y conserva su cobertura entera. No lo cambies a «saltarse los
+módulos inactivos»: encenderlos conserva la cobertura de humo de las páginas de Licencias,
+que siguen existiendo y deben funcionar si se reactivan.
+
+Lo que **sí** añade esta tarea es la prueba del caso contrario, en una clase propia que
+deja los módulos como nacen:
 
 ```python
 def test_las_urls_de_un_modulo_inactivo_dan_404(self):
@@ -568,8 +573,12 @@ def test_las_urls_de_un_modulo_inactivo_dan_404(self):
     # prestamos:lista, prestamos:crear
 ```
 
-Va aquí y no en la Tarea 5 porque la restricción global exige 0 fallos: un commit sobre
-una suite roja deja un punto del historial donde no se puede bisecar.
+Va en esta tarea, no en la Tarea 5, porque la restricción global exige 0 fallos: un commit
+sobre una suite roja deja un punto del historial donde no se puede bisecar.
+
+**Toda clase de prueba que toque módulos** necesita `invalidar_cache()` en `setUp` más
+`addCleanup(invalidar_cache)`: la caché sobrevive al rollback de `TestCase`, y
+`queryset.update()` no dispara las señales que la invalidan.
 
 - [ ] **Paso 6: correr las pruebas y la suite completa**
 
@@ -622,7 +631,8 @@ class MenuPorDatosTests(TestCase):
         self.assertIn(reverse("licencias:lista"), self.client.get(reverse("core:dashboard")).content.decode())
 ```
 
-`SmokeVistasTests` ya quedó arreglado en la Tarea 4; esta tarea no lo toca.
+`SmokeVistasTests` ya quedó resuelto en la Tarea 2 (su `setUp` enciende los 10 módulos) y
+la prueba del 404 la añadió la Tarea 4; esta tarea no toca ninguna de las dos.
 
 - [ ] **Paso 2: correr y ver que falla** → FAIL: el menú sigue trayendo Licencias.
 
@@ -782,6 +792,21 @@ class PantallaModulosTests(TestCase):
 si `es_esencial` responde `HttpResponseBadRequest` con la razón; si no, invierte `activo`,
 guarda (el `full_clean` del modelo es la segunda barrera), audita y devuelve el parcial.
 
+Tres cosas que salieron de la revisión de la Tarea 1 y son obligatorias aquí:
+
+1. **Guardar por instancia (`modulo.save()`), nunca `queryset.update()`.** `update()` se
+   salta el `full_clean()` donde vive la regla de los esenciales **y** no dispara las
+   señales que invalidan la caché: con `update()` el interruptor parecería no hacer nada
+   hasta que la caché venza a los 300 s.
+2. **Prohibir también el borrado de un módulo esencial.** La regla de hoy cubre `save()`
+   pero no `delete()`, y borrar la fila de `administracion` deja la pantalla de
+   configuración inalcanzable — la anti-meta 1 de la spec por una puerta que no se había
+   mirado. Va en el modelo, como la otra, con su prueba.
+3. **Si guardas dentro de `transaction.atomic()`, invalida con `transaction.on_commit`**,
+   no en `post_save`: entre la invalidación y el commit otra petición puede volver a
+   cachear el valor viejo y dejarlo hasta 300 s. Si usas `on_commit`, las pruebas
+   necesitan `captureOnCommitCallbacks` o los callbacks no corren.
+
 - [ ] **Paso 4: la plantilla**
 
 Una fila por módulo: icono, nombre, interruptor `form-check form-switch` con
@@ -843,6 +868,11 @@ class PantallaRolesTests(TestCase):
 diccionario cacheado de una sola vez. `guardar_permiso(request, rol, modulo)` valida que
 `nivel` esté en los tres válidos y que `rol != "superadmin"`, hace `update_or_create`,
 audita y devuelve el parcial de la celda.
+
+**`update_or_create` sí dispara `post_save`, pero `queryset.update()` no.** Si acabas
+usando `update()` en algún camino, llama a `invalidar_cache()` a mano: si no, la celda
+cambia en la base y la pantalla sigue mostrando el permiso viejo hasta que la caché venza
+a los 300 s. Es el mismo aviso que la Tarea 7.
 
 - [ ] **Paso 4: la plantilla**
 
