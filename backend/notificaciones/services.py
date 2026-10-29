@@ -7,7 +7,7 @@ from django.db.models import F, Q
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.permisos import PERMISOS_POR_ROL
+from accounts.permisos import nivel_permiso
 from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Activo
 from inventario.services import acta_pdf_bytes
@@ -25,8 +25,7 @@ DIAS_GARANTIA = 30
 
 
 def _puede_ver(user, modulo):
-    perm = PERMISOS_POR_ROL.get(user.rol, {})
-    return perm.get(modulo) in ("lectura", "escritura")
+    return nivel_permiso(user.rol, modulo) in ("lectura", "escritura")
 
 
 def _crear(user, tipo, titulo, mensaje, link="", objetokey=""):

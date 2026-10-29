@@ -47,8 +47,10 @@ class CatalogoModulosTests(TestCase):
         """Base nueva o migración a medias no puede esconder la aplicación."""
         Modulo.objects.all().delete()
         invalidar_cache()
-        for clave in MODULOS:
-            self.assertTrue(modulo_esta_activo(clave))
+        # El respaldo deja traza en el log; se captura para no ensuciar la salida.
+        with self.assertLogs("administracion.registro", level="WARNING"):
+            for clave in MODULOS:
+                self.assertTrue(modulo_esta_activo(clave))
 
     def test_una_clave_desconocida_no_esta_activa(self):
         self.assertFalse(modulo_esta_activo("inventado"))
@@ -108,10 +110,21 @@ class CacheDeModulosTests(TestCase):
         # exc_info lleva el error original: sin él no se sabría qué falló.
         self.assertIsInstance(registro.exc_info[1], OperationalError)
 
+    def test_la_tabla_vacia_devuelve_todos_los_modulos_y_queda_registrada(self):
+        """Vaciar la tabla reactiva los módulos apagados: el mismo fallo abierto
+        que un error de base, por otra puerta, así que tampoco es silencioso."""
+        Modulo.objects.all().delete()
+        invalidar_cache()
+        with self.assertLogs("administracion.registro", level="WARNING") as registros:
+            self.assertEqual(modulos_activos(), set(MODULOS))
+        self.assertEqual(len(registros.records), 1)
+        self.assertEqual(registros.records[0].levelname, "WARNING")
+
     def test_la_respuesta_de_tabla_vacia_no_se_guarda_en_cache(self):
         """Si se cacheara, sembrar filas sin señales (migración) dejaría todo activo."""
         Modulo.objects.all().delete()
-        self.assertEqual(modulos_activos(), set(MODULOS))
+        with self.assertLogs("administracion.registro", level="WARNING"):
+            self.assertEqual(modulos_activos(), set(MODULOS))
         Modulo.objects.bulk_create([
             Modulo(clave="soporte", nombre="Soporte", icono="bi-life-preserver",
                    url_nombre="soporte:lista", orden=80, activo=True),

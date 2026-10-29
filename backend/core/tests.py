@@ -15,7 +15,8 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.permisos import PERMISOS_POR_ROL
+from administracion.models import Modulo, PermisoRol
+from administracion.registro import invalidar_cache
 from core.utils import get_client_ip
 from core.views import MEDIA_PERMISOS
 
@@ -121,6 +122,9 @@ def _cerrar_archivo(resp):
 
 class MediaProtegidoTests(TestCase):
     def setUp(self):
+        # La caché de permisos sobrevive al rollback de cada prueba.
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
         self.tmpdir = tempfile.TemporaryDirectory()
         self.media_root = Path(self.tmpdir.name)
 
@@ -176,18 +180,18 @@ class MediaProtegidoTests(TestCase):
         _cerrar_archivo(resp)
 
     def test_usuario_sin_permiso_obtiene_404(self):
-        # Todos los roles reales tienen al menos lectura en los prefijos registrados.
-        # Forzamos un rol con permiso "ninguno" sobre inventario para este test.
-        original = PERMISOS_POR_ROL["tecnico"]["inventario"]
-        PERMISOS_POR_ROL["tecnico"]["inventario"] = "ninguno"
-        try:
-            client = Client()
-            client.force_login(self.user_tecnico)
-            with self._override_media():
-                resp = client.get(self._url("inventario/fotos/a.png"))
-            self.assertEqual(resp.status_code, 404)
-        finally:
-            PERMISOS_POR_ROL["tecnico"]["inventario"] = original
+        # Todos los roles reales tienen al menos lectura en los prefijos
+        # registrados. Dejamos al técnico en "ninguno" sobre inventario: el
+        # rollback de TestCase devuelve la fila y setUp limpia la caché.
+        PermisoRol.objects.filter(rol__clave="tecnico", modulo="inventario").update(
+            nivel="ninguno"
+        )
+        invalidar_cache()
+        client = Client()
+        client.force_login(self.user_tecnico)
+        with self._override_media():
+            resp = client.get(self._url("inventario/fotos/a.png"))
+        self.assertEqual(resp.status_code, 404)
 
     def test_path_traversal_devuelve_404(self):
         client = Client()
@@ -445,6 +449,15 @@ class SmokeVistasTests(TestCase):
         "licencias:lista", "licencias:crear", "licencias:exportar_excel",
         "prestamos:lista", "prestamos:crear",
     ]
+
+    def setUp(self):
+        # Licencias y préstamos nacen apagados y un módulo apagado redirige
+        # hasta al superadministrador. Aquí se comprueba que las páginas abren,
+        # así que se encienden todas: el apagado se prueba por su cuenta en
+        # administracion.test_roles.
+        Modulo.objects.update(activo=True)
+        invalidar_cache()  # update() no dispara señales
+        self.addCleanup(invalidar_cache)
 
     def test_paginas_de_lectura_responden_200(self):
         from inventario.models import Activo

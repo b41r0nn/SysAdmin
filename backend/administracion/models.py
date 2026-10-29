@@ -6,10 +6,14 @@ from accounts.permisos import MODULOS
 from passwords.crypto import build_fernet
 
 
-MODULO_CHOICES = [
+# Módulos sobre los que se conceden permisos. La auditoría añade "auth" porque
+# el inicio de sesión también se registra, pero no es un módulo con permisos.
+MODULO_CHOICES_PERMISOS = [
     (m, m.replace("_", " ").capitalize())
     for m in MODULOS
-] + [("auth", "Inicio de sesión")]
+]
+
+MODULO_CHOICES = MODULO_CHOICES_PERMISOS + [("auth", "Inicio de sesión")]
 
 
 class RegistroAuditoria(models.Model):
@@ -137,3 +141,67 @@ class Modulo(models.Model):
         # solo está en el HTML no es una validación.
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class Rol(models.Model):
+    """Catálogo de roles de usuario.
+
+    Las claves son las que guarda ``CustomUser.rol``, que sigue siendo un
+    ``CharField``: esta tabla manda en los ``choices`` del campo, no en su tipo.
+    """
+
+    clave = models.CharField(max_length=20, unique=True)  # el largo de CustomUser.rol
+    nombre = models.CharField(max_length=60)
+    es_sistema = models.BooleanField(
+        default=False,
+        verbose_name="Es de sistema",
+        help_text="Un rol de sistema no se puede borrar.",
+    )
+    orden = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["orden", "nombre"]
+        verbose_name = "Rol"
+        verbose_name_plural = "Roles"
+
+    def __str__(self):
+        return self.nombre
+
+    def delete(self, *args, **kwargs):
+        # La regla vive en el modelo y no en un formulario. Se lanza
+        # ValidationError, y no ProtectedError, por coherencia con Modulo.
+        if self.es_sistema:
+            raise ValidationError(
+                f"El rol «{self.nombre}» es de sistema y no se puede borrar."
+            )
+        return super().delete(*args, **kwargs)
+
+
+class PermisoRol(models.Model):
+    """Una celda de la matriz de permisos: qué puede hacer un rol en un módulo.
+
+    Se lee siempre por ``accounts.permisos.nivel_permiso``, nunca directamente.
+    """
+
+    NIVEL_CHOICES = [
+        ("ninguno", "Ninguno"),
+        ("lectura", "Lectura"),
+        ("escritura", "Escritura"),
+    ]
+
+    rol = models.ForeignKey(Rol, on_delete=models.CASCADE, related_name="permisos")
+    modulo = models.CharField(
+        max_length=30,
+        choices=MODULO_CHOICES_PERMISOS,
+        verbose_name="Módulo",
+    )
+    nivel = models.CharField(max_length=10, choices=NIVEL_CHOICES, default="ninguno")
+
+    class Meta:
+        unique_together = ("rol", "modulo")
+        ordering = ["rol", "modulo"]
+        verbose_name = "Permiso de rol"
+        verbose_name_plural = "Permisos de rol"
+
+    def __str__(self):
+        return f"{self.rol.clave}/{self.modulo} = {self.nivel}"
