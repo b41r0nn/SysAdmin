@@ -1,0 +1,23 @@
+{% comment %}
+Una celda de la matriz de permisos. El token CSRF no va aquí: lo hereda de la
+tabla por el DOM, también cuando esta celda llega como respuesta de HTMX.
+{% endcomment %}
+<td id="celda-{{ celda.rol.clave }}-{{ celda.modulo.clave }}" class="text-nowrap">
+  {% if celda.fijo %}
+    <span class="text-muted" title="El {{ celda.rol.nombre }} siempre tiene escritura: es la llave de repuesto del sistema.">
+      Escritura (fijo)
+    </span>
+  {% else %}
+    <select class="form-select form-select-sm"
+            name="nivel"
+            aria-label="{{ celda.rol.nombre }} en {{ celda.modulo.nombre }}"
+            hx-post="{% url 'administracion:guardar_permiso' celda.rol.clave celda.modulo.clave %}"
+            hx-trigger="change"
+            hx-target="#celda-{{ celda.rol.clave }}-{{ celda.modulo.clave }}"
+            hx-swap="outerHTML">
+      {% for valor, etiqueta in niveles %}
+        <option value="{{ valor }}" {% if valor == celda.nivel %}selected{% endif %}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+  {% endif %}
+</td>

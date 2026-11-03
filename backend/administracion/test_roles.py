@@ -5,12 +5,14 @@ from unittest import mock
 from unittest.mock import patch
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import OperationalError, ProgrammingError
 from django.test import TestCase
+from django.urls import reverse
 
 from accounts.permisos import MODULOS, PERMISOS_POR_ROL, nivel_permiso
-from administracion.models import PermisoRol, Rol
+from administracion.models import Modulo, PermisoRol, RegistroAuditoria, Rol
 from administracion.registro import invalidar_cache, modulos_activos, nivel_de, roles_choices
 
 
@@ -211,6 +213,171 @@ class SiembraDeFabricaTests(TestCase):
             if sembradas.get(celda) != de_fabrica.get(celda)
         }
         self.assertEqual(diferencias, {}, "Celdas (rol, módulo) donde la tabla no coincide con el código.")
+
+
+class PantallaRolesTests(TestCase):
+    """La matriz de roles × módulos que se edita celda a celda.
+
+    Todas las pruebas de rechazo mandan el POST directo, sin pasar por el HTML:
+    un ``<select>`` con tres opciones y una columna dibujada como texto fijo no
+    son una validación. La validación vive en la vista (400) y en
+    ``PermisoRol.save()`` (``full_clean()``).
+    """
+
+    def setUp(self):
+        # La caché sobrevive al rollback de cada prueba: se limpia antes y
+        # después para no filtrar estado entre pruebas.
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
+        self.superadmin = get_user_model().objects.create_user(
+            username="super_matriz", password="x", rol="superadmin"
+        )
+        self.client.force_login(self.superadmin)
+
+    def crear_usuario(self, rol):
+        return get_user_model().objects.create_user(
+            username=f"matriz_{rol}", password="x", rol=rol
+        )
+
+    def guardar(self, rol, modulo, nivel, **extra):
+        return self.client.post(
+            reverse("administracion:guardar_permiso", args=[rol, modulo]),
+            {"nivel": nivel},
+            **extra,
+        )
+
+    def test_la_matriz_trae_todos_los_modulos_y_roles(self):
+        resp = self.client.get(reverse("administracion:roles"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "administracion/roles_matriz.html")
+        self.assertEqual(Rol.objects.count(), 4)
+        self.assertEqual(Modulo.objects.count(), 10)
+        for rol in Rol.objects.all():
+            with self.subTest(rol=rol.clave):
+                self.assertContains(resp, rol.nombre)
+        # Licencias y Préstamos nacen apagados y aun así salen: hay que poder
+        # dejar los permisos listos ANTES de encender un módulo.
+        self.assertFalse(Modulo.objects.get(clave="licencias").activo)
+        self.assertFalse(Modulo.objects.get(clave="prestamos").activo)
+        for modulo in Modulo.objects.all():
+            with self.subTest(modulo=modulo.clave):
+                self.assertContains(resp, modulo.nombre)
+        # Las 30 celdas editables: los tres roles que no son superadmin.
+        for clave_rol in ("admin", "tecnico", "lectura"):
+            for clave_modulo in Modulo.objects.values_list("clave", flat=True):
+                with self.subTest(celda=f"{clave_rol}/{clave_modulo}"):
+                    self.assertContains(
+                        resp,
+                        reverse("administracion:guardar_permiso", args=[clave_rol, clave_modulo]),
+                    )
+
+    def test_guardar_una_celda_cambia_el_permiso(self):
+        resp = self.client.post(
+            reverse("administracion:guardar_permiso", args=["tecnico", "documentos"]),
+            {"nivel": "escritura"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "administracion/partials/celda_permiso.html")
+        self.assertTemplateNotUsed(resp, "base.html")
+        self.assertEqual(nivel_permiso("tecnico", "documentos"), "escritura")
+        self.assertEqual(
+            PermisoRol.objects.get(rol__clave="tecnico", modulo="documentos").nivel,
+            "escritura",
+        )
+
+    def test_la_columna_de_superadmin_sale_deshabilitada(self):
+        resp = self.client.get(reverse("administracion:roles"))
+        # Texto fijo en las diez filas y ni un control que apunte a la vista.
+        self.assertContains(resp, "Escritura (fijo)", count=10)
+        for clave_modulo in Modulo.objects.values_list("clave", flat=True):
+            with self.subTest(modulo=clave_modulo):
+                self.assertNotContains(
+                    resp,
+                    reverse("administracion:guardar_permiso", args=["superadmin", clave_modulo]),
+                )
+
+    def test_tocar_la_celda_de_superadmin_se_rechaza(self):
+        """Foco de revision 1: la llave de repuesto no se toca ni por POST directo."""
+        resp = self.guardar("superadmin", "administracion", "ninguno")
+        self.assertEqual(resp.status_code, 400)
+        # La fila guardada es la que manda: nivel_permiso responde "escritura"
+        # para superadmin sin mirar la tabla, así que sola no probaría nada.
+        self.assertEqual(
+            PermisoRol.objects.get(rol__clave="superadmin", modulo="administracion").nivel,
+            "escritura",
+        )
+        self.assertEqual(nivel_permiso("superadmin", "administracion"), "escritura")
+        # Ni en ningún otro módulo, ni con un nivel que parezca inofensivo.
+        for clave_modulo in Modulo.objects.values_list("clave", flat=True):
+            for nivel in ("ninguno", "lectura", "escritura"):
+                with self.subTest(modulo=clave_modulo, nivel=nivel):
+                    self.assertEqual(
+                        self.guardar("superadmin", clave_modulo, nivel).status_code, 400
+                    )
+        self.assertEqual(
+            set(
+                PermisoRol.objects.filter(rol__clave="superadmin").values_list("nivel", flat=True)
+            ),
+            {"escritura"},
+        )
+        self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
+
+    def test_un_nivel_invalido_se_rechaza(self):
+        for nivel in ("total", "", "LECTURA", "ninguno ", "admin"):
+            with self.subTest(nivel=nivel):
+                self.assertEqual(self.guardar("tecnico", "documentos", nivel).status_code, 400)
+                self.assertEqual(
+                    PermisoRol.objects.get(rol__clave="tecnico", modulo="documentos").nivel,
+                    "lectura",
+                )
+        # Sin el campo tampoco: un POST vacío no puede valer como "ninguno".
+        resp = self.client.post(
+            reverse("administracion:guardar_permiso", args=["tecnico", "documentos"])
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(nivel_permiso("tecnico", "documentos"), "lectura")
+        self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
+
+    def test_el_cambio_surte_efecto_en_una_vista_de_inmediato(self):
+        """Sin esperar los 300 s de la caché: se guarda por instancia y la señal la limpia."""
+        tecnico = self.crear_usuario("tecnico")
+        url = reverse("documentos:crear")  # exige escritura en documentos
+        self.assertEqual(nivel_permiso("tecnico", "documentos"), "lectura")
+        self.client.force_login(tecnico)
+        self.assertEqual(self.client.get(url).status_code, 302)
+
+        self.client.force_login(self.superadmin)
+        self.assertEqual(self.guardar("tecnico", "documentos", "escritura").status_code, 200)
+
+        self.client.force_login(tecnico)
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_el_cambio_queda_auditado_con_anterior_y_nuevo(self):
+        self.guardar("tecnico", "documentos", "escritura")
+        registro = RegistroAuditoria.objects.get(accion="configurar")
+        self.assertEqual(registro.usuario, self.superadmin)
+        self.assertEqual(registro.modulo, "administracion")
+        self.assertEqual(registro.objeto_tipo, "permisorol")
+        self.assertIn("Técnico", registro.detalle)
+        self.assertIn("Documentos", registro.detalle)
+        # El anterior y el nuevo, y en ese orden: "de Lectura a Escritura" y
+        # "de Escritura a Lectura" no son el mismo cambio.
+        self.assertIn("Lectura", registro.detalle)
+        self.assertIn("Escritura", registro.detalle)
+        self.assertLess(registro.detalle.index("Lectura"), registro.detalle.index("Escritura"))
+
+    def test_un_tecnico_no_puede_abrir_la_matriz(self):
+        self.client.force_login(self.crear_usuario("tecnico"))
+        # administracion es "ninguno" para el técnico: redirige, no 404.
+        self.assertEqual(self.client.get(reverse("administracion:roles")).status_code, 302)
+        # Ni escribir en ella por POST directo, ni para subirse el permiso.
+        self.assertEqual(self.guardar("tecnico", "documentos", "escritura").status_code, 302)
+        self.assertEqual(
+            PermisoRol.objects.get(rol__clave="tecnico", modulo="documentos").nivel,
+            "lectura",
+        )
+        self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
 
 
 class PuntoUnicoDeLecturaTests(TestCase):
