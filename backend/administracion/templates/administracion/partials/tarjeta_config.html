@@ -1,0 +1,18 @@
+<a href="{{ area.url }}" class="text-decoration-none d-block h-100" data-area="{{ area.clave }}">
+  <div class="sa-card p-4 h-100">
+    <div class="d-flex align-items-start gap-3">
+      <div class="sa-stat-icon {% if area.alerta %}bg-danger bg-opacity-10 text-danger{% else %}bg-primary bg-opacity-10 text-primary{% endif %}"
+           style="width:44px;height:44px;flex-shrink:0;">
+        <i class="bi {{ area.icono }}"></i>
+      </div>
+      <div class="min-w-0">
+        <h6 class="fw-bold mb-1 text-body">{{ area.titulo }}</h6>
+        <p class="text-muted mb-0" style="font-size:.8rem;">{{ area.descripcion }}</p>
+        {% if area.resumen %}
+          <p class="fw-semibold mb-0 mt-2 {% if area.alerta %}text-danger{% else %}text-body{% endif %}"
+             style="font-size:.85rem;">{{ area.resumen }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</a>
