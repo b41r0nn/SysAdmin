@@ -9,6 +9,7 @@ pintan desde el catálogo de módulos y los permisos del rol, no desde HTML a ma
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ValidationError
 from django.db import connection
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
@@ -17,7 +18,7 @@ from django.urls import ResolverMatch, reverse
 
 from administracion.context_processors import menu_modulos
 from administracion.middleware import APPS_SIEMPRE_ABIERTAS, ModuloActivoMiddleware
-from administracion.models import Modulo, PermisoRol
+from administracion.models import Modulo, PermisoRol, RegistroAuditoria
 from administracion.registro import invalidar_cache
 from accounts.permisos import APP_A_MODULO
 
@@ -323,3 +324,97 @@ class TableroPorModulosTests(_BaseModulosTests):
                          "Ordenes abiertas", "Les toca mantenimiento"):
             with self.subTest(etiqueta=etiqueta):
                 self.assertNotIn(etiqueta, html)
+
+
+ESENCIALES = ("inventario", "mantenimiento", "passwords", "administracion")
+
+
+class PantallaModulosTests(_BaseModulosTests):
+    def toggle(self, clave, **extra):
+        return self.client.post(reverse("administracion:toggle_modulo", args=[clave]), **extra)
+
+    def test_lista_los_diez_modulos(self):
+        resp = self.client.get(reverse("administracion:modulos"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Modulo.objects.count(), 10)
+        for modulo in Modulo.objects.all():
+            self.assertContains(resp, modulo.nombre)
+            if not modulo.es_esencial:
+                self.assertContains(resp, reverse("administracion:toggle_modulo", args=[modulo.clave]))
+
+    def test_el_esencial_sale_deshabilitado_con_su_razon(self):
+        resp = self.client.get(reverse("administracion:modulos"))
+        self.assertContains(resp, "Esencial: no se puede desactivar", count=len(ESENCIALES))
+        self.assertContains(resp, "disabled", count=len(ESENCIALES))
+
+    def test_desactivar_un_modulo_opcional_funciona(self):
+        self.assertTrue(Modulo.objects.get(clave="soporte").activo)
+        self.toggle("soporte")
+        self.assertFalse(Modulo.objects.get(clave="soporte").activo)
+
+    def test_el_cambio_surte_efecto_de_inmediato_sin_esperar_la_cache(self):
+        """Se guarda por instancia: update() no dispararia la invalidacion."""
+        from administracion.registro import modulos_activos
+
+        self.assertIn("soporte", modulos_activos())
+        self.toggle("soporte")
+        self.assertNotIn("soporte", modulos_activos())
+        self.toggle("soporte")
+        self.assertIn("soporte", modulos_activos())
+
+    def test_el_post_devuelve_el_parcial_de_la_fila(self):
+        resp = self.toggle("soporte", HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "administracion/partials/fila_modulo.html")
+        self.assertTemplateNotUsed(resp, "base.html")
+        self.assertContains(resp, "Soporte")
+
+    def test_desactivar_un_esencial_se_rechaza_en_el_servidor(self):
+        """La casilla deshabilitada en el HTML no es una validacion."""
+        resp = self.toggle("administracion")
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(Modulo.objects.get(clave="administracion").activo)
+
+    def test_los_cuatro_esenciales_se_rechazan(self):
+        for clave in ESENCIALES:
+            with self.subTest(clave=clave):
+                resp = self.toggle(clave)
+                self.assertEqual(resp.status_code, 400)
+                self.assertTrue(Modulo.objects.get(clave=clave).activo)
+
+    def test_un_tecnico_no_puede_cambiar_un_modulo(self):
+        self.client.force_login(self.crear_usuario("tecnico"))
+        self.toggle("soporte")
+        self.assertTrue(Modulo.objects.get(clave="soporte").activo)
+
+    def test_el_cambio_queda_auditado(self):
+        self.toggle("soporte")
+        registro = RegistroAuditoria.objects.get(accion="configurar")
+        self.assertEqual(registro.usuario, self.superadmin)
+        self.assertEqual(registro.modulo, "administracion")
+        self.assertIn("Soporte", registro.detalle)
+
+    def test_un_rechazo_no_deja_auditoria(self):
+        self.toggle("administracion")
+        self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
+
+    def test_un_get_no_cambia_nada(self):
+        resp = self.client.get(reverse("administracion:toggle_modulo", args=["soporte"]))
+        self.assertEqual(resp.status_code, 405)
+        self.assertTrue(Modulo.objects.get(clave="soporte").activo)
+
+    def test_una_clave_inexistente_da_404(self):
+        self.assertEqual(self.toggle("no_existe").status_code, 404)
+
+
+class BorradoDeModulosTests(_BaseModulosTests):
+    def test_un_modulo_esencial_no_se_puede_borrar(self):
+        for clave in ESENCIALES:
+            with self.subTest(clave=clave):
+                with self.assertRaises(ValidationError):
+                    Modulo.objects.get(clave=clave).delete()
+                self.assertTrue(Modulo.objects.filter(clave=clave).exists())
+
+    def test_un_modulo_opcional_si_se_puede_borrar(self):
+        Modulo.objects.get(clave="soporte").delete()
+        self.assertFalse(Modulo.objects.filter(clave="soporte").exists())

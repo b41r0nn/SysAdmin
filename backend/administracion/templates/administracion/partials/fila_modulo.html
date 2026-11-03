@@ -1,0 +1,22 @@
+<tr id="fila-modulo-{{ modulo.clave }}">
+  <td class="px-3" style="width:3rem;"><i class="bi {{ modulo.icono }} fs-5 text-primary"></i></td>
+  <td>
+    <span class="fw-semibold">{{ modulo.nombre }}</span>
+    {% if modulo.es_esencial %}
+      <div class="text-muted" style="font-size:.8rem;">Esencial: no se puede desactivar</div>
+    {% endif %}
+  </td>
+  <td class="text-end pe-3">
+    <div class="form-check form-switch d-inline-block mb-0">
+      <input class="form-check-input" type="checkbox" role="switch"
+             id="interruptor-{{ modulo.clave }}"
+             aria-label="{{ modulo.nombre }}"
+             {% if modulo.activo %}checked{% endif %}
+             {% if modulo.es_esencial %}disabled{% else %}
+             hx-post="{% url 'administracion:toggle_modulo' modulo.clave %}"
+             hx-target="#fila-modulo-{{ modulo.clave }}"
+             hx-swap="outerHTML"
+             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'{% endif %}>
+    </div>
+  </td>
+</tr>
