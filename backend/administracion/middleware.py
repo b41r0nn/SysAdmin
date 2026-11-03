@@ -1,15 +1,20 @@
-"""Filtro de módulos apagados.
+"""Middlewares del módulo de administración.
 
-Un módulo apagado deja de existir: sus URLs responden 404, no una redirección,
-y eso vale también para el superadministrador y para las páginas públicas del
-módulo (por ejemplo el formulario de reporte de soporte).
+- ``ModuloActivoMiddleware``: filtro de módulos apagados. Un módulo apagado
+  deja de existir: sus URLs responden 404, no una redirección, y eso vale
+  también para el superadministrador y para las páginas públicas del módulo
+  (por ejemplo el formulario de reporte de soporte).
+- ``SesionConfigurableMiddleware``: vencimiento de la sesión según la
+  configuración guardada.
 """
 
 from django.http import Http404
+from django.utils.deprecation import MiddlewareMixin
 
 from accounts.permisos import APP_A_MODULO
 
 from .registro import modulo_esta_activo
+from .seguridad import minutos_de_sesion
 
 # Apps que nunca se filtran, aunque algún día alguien las añada a APP_A_MODULO
 # por error: sin ellas no hay login (``accounts``), ni portada (``core``), ni
@@ -46,4 +51,34 @@ class ModuloActivoMiddleware:
             return None
         if not modulo_esta_activo(modulo):
             raise Http404
+        return None
+
+
+class SesionConfigurableMiddleware(MiddlewareMixin):
+    """Fija el vencimiento de la sesión con los minutos de la configuración.
+
+    Se resuelve en ``process_request`` y va registrado después de
+    ``AuthenticationMiddleware``, porque hace falta ``request.user`` para saber
+    si hay una sesión que vencer.
+
+    Hereda de ``MiddlewareMixin`` —como el propio ``AuthenticationMiddleware``
+    de Django— y no es decorativo: de los hooks antiguos, un middleware de
+    estilo nuevo solo honra ``process_view``, ``process_exception`` y
+    ``process_template_response``. Un ``process_request`` en una clase sin el
+    mixin **no se llama nunca**, y el síntoma sería que todo el mundo sigue con
+    el vencimiento viejo sin que nada falle a la vista. Por eso
+    ``ModuloActivoMiddleware``, aquí arriba, usa ``process_view``.
+
+    ``SESSION_SAVE_EVERY_REQUEST`` ya está activo, así que el minutero se
+    renueva en cada petición: lo que se cuenta es inactividad real y no tiempo
+    desde el login.
+    """
+
+    def process_request(self, request):
+        usuario = getattr(request, "user", None)
+        if usuario is None or not usuario.is_authenticated:
+            # Una sesión anónima no se toca: set_expiry() la marcaría como
+            # modificada y la escribiría sin necesidad.
+            return None
+        request.session.set_expiry(minutos_de_sesion() * 60)
         return None

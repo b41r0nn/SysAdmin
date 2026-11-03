@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Seguridad — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'administracion:inicio' %}" class="text-decoration-none">Configuración</a></li>
+    <li class="breadcrumb-item active">Seguridad</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-8">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-lock"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Seguridad</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Intentos de acceso, bloqueo de cuentas, sesiones y contraseñas.
+          </p>
+        </div>
+      </div>
+
+      <div class="alert alert-warning d-flex gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div style="font-size:.85rem;">
+          Lo que se guarda aquí aplica a <strong>todas las cuentas, incluida la tuya</strong>,
+          desde la próxima petición. Revisa los valores antes de guardar.
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Sesión</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.sesion_minutos.id_for_label }}">
+                {{ form.sesion_minutos.label }}
+              </label>
+              {{ form.sesion_minutos }}
+              <div class="form-text">{{ form.sesion_minutos.help_text }}</div>
+              {% if form.sesion_minutos.errors %}
+                <div class="invalid-feedback d-block">{{ form.sesion_minutos.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="sa-fieldset mt-4">
+          <legend>Bloqueo por intentos fallidos</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.intentos_antes_de_bloquear.id_for_label }}">
+                {{ form.intentos_antes_de_bloquear.label }}
+              </label>
+              {{ form.intentos_antes_de_bloquear }}
+              <div class="form-text">{{ form.intentos_antes_de_bloquear.help_text }}</div>
+              {% if form.intentos_antes_de_bloquear.errors %}
+                <div class="invalid-feedback d-block">{{ form.intentos_antes_de_bloquear.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.horas_de_bloqueo.id_for_label }}">
+                {{ form.horas_de_bloqueo.label }}
+              </label>
+              {{ form.horas_de_bloqueo }}
+              <div class="form-text">{{ form.horas_de_bloqueo.help_text }}</div>
+              {% if form.horas_de_bloqueo.errors %}
+                <div class="invalid-feedback d-block">{{ form.horas_de_bloqueo.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <p class="text-muted mb-0 mt-3" style="font-size:.8rem;">
+            El bloqueo es por la combinación de usuario y dirección IP, y un ingreso
+            correcto reinicia el contador.
+          </p>
+        </fieldset>
+
+        <fieldset class="sa-fieldset mt-4">
+          <legend>Contraseñas</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.longitud_minima_password.id_for_label }}">
+                {{ form.longitud_minima_password.label }}
+              </label>
+              {{ form.longitud_minima_password }}
+              <div class="form-text">{{ form.longitud_minima_password.help_text }}</div>
+              {% if form.longitud_minima_password.errors %}
+                <div class="invalid-feedback d-block">{{ form.longitud_minima_password.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <p class="text-muted mb-0 mt-3" style="font-size:.8rem;">
+            Solo aplica a contraseñas nuevas. Las que ya están guardadas no se revisan
+            de nuevo hasta que se cambien.
+          </p>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3 mt-4"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'administracion:inicio' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2-circle me-2"></i>Guardar cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

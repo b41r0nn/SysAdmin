@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from accounts.permisos import MODULOS, ROL_SUPERADMIN
@@ -70,6 +71,45 @@ class ConfiguracionSistema(models.Model):
     # Encabezado y pie del acta de mantenimiento; vacíos, el acta muestra "—".
     acta_mant_codigo = models.CharField("Código del acta de mantenimiento", max_length=30, blank=True)
     acta_mant_version = models.CharField("Versión del acta de mantenimiento", max_length=10, blank=True)
+    # ─── Política de seguridad del login ────────────────────────────────────
+    # Los cuatro defaults reproducen exactamente lo que estaba fijo en los
+    # settings (SESSION_COOKIE_AGE=1800, AXES_FAILURE_LIMIT=5,
+    # AXES_COOLOFF_TIME=1 y min_length=10): mover el valor a la base de datos
+    # no puede cambiar la política de una instalación que ya existe.
+    # Se leen por `administracion.seguridad`, nunca directamente.
+    sesion_minutos = models.PositiveIntegerField(
+        default=30,
+        validators=[MinValueValidator(1)],
+        verbose_name="Minutos de sesión",
+        help_text="Minutos de inactividad antes de cerrar la sesión. Mínimo 1.",
+    )
+    intentos_antes_de_bloquear = models.PositiveIntegerField(
+        default=5,
+        validators=[MinValueValidator(1)],
+        verbose_name="Intentos antes de bloquear",
+        help_text="Intentos de acceso fallidos seguidos antes de bloquear la cuenta. Mínimo 1.",
+    )
+    horas_de_bloqueo = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(0)],
+        verbose_name="Horas de bloqueo",
+        # NO decir «0 = sin bloqueo»: con 0 el bloqueo no caduca nunca y la
+        # única salida es un comando en el servidor. Una etiqueta que lo
+        # vendiera como «sin bloqueo» dejaría al administrador fuera de su
+        # propio sistema sin saber cómo volver a entrar.
+        help_text=(
+            "Horas que dura el bloqueo tras alcanzar el límite de intentos. "
+            "Con 0 el bloqueo NO caduca solo: la cuenta queda bloqueada hasta que "
+            "alguien lo levante en el servidor con «manage.py axes_reset» "
+            "(o axes_reset_username / axes_reset_ip_username para una sola cuenta)."
+        ),
+    )
+    longitud_minima_password = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(8)],
+        verbose_name="Longitud mínima de la contraseña",
+        help_text="Caracteres que debe tener como mínimo una contraseña nueva. Mínimo 8.",
+    )
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
     class Meta:
