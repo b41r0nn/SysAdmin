@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item active">Configuración</li>
+  </ol>
+</nav>
+
+<div class="mb-4">
+  <h4 class="fw-bold mb-1">Configuración</h4>
+  <p class="text-muted mb-0" style="font-size:.85rem;">
+    Todo lo que se ajusta del sistema, en un solo lugar.
+    Última modificación de los datos de la empresa: {{ ultimo_cambio|date:"d/m/Y H:i" }}.
+  </p>
+</div>
+
+<div class="row g-3">
+  {% for area in areas %}
+    <div class="col-12 col-md-6 col-xl-4">
+      {% include "administracion/partials/tarjeta_config.html" with area=area %}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

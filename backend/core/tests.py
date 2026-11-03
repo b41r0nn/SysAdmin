@@ -443,7 +443,9 @@ class SmokeVistasTests(TestCase):
         "yule:historial",
         "documentos:lista", "documentos:crear", "documentos:categorias_lista",
         "administracion:lista_auditoria", "administracion:cuentas", "administracion:crear_cuenta",
-        "administracion:configuracion",
+        "administracion:configuracion", "administracion:inicio", "administracion:modulos",
+        "administracion:roles", "administracion:correo", "administracion:seguridad",
+        "administracion:datos",
         "notificaciones:lista", "notificaciones:cantidad",
         "soporte:lista", "soporte:reportar_publico", "soporte:excel", "soporte:crear",
         "licencias:lista", "licencias:crear", "licencias:exportar_excel",
@@ -451,7 +453,7 @@ class SmokeVistasTests(TestCase):
     ]
 
     def setUp(self):
-        # Licencias y préstamos nacen apagados y un módulo apagado redirige
+        # Licencias y préstamos nacen apagados y un módulo apagado responde 404
         # hasta al superadministrador. Aquí se comprueba que las páginas abren,
         # así que se encienden todas: el apagado se prueba por su cuenta en
         # administracion.test_roles.
