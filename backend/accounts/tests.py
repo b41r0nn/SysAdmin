@@ -270,9 +270,14 @@ class LoginSeguridadTests(TestCase):
         self.assertEqual(resp.get("Referrer-Policy"), "same-origin")
 
     def test_axes_configuracion_activa(self):
+        from axes.helpers import get_failure_limit
         from django.conf import settings
 
-        self.assertTrue(settings.AXES_FAILURE_LIMIT == 5)
+        # El límite ya no es el entero 5 en los settings: es la ruta con puntos
+        # de administracion.seguridad.limite_de_intentos, que lo lee de
+        # ConfiguracionSistema. Se comprueba el límite EFECTIVO, resolviéndolo
+        # como lo resuelve axes, que es lo que esta prueba siempre quiso decir.
+        self.assertEqual(get_failure_limit(None, {}), 5)
         self.assertEqual(settings.AXES_LOCKOUT_PARAMETERS, [["username", "ip_address"]])
         self.assertTrue(settings.AXES_RESET_ON_SUCCESS)
         self.assertIn(
