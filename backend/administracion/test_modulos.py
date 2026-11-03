@@ -19,8 +19,8 @@ from django.urls import ResolverMatch, reverse
 from administracion.context_processors import menu_modulos
 from administracion.middleware import APPS_SIEMPRE_ABIERTAS, ModuloActivoMiddleware
 from administracion.models import Modulo, PermisoRol, RegistroAuditoria
-from administracion.registro import invalidar_cache
-from accounts.permisos import APP_A_MODULO
+from administracion.registro import invalidar_cache, modulo_esta_activo, modulos_activos
+from accounts.permisos import APP_A_MODULO, MODULOS_ESENCIALES, nivel_permiso
 
 
 class _BaseModulosTests(TestCase):
@@ -155,6 +155,69 @@ class UrlsModuloInactivoTests(_BaseModulosTests):
             "prestamos:lista",
             "prestamos:crear",
         ):
+            with self.subTest(ruta=ruta):
+                self.assertEqual(self.client.get(reverse(ruta)).status_code, 404)
+
+
+class ModulosEsencialesSiempreActivosTests(_BaseModulosTests):
+    """Anti-meta 1 de la spec: dejar la configuración inalcanzable tiene que ser
+    IMPOSIBLE, no improbable.
+
+    ``Modulo.save()`` y ``Modulo.delete()`` defienden la columna ``es_esencial``,
+    pero un ``queryset.update()`` se salta los dos —``self.apagar()`` es
+    exactamente esa puerta— y entonces ``ModuloActivoMiddleware`` responde 404 a
+    todas las URLs de configuración, también al superusuario de Django, y la
+    palanca para volver a encender el módulo no está en ``/admin/``.
+
+    Por eso la lista de esenciales es una constante de código
+    (``accounts.permisos.MODULOS_ESENCIALES``) y el resolvedor la fuerza: la
+    propiedad no depende de los datos, igual que la concesión del
+    superadministrador.
+    """
+
+    def test_apagar_administracion_por_update_no_cierra_la_configuracion(self):
+        self.apagar("administracion")
+        self.assertFalse(Modulo.objects.get(clave="administracion").activo)
+        for ruta in ("administracion:inicio", "administracion:modulos", "administracion:roles"):
+            with self.subTest(ruta=ruta):
+                self.assertEqual(self.client.get(reverse(ruta)).status_code, 200)
+
+    def test_los_cuatro_esenciales_siguen_respondiendo(self):
+        rutas = dict(
+            Modulo.objects.filter(es_esencial=True).values_list("clave", "url_nombre")
+        )
+        self.assertEqual(set(rutas), set(MODULOS_ESENCIALES))
+        self.apagar(*MODULOS_ESENCIALES)
+        for clave, url_nombre in rutas.items():
+            with self.subTest(clave=clave):
+                self.assertEqual(self.client.get(reverse(url_nombre)).status_code, 200)
+
+    def test_el_resolvedor_los_da_por_activos(self):
+        self.apagar(*MODULOS_ESENCIALES)
+        for clave in sorted(MODULOS_ESENCIALES):
+            with self.subTest(clave=clave):
+                self.assertIn(clave, modulos_activos())
+                self.assertTrue(modulo_esta_activo(clave))
+                self.assertEqual(nivel_permiso("superadmin", clave), "escritura")
+
+    def test_borrar_la_fila_tampoco_apaga_un_esencial(self):
+        """``Modulo.delete()`` lo prohíbe, pero un borrado por queryset se lo salta."""
+        Modulo.objects.filter(clave="administracion").delete()
+        invalidar_cache()
+        self.assertFalse(Modulo.objects.filter(clave="administracion").exists())
+        self.assertEqual(self.client.get(reverse("administracion:inicio")).status_code, 200)
+
+    def test_un_modulo_no_esencial_apagado_por_update_sigue_dando_404(self):
+        """Contraprueba: el arreglo no puede romper el apagado de verdad, que es
+        la función que construyó la Tarea 4."""
+        self.assertTrue(Modulo.objects.get(clave="soporte").activo)
+        self.apagar("soporte")
+        self.assertNotIn("soporte", modulos_activos())
+        self.assertFalse(modulo_esta_activo("soporte"))
+        self.assertEqual(nivel_permiso("superadmin", "soporte"), "ninguno")
+        self.assertEqual(self.client.get(reverse("soporte:lista")).status_code, 404)
+        # Y los que nacen apagados siguen apagados.
+        for ruta in ("licencias:lista", "prestamos:lista"):
             with self.subTest(ruta=ruta):
                 self.assertEqual(self.client.get(reverse(ruta)).status_code, 404)
 

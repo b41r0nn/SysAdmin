@@ -4,6 +4,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from django.apps import apps
 from django.conf import settings
@@ -11,6 +12,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
+from django.db import ProgrammingError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -66,6 +68,35 @@ class VaultKeyCheckTests(TestCase):
     @override_settings(PASSWORDS_ENCRYPTION_KEY="clave-fernet-de-prueba")
     def test_sin_warning_con_clave(self):
         self.assertEqual(self._run(), [])
+
+
+class ModulosSembradosCheckTests(TestCase):
+    """W002: un módulo de ``MODULOS`` sin fila queda fuera de la interfaz.
+
+    No aparece en la pantalla de módulos ni en la matriz de roles (las dos
+    iteran ``Modulo.objects.all()``), así que sus permisos son ineditables.
+    """
+
+    def _run(self):
+        from core.checks import check_modulos_sembrados
+
+        return check_modulos_sembrados(None)
+
+    def test_sin_warning_con_los_diez_sembrados(self):
+        self.assertEqual(Modulo.objects.count(), 10)
+        self.assertEqual(self._run(), [])
+
+    def test_w002_si_falta_la_fila_de_un_modulo(self):
+        Modulo.objects.filter(clave="soporte").delete()
+        avisos = self._run()
+        self.assertEqual([a.id for a in avisos], ["sysadmin.W002"])
+        self.assertIn("soporte", avisos[0].msg)
+
+    def test_con_la_base_sin_tablas_no_revienta(self):
+        """El chequeo corre también antes de ``migrate``: no puede tumbar manage.py."""
+        with mock.patch("administracion.models.Modulo.objects") as objetos:
+            objetos.values_list.side_effect = ProgrammingError("no existe la relacion")
+            self.assertEqual(self._run(), [])
 
 
 class DashboardTests(TestCase):
