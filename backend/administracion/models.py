@@ -142,6 +142,15 @@ class Modulo(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
 
+    def delete(self, *args, **kwargs):
+        # Borrar la fila de «administracion» dejaría inalcanzable la pantalla de
+        # configuración: es la misma regla que el save(), por otra puerta.
+        if self.es_esencial:
+            raise ValidationError(
+                f"El módulo «{self.nombre}» es esencial y no se puede borrar."
+            )
+        return super().delete(*args, **kwargs)
+
 
 class Rol(models.Model):
     """Catálogo de roles de usuario.

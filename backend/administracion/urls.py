@@ -14,6 +14,7 @@ urlpatterns = [
     path("cuentas/<int:pk>/password/", views.resetear_password, name="resetear_password"),
     path("configuracion/", views.configuracion, name="configuracion"),
     path("modulos/", views.modulos, name="modulos"),
+    path("modulos/<str:clave>/estado/", views.toggle_modulo, name="toggle_modulo"),
     path("roles/", views.roles, name="roles"),
     path("correo/", views.correo, name="correo"),
     path("seguridad/", views.seguridad, name="seguridad"),
