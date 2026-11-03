@@ -5,19 +5,12 @@ from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
-from accounts.permisos import requiere_permiso
+from accounts.permisos import ROL_SUPERADMIN, requiere_permiso
 from core.utils import get_client_ip
 
 from ..models import Modulo, PermisoRol, Rol
 from ..registro import nivel_de
 from ..services import registrar_auditoria
-
-# El superadministrador es la llave de repuesto del sistema: si su columna se
-# pudiera degradar, un descuido dejaría la configuración sin nadie que entre a
-# arreglarla. El resolvedor ya le da escritura siempre; aquí se le cierra
-# además la puerta de escritura, para que la tabla no quede diciendo una cosa
-# distinta de lo que el sistema aplica.
-ROL_INTOCABLE = "superadmin"
 
 # {clave: etiqueta} de los tres únicos niveles válidos.
 NIVELES = dict(PermisoRol.NIVEL_CHOICES)
@@ -30,7 +23,7 @@ def _celda(rol, modulo, nivel):
         "modulo": modulo,
         "nivel": nivel,
         "etiqueta": NIVELES.get(nivel, nivel),
-        "fijo": rol.clave == ROL_INTOCABLE,
+        "fijo": rol.clave == ROL_SUPERADMIN,
     }
 
 
@@ -71,9 +64,10 @@ def guardar_permiso(request, rol, modulo):
     """Guarda una celda de la matriz y devuelve el parcial para que HTMX la reemplace."""
     fila_rol = get_object_or_404(Rol, clave=rol)
     fila_modulo = get_object_or_404(Modulo, clave=modulo)
-    if fila_rol.clave == ROL_INTOCABLE:
+    if fila_rol.clave == ROL_SUPERADMIN:
         # El texto fijo de la plantilla no es una validación: el POST directo
-        # llega igual y es exactamente el que hay que rechazar.
+        # llega igual y es exactamente el que hay que rechazar. La misma regla
+        # está en PermisoRol.clean(), que es la que no se puede saltar nadie.
         return HttpResponseBadRequest(
             f"El rol «{fila_rol.nombre}» siempre tiene escritura y no se puede cambiar."
         )

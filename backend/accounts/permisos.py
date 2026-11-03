@@ -3,6 +3,15 @@ from django.contrib import messages
 from django.shortcuts import redirect
 from django.contrib.auth.decorators import login_required
 
+# La llave de repuesto del sistema: el rol que no se puede degradar. Si su
+# columna de permisos se pudiera bajar, un descuido dejaría la configuración
+# sin nadie que entre a arreglarla. La regla vive en tres sitios que tienen que
+# decir lo mismo, y por eso la clave es una sola constante: aquí
+# (``nivel_permiso`` se la concede), en ``administracion.models.PermisoRol.clean``
+# (que no deja guardar otra cosa) y en ``administracion.views.roles`` (que no
+# deja ni intentarlo).
+ROL_SUPERADMIN = "superadmin"
+
 MODULOS = [
     "usuarios",
     "inventario",
@@ -84,7 +93,7 @@ def nivel_permiso(rol: str, modulo: str) -> str:
 
     if not modulo_esta_activo(modulo):
         return "ninguno"
-    if rol == "superadmin":
+    if rol == ROL_SUPERADMIN:
         return "escritura"
     return nivel_de(rol, modulo)
 
