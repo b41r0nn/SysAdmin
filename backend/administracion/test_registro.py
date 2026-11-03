@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.permisos import APP_A_MODULO, MODULOS
+from administracion import registro
 from administracion.models import Modulo
 from administracion.registro import invalidar_cache, modulo_esta_activo, modulos_activos
 
@@ -130,3 +131,74 @@ class CacheDeModulosTests(TestCase):
                    url_nombre="soporte:lista", orden=80, activo=True),
         ])  # bulk_create no dispara post_save
         self.assertEqual(modulos_activos(), {"soporte"})
+
+
+class CatalogoParaElMenuTests(TestCase):
+    """``catalogo_modulos`` alimenta el menú: solo lo encendido, en orden, cacheado."""
+
+    def setUp(self):
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
+
+    def test_devuelve_solo_los_modulos_activos_en_el_orden_del_menu(self):
+        claves = [modulo["clave"] for modulo in registro.catalogo_modulos()]
+        esperadas = list(
+            Modulo.objects.filter(activo=True).order_by("orden").values_list("clave", flat=True)
+        )
+        self.assertEqual(claves, esperadas)
+        self.assertNotIn("licencias", claves)  # nace apagado
+        self.assertIn("inventario", claves)
+
+    def test_cada_modulo_trae_lo_que_hace_falta_para_pintarlo(self):
+        modulo = registro.catalogo_modulos()[0]
+        self.assertEqual(
+            set(modulo), {"clave", "nombre", "icono", "url_nombre"}
+        )
+
+    def test_la_lectura_repetida_no_vuelve_a_consultar_la_base(self):
+        registro.catalogo_modulos()  # llena la caché
+        with self.assertNumQueries(0):
+            self.assertEqual(registro.catalogo_modulos(), registro.catalogo_modulos())
+
+    def test_guardar_un_modulo_lo_refleja_sin_invalidar_a_mano(self):
+        self.assertNotIn("licencias", [m["clave"] for m in registro.catalogo_modulos()])
+        modulo = Modulo.objects.get(clave="licencias")
+        modulo.activo = True
+        modulo.save()
+        self.assertIn("licencias", [m["clave"] for m in registro.catalogo_modulos()])
+
+    def test_invalidar_cache_vacia_tambien_el_catalogo(self):
+        registro.catalogo_modulos()  # llena la caché
+        Modulo.objects.filter(clave="soporte").update(activo=False)  # sin señales
+        invalidar_cache()
+        self.assertNotIn("soporte", [m["clave"] for m in registro.catalogo_modulos()])
+
+    def test_la_tabla_vacia_da_un_catalogo_vacio_y_queda_registrada(self):
+        """Sin filas no hay nada que pintar, pero el menú no puede reventar."""
+        Modulo.objects.all().delete()
+        invalidar_cache()
+        with self.assertLogs("administracion.registro", level="WARNING") as registros:
+            self.assertEqual(registro.catalogo_modulos(), [])
+        self.assertEqual(len(registros.records), 1)
+
+    def test_la_respuesta_de_tabla_vacia_no_se_guarda_en_cache(self):
+        """Si se cacheara, sembrar filas sin señales (migración) dejaría el menú vacío."""
+        Modulo.objects.all().delete()
+        with self.assertLogs("administracion.registro", level="WARNING"):
+            self.assertEqual(registro.catalogo_modulos(), [])
+        Modulo.objects.bulk_create([
+            Modulo(clave="soporte", nombre="Soporte", icono="bi-life-preserver",
+                   url_nombre="soporte:lista", orden=80, activo=True),
+        ])  # bulk_create no dispara post_save
+        self.assertEqual([m["clave"] for m in registro.catalogo_modulos()], ["soporte"])
+
+    def test_un_error_de_base_da_un_catalogo_vacio_y_queda_registrado(self):
+        with self.assertLogs("administracion.registro", level="WARNING") as registros:
+            with mock.patch(
+                "django.db.models.query.QuerySet._fetch_all",
+                side_effect=OperationalError("no such table"),
+            ):
+                self.assertEqual(registro.catalogo_modulos(), [])
+        self.assertEqual(len(registros.records), 1)
+        # exc_info lleva el error original: sin él no se sabría qué falló.
+        self.assertIsInstance(registros.records[0].exc_info[1], OperationalError)

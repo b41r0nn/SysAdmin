@@ -17,6 +17,7 @@ from .models import Modulo, PermisoRol, Rol
 logger = logging.getLogger(__name__)
 
 CLAVE_CACHE_MODULOS = "sysadmin:modulos_activos"
+CLAVE_CACHE_CATALOGO = "sysadmin:catalogo_modulos"
 CLAVE_CACHE_PERMISOS = "sysadmin:permisos"
 CLAVE_CACHE_ROLES = "sysadmin:roles"
 
@@ -26,7 +27,12 @@ CLAVE_CACHE_ROLES = "sysadmin:roles"
 # viejo hasta el siguiente reinicio.
 SEGUNDOS_CACHE = 300
 
-CLAVES_CACHE = (CLAVE_CACHE_MODULOS, CLAVE_CACHE_PERMISOS, CLAVE_CACHE_ROLES)
+CLAVES_CACHE = (
+    CLAVE_CACHE_MODULOS,
+    CLAVE_CACHE_CATALOGO,
+    CLAVE_CACHE_PERMISOS,
+    CLAVE_CACHE_ROLES,
+)
 
 
 def modulos_activos():
@@ -68,6 +74,47 @@ def modulo_esta_activo(clave):
     if clave not in MODULOS:
         return False
     return clave in modulos_activos()
+
+
+def catalogo_modulos():
+    """Módulos encendidos, en el orden del menú, con lo necesario para pintarlos.
+
+    Devuelve una lista de ``{clave, nombre, icono, url_nombre}`` ordenada por
+    ``Modulo.orden``. ``modulos_activos`` solo guarda claves; el menú necesita
+    además el nombre, el icono y la URL, y leerlos de la base en cada request
+    sería una consulta por página.
+
+    Si no hay filas o la base falla devuelve una lista vacía: el menú se queda
+    sin módulos, pero la página abre. Es un fallo cerrado (a diferencia de
+    ``modulos_activos``) porque aquí no se concede ningún acceso, solo se
+    pintan enlaces; aun así queda en el log, y la respuesta no se guarda en
+    caché para que sembrar las filas después surta efecto de inmediato.
+    """
+    catalogo = cache.get(CLAVE_CACHE_CATALOGO)
+    if catalogo is not None:
+        return catalogo
+    try:
+        filas = list(
+            Modulo.objects.order_by("orden", "nombre").values(
+                "clave", "nombre", "icono", "url_nombre", "activo"
+            )
+        )
+    except DatabaseError:
+        logger.warning(
+            "No se pudo leer el catálogo de módulos; el menú queda sin módulos.",
+            exc_info=True,
+        )
+        return []
+    if not filas:
+        logger.warning("El catálogo de módulos está vacío; el menú queda sin módulos.")
+        return []
+    catalogo = [
+        {campo: fila[campo] for campo in ("clave", "nombre", "icono", "url_nombre")}
+        for fila in filas
+        if fila["activo"]
+    ]
+    cache.set(CLAVE_CACHE_CATALOGO, catalogo, SEGUNDOS_CACHE)
+    return catalogo
 
 
 def _matriz_permisos():
