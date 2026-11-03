@@ -424,6 +424,107 @@ class PantallaRolesTests(TestCase):
         self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
 
 
+class MatrizSoloLecturaTests(TestCase):
+    """Quien solo tiene lectura no ve los ``<select>``, y su POST da 403, no 302.
+
+    Con un 302, HTMX sigue la redirección de forma transparente y acaba
+    intercambiando el tablero —o el formulario de login, si la sesión caducó—
+    dentro del ``<td>`` que disparó la petición. Con un 403 no intercambia nada
+    y el manejador de ``htmx:responseError`` avisa. No pintar el control evita
+    además que el problema llegue a ocurrir.
+    """
+
+    def setUp(self):
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
+
+    def entrar_con(self, nivel):
+        """Deja el rol «admin» con ese nivel en administracion y entra con él.
+
+        En la matriz de fábrica ningún rol tiene administracion distinto de
+        «ninguno», pero «que vea la configuración sin cambiarla» es razonable y,
+        desde que la matriz es editable, alcanzable por la interfaz.
+        """
+        PermisoRol.objects.filter(rol__clave="admin", modulo="administracion").update(nivel=nivel)
+        invalidar_cache()
+        self.client.force_login(
+            get_user_model().objects.create_user(
+                username=f"matriz_admin_{nivel}", password="x", rol="admin"
+            )
+        )
+
+    def guardar(self, rol, modulo, nivel, **extra):
+        return self.client.post(
+            reverse("administracion:guardar_permiso", args=[rol, modulo]),
+            {"nivel": nivel},
+            **extra,
+        )
+
+    def test_con_solo_lectura_la_matriz_no_trae_selects(self):
+        self.entrar_con("lectura")
+        resp = self.client.get(reverse("administracion:roles"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "<select")
+        self.assertNotContains(resp, "hx-post")
+        for clave_rol in ("admin", "tecnico", "lectura"):
+            for clave_modulo in Modulo.objects.values_list("clave", flat=True):
+                with self.subTest(celda=f"{clave_rol}/{clave_modulo}"):
+                    self.assertNotContains(
+                        resp,
+                        reverse("administracion:guardar_permiso", args=[clave_rol, clave_modulo]),
+                    )
+        # La matriz se sigue viendo: deja de ser editable, no de informar.
+        self.assertContains(resp, "Escritura (fijo)", count=10)
+        self.assertContains(resp, "Lectura")
+
+    def test_con_solo_lectura_el_post_por_htmx_responde_403(self):
+        self.entrar_con("lectura")
+        resp = self.guardar("tecnico", "documentos", "escritura", HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(
+            PermisoRol.objects.get(rol__clave="tecnico", modulo="documentos").nivel, "lectura"
+        )
+        self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
+
+    def test_sin_la_cabecera_de_htmx_sigue_redirigiendo_como_hoy(self):
+        """Regresión: una navegación normal no cambia."""
+        self.entrar_con("lectura")
+        self.assertEqual(self.guardar("tecnico", "documentos", "escritura").status_code, 302)
+        self.assertEqual(
+            PermisoRol.objects.get(rol__clave="tecnico", modulo="documentos").nivel, "lectura"
+        )
+
+    def test_con_escritura_la_matriz_sigue_siendo_editable(self):
+        """Contraprueba: sin ella, no pintar los controles podría haber apagado
+        la pantalla para todo el mundo sin que ninguna prueba se enterara."""
+        self.entrar_con("escritura")
+        resp = self.client.get(reverse("administracion:roles"))
+        self.assertContains(resp, "<select", count=30)
+        for clave_rol in ("admin", "tecnico", "lectura"):
+            for clave_modulo in Modulo.objects.values_list("clave", flat=True):
+                with self.subTest(celda=f"{clave_rol}/{clave_modulo}"):
+                    self.assertContains(
+                        resp,
+                        reverse("administracion:guardar_permiso", args=[clave_rol, clave_modulo]),
+                    )
+        # Y el guardado por HTMX sigue funcionando.
+        resp = self.guardar("tecnico", "documentos", "escritura", HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            PermisoRol.objects.get(rol__clave="tecnico", modulo="documentos").nivel, "escritura"
+        )
+
+    def test_la_celda_que_devuelve_el_post_vuelve_con_su_select(self):
+        """El parcial se pinta fuera del contexto de la pantalla: si no recibiera
+        el permiso, el intercambio dejaría la celda sin ``<select>``."""
+        self.entrar_con("escritura")
+        resp = self.guardar("tecnico", "documentos", "escritura", HTTP_HX_REQUEST="true")
+        self.assertContains(resp, "<select", count=1)
+        self.assertContains(
+            resp, reverse("administracion:guardar_permiso", args=["tecnico", "documentos"])
+        )
+
+
 class PuntoUnicoDeLecturaTests(TestCase):
     def test_nadie_lee_PERMISOS_POR_ROL_fuera_del_resolvedor(self):
         """Si vuelve a haber una lectura directa, el apagado de modulos se la salta."""

@@ -5,7 +5,7 @@ from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
-from accounts.permisos import ROL_SUPERADMIN, requiere_permiso
+from accounts.permisos import ROL_SUPERADMIN, requiere_permiso, tiene_permiso
 from core.utils import get_client_ip
 
 from ..models import Modulo, PermisoRol, Rol
@@ -40,6 +40,10 @@ def roles(request):
 
     ``nivel_de`` lee el diccionario cacheado, así que las cuarenta celdas salen
     de una sola consulta.
+
+    A quien solo tiene lectura no se le pintan los ``<select>``: la vista del
+    POST exige escritura y responde 403, con el que HTMX no intercambia nada,
+    así que el control se quedaría mostrando un nivel que nadie guardó.
     """
     filas_rol = list(Rol.objects.all())
     filas = [
@@ -55,6 +59,7 @@ def roles(request):
         "roles": filas_rol,
         "filas": filas,
         "niveles": PermisoRol.NIVEL_CHOICES,
+        "puede_escribir": tiene_permiso(request.user, "administracion", "escritura"),
     })
 
 
@@ -102,7 +107,12 @@ def guardar_permiso(request, rol, modulo):
         ),
         ip=get_client_ip(request),
     )
+    # ``puede_escribir`` va fijo: aquí solo llega quien tiene escritura (lo
+    # exige el decorador). El parcial se pinta fuera del contexto de la
+    # pantalla, así que sin pasárselo el intercambio devolvería la celda sin su
+    # ``<select>``.
     return render(request, "administracion/partials/celda_permiso.html", {
         "celda": _celda(fila_rol, fila_modulo, permiso.nivel),
         "niveles": PermisoRol.NIVEL_CHOICES,
+        "puede_escribir": True,
     })

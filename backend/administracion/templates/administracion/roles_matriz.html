@@ -13,10 +13,17 @@
 
 <div class="mb-4">
   <h4 class="fw-bold mb-1">Roles y permisos</h4>
-  <p class="text-muted mb-0" style="font-size:.85rem;">
-    Cada celda se guarda sola al cambiarla. La columna del Super Administrador no se puede
-    tocar: es la llave de repuesto del sistema y siempre tiene escritura.
-  </p>
+  {% if puede_escribir %}
+    <p class="text-muted mb-0" style="font-size:.85rem;">
+      Cada celda se guarda sola al cambiarla. La columna del Super Administrador no se puede
+      tocar: es la llave de repuesto del sistema y siempre tiene escritura.
+    </p>
+  {% else %}
+    <p class="text-muted mb-0" style="font-size:.85rem;">
+      Solo lectura: puedes ver qué puede hacer cada rol, pero no cambiarlo. La columna del
+      Super Administrador no se puede tocar nunca: es la llave de repuesto del sistema.
+    </p>
+  {% endif %}
 </div>
 
 <div class="sa-card p-0 overflow-hidden">

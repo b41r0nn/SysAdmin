@@ -7,6 +7,14 @@ tabla por el DOM, también cuando esta celda llega como respuesta de HTMX.
     <span class="text-muted" title="El {{ celda.rol.nombre }} siempre tiene escritura: es la llave de repuesto del sistema.">
       Escritura (fijo)
     </span>
+  {% elif not puede_escribir %}
+    {% comment %}
+    Sin escritura, el nivel va como texto, igual que la columna del
+    superadministrador. Un <select> aquí ofrecería un cambio que la vista
+    rechaza con 403 y que HTMX no puede intercambiar: el control se quedaría
+    en el nivel nuevo sin que nada se hubiera guardado.
+    {% endcomment %}
+    <span class="text-muted">{{ celda.etiqueta }}</span>
   {% else %}
     <select class="form-select form-select-sm"
             name="nivel"

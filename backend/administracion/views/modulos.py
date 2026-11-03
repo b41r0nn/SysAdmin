@@ -3,7 +3,7 @@ from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
-from accounts.permisos import requiere_permiso
+from accounts.permisos import requiere_permiso, tiene_permiso
 from core.utils import get_client_ip
 
 from ..models import Modulo
@@ -12,9 +12,16 @@ from ..services import registrar_auditoria
 
 @requiere_permiso("administracion", "lectura")
 def modulos(request):
-    """Lista los módulos con un interruptor para encender o apagar cada uno."""
+    """Lista los módulos con un interruptor para encender o apagar cada uno.
+
+    A quien solo tiene lectura no se le pinta el interruptor: la vista del POST
+    exige escritura y responde 403, con el que HTMX no intercambia nada, así que
+    el control se quedaría mostrando un valor que nadie guardó. Más vale que no
+    esté.
+    """
     return render(request, "administracion/modulos_lista.html", {
         "modulos": Modulo.objects.all(),
+        "puede_escribir": tiene_permiso(request.user, "administracion", "escritura"),
     })
 
 
@@ -43,4 +50,11 @@ def toggle_modulo(request, clave):
         detalle=f"Módulo «{modulo.nombre}»: {'desactivado' if not modulo.activo else 'activado'}",
         ip=get_client_ip(request),
     )
-    return render(request, "administracion/partials/fila_modulo.html", {"modulo": modulo})
+    # ``puede_escribir`` va fijo: aquí solo llega quien tiene escritura (lo
+    # exige el decorador). El parcial se pinta fuera del contexto de la
+    # pantalla, así que sin pasárselo el intercambio devolvería la fila sin su
+    # interruptor.
+    return render(request, "administracion/partials/fila_modulo.html", {
+        "modulo": modulo,
+        "puede_escribir": True,
+    })

@@ -470,6 +470,84 @@ class PantallaModulosTests(_BaseModulosTests):
         self.assertEqual(self.toggle("no_existe").status_code, 404)
 
 
+class PantallaModulosSoloLecturaTests(_BaseModulosTests):
+    """Quien solo tiene lectura no ve los interruptores, y su POST da 403, no 302.
+
+    Con un 302, HTMX sigue la redirección de forma transparente y acaba
+    intercambiando el tablero —o el formulario de login— dentro del ``<tr>`` que
+    disparó la petición. Con un 403 no intercambia nada y el manejador de
+    ``htmx:responseError`` avisa. No pintar el control evita además que el
+    problema llegue a ocurrir.
+    """
+
+    def entrar_con(self, nivel):
+        """Deja el rol «admin» con ese nivel en administracion y entra con él.
+
+        En la matriz de fábrica ningún rol tiene administracion distinto de
+        «ninguno» —solo el superadministrador, y por el atajo del resolvedor—,
+        pero «que vea la configuración sin cambiarla» es una configuración
+        razonable y, desde que la matriz es editable, alcanzable por la interfaz.
+        """
+        PermisoRol.objects.filter(rol__clave="admin", modulo="administracion").update(nivel=nivel)
+        invalidar_cache()
+        self.client.force_login(self.crear_usuario("admin"))
+
+    def toggle(self, clave, **extra):
+        return self.client.post(reverse("administracion:toggle_modulo", args=[clave]), **extra)
+
+    def test_con_solo_lectura_la_pantalla_no_trae_interruptores(self):
+        self.entrar_con("lectura")
+        resp = self.client.get(reverse("administracion:modulos"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "hx-post")
+        for clave in Modulo.objects.values_list("clave", flat=True):
+            with self.subTest(clave=clave):
+                self.assertNotContains(
+                    resp, reverse("administracion:toggle_modulo", args=[clave])
+                )
+        # Pero el estado se sigue viendo: la pantalla no queda muda.
+        self.assertContains(resp, "Soporte")
+        self.assertContains(resp, "Apagado")
+
+    def test_con_solo_lectura_el_post_por_htmx_responde_403(self):
+        self.entrar_con("lectura")
+        resp = self.toggle("soporte", HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(Modulo.objects.get(clave="soporte").activo)
+        self.assertFalse(RegistroAuditoria.objects.filter(accion="configurar").exists())
+
+    def test_sin_la_cabecera_de_htmx_sigue_redirigiendo_como_hoy(self):
+        """Regresión: una navegación normal no cambia."""
+        self.entrar_con("lectura")
+        self.assertEqual(self.toggle("soporte").status_code, 302)
+        self.assertTrue(Modulo.objects.get(clave="soporte").activo)
+
+    def test_con_escritura_la_pantalla_sigue_trayendo_sus_controles(self):
+        """Contraprueba: sin ella, no pintar los controles podría haber apagado
+        la pantalla para todo el mundo sin que ninguna prueba se enterara."""
+        self.entrar_con("escritura")
+        resp = self.client.get(reverse("administracion:modulos"))
+        self.assertContains(resp, "hx-post")
+        for clave in Modulo.objects.filter(es_esencial=False).values_list("clave", flat=True):
+            with self.subTest(clave=clave):
+                self.assertContains(
+                    resp, reverse("administracion:toggle_modulo", args=[clave])
+                )
+        # Y el guardado por HTMX sigue funcionando.
+        resp = self.toggle("soporte", HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "administracion/partials/fila_modulo.html")
+        self.assertFalse(Modulo.objects.get(clave="soporte").activo)
+
+    def test_la_fila_que_devuelve_el_post_vuelve_con_su_interruptor(self):
+        """El parcial se pinta fuera del contexto de la pantalla: si no recibiera
+        el permiso, el intercambio dejaría la fila sin interruptor."""
+        self.entrar_con("escritura")
+        resp = self.toggle("soporte", HTTP_HX_REQUEST="true")
+        self.assertContains(resp, "hx-post")
+        self.assertContains(resp, reverse("administracion:toggle_modulo", args=["soporte"]))
+
+
 class BorradoDeModulosTests(_BaseModulosTests):
     def test_un_modulo_esencial_no_se_puede_borrar(self):
         for clave in ESENCIALES:

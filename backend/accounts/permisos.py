@@ -1,5 +1,6 @@
 from functools import wraps
 from django.contrib import messages
+from django.http import HttpResponseForbidden
 from django.shortcuts import redirect
 from django.contrib.auth.decorators import login_required
 
@@ -157,6 +158,18 @@ def tiene_permiso(user, modulo, nivel="lectura"):
     return nivel != "escritura" or permiso == "escritura"
 
 
+MENSAJE_SIN_PERMISO = "No tienes permiso para acceder a esta sección."
+
+# Cuerpo del 403 que reciben las peticiones de HTMX. Se muestra tal cual: el
+# manejador de ``htmx:responseError`` de ``static/js/sysadmin.js`` lo pinta como
+# aviso en pantalla, así que va en español y no distingue entre las dos causas
+# (ni hace falta: la salida es la misma).
+MENSAJE_HTMX_SIN_PERMISO = (
+    "No se pudo completar la acción: no tienes permiso o tu sesión caducó. "
+    "Vuelve a entrar y reinténtalo; nada se guardó."
+)
+
+
 def requiere_permiso(modulo, nivel="lectura"):
     """
     Decorator que verifica permisos por rol.
@@ -164,19 +177,38 @@ def requiere_permiso(modulo, nivel="lectura"):
     Args:
         modulo: clave de módulo (ej. "inventario", "passwords")
         nivel: "lectura" permite lectura y escritura; "escritura" exige escritura
+
+    Una navegación normal sin permiso sigue viendo el mensaje y la redirección
+    al tablero. Una petición de **HTMX** recibe 403, porque HTMX sigue un 302 de
+    forma transparente y acabaría intercambiando el HTML completo del tablero
+    —o del formulario de login— dentro del ``<tr>`` o el ``<td>`` que disparó la
+    petición. ``django_htmx.middleware.HtmxMiddleware`` está en ``MIDDLEWARE``,
+    así que ``request.htmx`` es lo que distingue una de otra.
     """
 
     def decorador(vista):
-        @wraps(vista)
         @login_required
-        def envoltura(request, *args, **kwargs):
-            if request.user.is_superuser:
-                return vista(request, *args, **kwargs)
-            permiso = nivel_permiso(request.user.rol, modulo)
-            if permiso == "ninguno" or (nivel == "escritura" and permiso != "escritura"):
-                messages.error(request, "No tienes permiso para acceder a esta sección.")
+        def con_sesion(request, *args, **kwargs):
+            if not tiene_permiso(request.user, modulo, nivel):
+                messages.error(request, MENSAJE_SIN_PERMISO)
                 return redirect("core:dashboard")
             return vista(request, *args, **kwargs)
+
+        @wraps(vista)
+        def envoltura(request, *args, **kwargs):
+            # El 403 se decide AQUÍ, fuera de ``login_required``, y no es un
+            # detalle de estilo: ``login_required`` envuelve a ``con_sesion``,
+            # así que corre ANTES de su cuerpo. El caso de la sesión caducada
+            # —el disparador universal, y el más probable— lo redirige él al
+            # formulario de login y nunca llega a la rama de permisos. Un 403
+            # puesto solo ahí dentro dejaría el bug principal abierto.
+            if getattr(request, "htmx", False) and not tiene_permiso(
+                getattr(request, "user", None), modulo, nivel
+            ):
+                return HttpResponseForbidden(
+                    MENSAJE_HTMX_SIN_PERMISO, content_type="text/plain; charset=utf-8"
+                )
+            return con_sesion(request, *args, **kwargs)
 
         return envoltura
 
