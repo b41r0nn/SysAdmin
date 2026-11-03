@@ -10,7 +10,7 @@ import logging
 from django.core.cache import cache
 from django.db import DatabaseError
 
-from accounts.permisos import MODULOS, PERMISOS_POR_ROL
+from accounts.permisos import MODULOS, MODULOS_ESENCIALES, PERMISOS_POR_ROL
 
 from .models import Modulo, PermisoRol, Rol
 
@@ -38,6 +38,23 @@ CLAVES_CACHE = (
 def modulos_activos():
     """Devuelve el conjunto de claves de los módulos encendidos.
 
+    Los de ``MODULOS_ESENCIALES`` van siempre, diga lo que diga la fila. Es la
+    anti-meta 1 de la spec: dejar la configuración inalcanzable tiene que ser
+    imposible, no improbable. ``Modulo.save()`` y ``Modulo.delete()`` defienden
+    la columna ``es_esencial``, pero un ``queryset.update()``, un
+    ``bulk_create``, un fixture o un SQL directo se los saltan, y a partir de ahí
+    ``ModuloActivoMiddleware`` responde 404 a toda la configuración —también al
+    superusuario de Django— sin vuelta por la web, porque ``Modulo`` no está
+    registrado en ``/admin/``. Forzándolos aquí la propiedad deja de depender de
+    los datos, igual que la concesión del superadministrador en
+    ``accounts.permisos.nivel_permiso``.
+
+    Que esto NO reconcilie la fila es deliberado: la pantalla de módulos puede
+    mostrar el interruptor de un esencial en ``off`` mientras el resolvedor lo
+    trata como activo. No es alcanzable por la interfaz (sale ``disabled`` y la
+    vista responde 400), y un resolvedor que se niega a dejarte fuera es el
+    comportamiento querido.
+
     Con la tabla vacía (base nueva o migración a medias) devuelve todos los
     módulos: la falta de datos no puede esconder la aplicación. Esa respuesta no
     se guarda en caché, para que sembrar las filas después surta efecto de
@@ -64,7 +81,7 @@ def modulos_activos():
             "El catálogo de módulos está vacío; se tratan todos como activos."
         )
         return set(MODULOS)
-    activos = {clave for clave, activo in filas if activo}
+    activos = {clave for clave, activo in filas if activo} | set(MODULOS_ESENCIALES)
     cache.set(CLAVE_CACHE_MODULOS, activos, SEGUNDOS_CACHE)
     return activos
 

@@ -25,6 +25,35 @@ MODULOS = [
     "prestamos",
 ]
 
+# Los módulos sin los que el sistema no se puede administrar. La otra mitad de
+# la anti-meta 1 de la spec: igual que la concesión de ``ROL_SUPERADMIN``, esta
+# propiedad NO depende de los datos.
+#
+# Es una CONSTANTE de código y no una lectura de
+# ``Modulo.objects.filter(es_esencial=True)`` a propósito: si la lista saliera
+# de la tabla, quien pueda apagar un módulo podría también bajar ese
+# ``es_esencial`` y estaríamos donde empezamos. Son los cuatro que la migración
+# ``0006_sembrar_modulos`` siembra con ``es_esencial=True``.
+#
+# ``administracion.registro.modulos_activos`` los fuerza como activos, así que
+# ni un ``queryset.update()``, ni un ``bulk_create``, ni un fixture, ni un SQL
+# directo pueden dejar la configuración inalcanzable: sin esto bastaba un
+# ``Modulo.objects.filter(clave="administracion").update(activo=False)`` para
+# que ``ModuloActivoMiddleware`` respondiera 404 a toda la configuración —
+# también al superusuario de Django— sin vuelta por la web, porque ``Modulo``
+# no está registrado en ``/admin/``.
+#
+# La columna ``es_esencial`` sigue mandando en la interfaz (el interruptor sale
+# ``disabled``) y en ``Modulo.clean()``: que las dos fuentes no se separen lo
+# vigila ``administracion.test_registro`` →
+# ``test_la_constante_de_esenciales_no_se_separa_de_la_columna``.
+MODULOS_ESENCIALES = frozenset({
+    "inventario",
+    "mantenimiento",
+    "passwords",
+    "administracion",
+})
+
 # app_name de la URL -> clave de módulo. Casi todas coinciden por nombre; las dos
 # que no (reports y yule) se mapean a mano.
 APP_A_MODULO = {

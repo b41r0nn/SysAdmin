@@ -5,7 +5,7 @@ from django.db import OperationalError
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.permisos import APP_A_MODULO, MODULOS
+from accounts.permisos import APP_A_MODULO, MODULOS, MODULOS_ESENCIALES
 from administracion import registro
 from administracion.models import Modulo
 from administracion.registro import invalidar_cache, modulo_esta_activo, modulos_activos
@@ -32,6 +32,23 @@ class CatalogoModulosTests(TestCase):
     def test_los_esenciales_son_los_cuatro_esperados(self):
         esenciales = set(Modulo.objects.filter(es_esencial=True).values_list("clave", flat=True))
         self.assertEqual(esenciales, {"inventario", "mantenimiento", "passwords", "administracion"})
+
+    def test_la_constante_de_esenciales_no_se_separa_de_la_columna(self):
+        """Dos sitios tienen que decir lo mismo y ninguno puede mandar sobre el otro.
+
+        ``MODULOS_ESENCIALES`` manda en el resolvedor (``modulos_activos`` los
+        fuerza, y por eso no puede leerse de la tabla); la columna
+        ``es_esencial`` manda en la interfaz (el interruptor sale ``disabled``) y
+        en ``Modulo.clean()``. Es el mismo patrón con el que la Tarea 9 ató
+        ``INTENTOS_POR_DEFECTO`` al default del modelo.
+        """
+        self.assertEqual(
+            set(MODULOS_ESENCIALES),
+            set(Modulo.objects.filter(es_esencial=True).values_list("clave", flat=True)),
+        )
+        # Y una clave esencial que no fuera un módulo conocido no la forzaría
+        # nadie: modulo_esta_activo() la rechaza antes de mirar el conjunto.
+        self.assertLessEqual(set(MODULOS_ESENCIALES), set(MODULOS))
 
     def test_un_modulo_esencial_no_se_puede_desactivar(self):
         modulo = Modulo.objects.get(clave="administracion")
@@ -130,7 +147,9 @@ class CacheDeModulosTests(TestCase):
             Modulo(clave="soporte", nombre="Soporte", icono="bi-life-preserver",
                    url_nombre="soporte:lista", orden=80, activo=True),
         ])  # bulk_create no dispara post_save
-        self.assertEqual(modulos_activos(), {"soporte"})
+        # Los esenciales van siempre, aunque no tengan fila: su lista es una
+        # constante de código y no una lectura de la tabla.
+        self.assertEqual(modulos_activos(), {"soporte"} | set(MODULOS_ESENCIALES))
 
 
 class CatalogoParaElMenuTests(TestCase):
