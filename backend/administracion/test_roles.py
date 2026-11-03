@@ -183,6 +183,50 @@ class ValidacionAlGuardarTests(TestCase):
         self.assertIn("nivel", contexto.exception.message_dict)
         self.assertFalse(PermisoRol.objects.filter(rol=rol).exists())
 
+    def test_al_superadmin_no_se_le_puede_guardar_otro_nivel(self):
+        """La guarda de la llave de repuesto, en el modelo y no solo en la vista.
+
+        La validación de la pantalla de roles no se hereda: una importación
+        masiva, un comando de gestión o un ``ModelForm`` futuro guardan por
+        instancia y no pasan por ella. Aquí sí.
+        """
+        for modulo in MODULOS:
+            for nivel in ("ninguno", "lectura"):
+                with self.subTest(modulo=modulo, nivel=nivel):
+                    permiso = PermisoRol.objects.get(rol__clave="superadmin", modulo=modulo)
+                    permiso.nivel = nivel
+                    with self.assertRaises(ValidationError) as contexto:
+                        permiso.save()
+                    self.assertIn("nivel", contexto.exception.message_dict)
+                    permiso.refresh_from_db()
+                    self.assertEqual(permiso.nivel, "escritura")
+
+    def test_una_fila_nueva_del_superadmin_tampoco_nace_degradada(self):
+        """La fila puede no existir (base a medias): al crearla, la misma regla."""
+        rol = Rol.objects.get(clave="superadmin")
+        PermisoRol.objects.filter(rol=rol, modulo="soporte").delete()
+        with self.assertRaises(ValidationError) as contexto:
+            PermisoRol(rol=rol, modulo="soporte", nivel="ninguno").save()
+        self.assertIn("nivel", contexto.exception.message_dict)
+        self.assertFalse(PermisoRol.objects.filter(rol=rol, modulo="soporte").exists())
+
+    def test_al_superadmin_si_se_le_guarda_escritura(self):
+        """Contraste: la guarda no puede bloquear el guardado legítimo."""
+        rol = Rol.objects.get(clave="superadmin")
+        permiso = PermisoRol.objects.get(rol=rol, modulo="administracion")
+        permiso.nivel = "escritura"
+        permiso.save()  # no lanza
+        self.assertEqual(
+            PermisoRol.objects.get(rol=rol, modulo="administracion").nivel, "escritura"
+        )
+
+        # Y una fila nueva con escritura también nace bien.
+        PermisoRol.objects.filter(rol=rol, modulo="soporte").delete()
+        PermisoRol(rol=rol, modulo="soporte", nivel="escritura").save()
+        self.assertEqual(
+            PermisoRol.objects.get(rol=rol, modulo="soporte").nivel, "escritura"
+        )
+
 
 class SiembraDeFabricaTests(TestCase):
     def test_la_migracion_siembra_las_40_celdas_de_fabrica(self):

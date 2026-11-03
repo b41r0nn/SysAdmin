@@ -2,7 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from accounts.permisos import MODULOS
+from accounts.permisos import MODULOS, ROL_SUPERADMIN
 from passwords.crypto import build_fernet
 
 
@@ -221,6 +221,24 @@ class PermisoRol(models.Model):
 
     def __str__(self):
         return f"{self.rol.clave}/{self.modulo} = {self.nivel}"
+
+    def clean(self):
+        super().clean()
+        if not self.rol_id:
+            # Sin rol no hay nada que comprobar: clean_fields() ya lo reporta.
+            # Mirar self.rol aquí lanzaría RelatedObjectDoesNotExist y
+            # convertiría un error de validación en un 500.
+            return
+        if self.rol.clave == ROL_SUPERADMIN and self.nivel != "escritura":
+            # La regla vive en el modelo y no solo en la vista de la matriz: la
+            # validación de una vista no la hereda una importación masiva, un
+            # comando de gestión ni un ModelForm. El resolvedor le da escritura
+            # al superadministrador de todas formas, así que una fila degradada
+            # solo serviría para que la tabla dijera algo distinto de lo que el
+            # sistema aplica.
+            raise ValidationError(
+                {"nivel": f"El rol «{self.rol.nombre}» siempre tiene escritura y no se puede cambiar."}
+            )
 
     def save(self, *args, **kwargs):
         # Sin full_clean() un nivel fuera de NIVEL_CHOICES (p. ej. "admin") se
