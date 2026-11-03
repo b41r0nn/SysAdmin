@@ -16,7 +16,7 @@ def _activar_modulo(prueba):
     """Enciende el módulo préstamos, que nace apagado.
 
     Desde que los permisos salen de la base, un módulo apagado resuelve a
-    «ninguno» para todos los roles y sus vistas redirigen. Estas pruebas cubren
+    «ninguno» para todos los roles y sus URLs responden 404. Estas pruebas cubren
     el módulo en uso; su apagado se prueba en ``administracion.test_roles``.
     ``update()`` no dispara señales, así que la caché se limpia a mano (y al
     terminar, porque sobrevive al rollback de la prueba).
@@ -54,6 +54,11 @@ def _prestamo(activo, solicitante, **kw):
 
 
 class PrestamosLoginTests(TestCase):
+    def setUp(self):
+        # Con el módulo apagado el filtro responde 404 antes de que login_required
+        # actúe; aquí se comprueba el login del módulo en uso.
+        _activar_modulo(self)
+
     def test_lista_requiere_login(self):
         resp = self.client.get(reverse("prestamos:lista"))
         self.assertEqual(resp.status_code, 302)
