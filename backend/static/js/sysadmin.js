@@ -41,6 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   initFiltroActivos();
+  initAvisosHtmx();
 });
 
 /**
@@ -84,5 +85,120 @@ function initFiltroActivos() {
     filtro.addEventListener("input", aplicar);
     filtro.addEventListener("search", aplicar);
     aplicar();
+  });
+}
+
+/* ─── Avisos de los errores de HTMX ──────────────────────────────────────────
+ *
+ * Un cambio por HTMX que el servidor rechaza es invisible sin esto: con un 4xx
+ * HTMX no intercambia nada, así que el interruptor o el <select> se quedan
+ * mostrando el valor que el usuario acaba de poner aunque no se haya guardado
+ * nada. Pasa con un 403 (sin permiso, o sesión caducada: el caso universal, a
+ * los 30 min de inactividad), con un 400 (un rechazo legítimo de la vista, como
+ * intentar apagar un módulo esencial) y con un 404 (alguien borró la fila por
+ * consola con la pantalla abierta).
+ */
+
+const SELECTOR_CONTROLES_HTMX =
+  "input[hx-post], select[hx-post], input[hx-get], select[hx-get]";
+
+/**
+ * Apunta en cada control el valor que el servidor tiene de verdad.
+ *
+ * Hace falta recordarlo al pintar: cuando salta el error, el control ya tiene
+ * el valor que el usuario acaba de poner, así que leerlo entonces no sirve para
+ * volver atrás. Se vuelve a apuntar en cada intercambio de HTMX, porque un
+ * guardado correcto devuelve el control ya repintado por el servidor.
+ */
+function recordarValorReal(raiz) {
+  if (!raiz || !raiz.querySelectorAll) {
+    return;
+  }
+  const controles = [];
+  if (raiz.matches && raiz.matches(SELECTOR_CONTROLES_HTMX)) {
+    controles.push(raiz);
+  }
+  raiz.querySelectorAll(SELECTOR_CONTROLES_HTMX).forEach(function (control) {
+    controles.push(control);
+  });
+  controles.forEach(function (control) {
+    control.dataset.valorReal = esCasilla(control)
+      ? control.checked
+        ? "1"
+        : "0"
+      : control.value;
+  });
+}
+
+function esCasilla(control) {
+  return control.type === "checkbox" || control.type === "radio";
+}
+
+function restaurarValorReal(control) {
+  if (!control || !control.dataset || control.dataset.valorReal === undefined) {
+    return;
+  }
+  if (esCasilla(control)) {
+    control.checked = control.dataset.valorReal === "1";
+  } else {
+    control.value = control.dataset.valorReal;
+  }
+}
+
+/**
+ * El motivo que se le muestra al usuario.
+ *
+ * El 403 del decorador de permisos y los 400 de las vistas mandan el motivo en
+ * el cuerpo, en español y en texto plano: se muestra tal cual. Un 404 (o un
+ * 500) responde una página entera de Django, que no sirve de aviso, así que
+ * ahí se pone un texto propio.
+ */
+function mensajeDelErrorHtmx(xhr) {
+  const cuerpo = xhr && xhr.responseText ? xhr.responseText.trim() : "";
+  if (cuerpo && cuerpo.length <= 300 && cuerpo.indexOf("<") === -1) {
+    return cuerpo;
+  }
+  if (xhr && xhr.status === 404) {
+    return "Lo que intentabas cambiar ya no existe: alguien lo borró. Recarga la página.";
+  }
+  return "No se pudo guardar el cambio. Recarga la página y vuelve a intentarlo.";
+}
+
+/** Pinta el aviso con el mismo patrón de alertas que usa base.html. */
+function avisarEnPantalla(texto) {
+  const contenedor = document.querySelector("main.sa-content") || document.body;
+  contenedor.querySelectorAll("[data-aviso-htmx]").forEach(function (viejo) {
+    viejo.remove();
+  });
+  const aviso = document.createElement("div");
+  aviso.className = "alert alert-danger alert-dismissible fade show";
+  aviso.setAttribute("role", "alert");
+  aviso.setAttribute("data-aviso-htmx", "");
+  // textContent y no innerHTML: el motivo viene del servidor y se muestra como
+  // texto, nunca como HTML.
+  aviso.textContent = texto;
+  const cerrar = document.createElement("button");
+  cerrar.type = "button";
+  cerrar.className = "btn-close";
+  cerrar.setAttribute("data-bs-dismiss", "alert");
+  cerrar.setAttribute("aria-label", "Cerrar");
+  aviso.appendChild(cerrar);
+  contenedor.insertBefore(aviso, contenedor.firstChild);
+  aviso.scrollIntoView({ block: "nearest" });
+}
+
+function initAvisosHtmx() {
+  const cuerpo = document.body;
+  if (!cuerpo) {
+    return;
+  }
+  recordarValorReal(cuerpo);
+  cuerpo.addEventListener("htmx:load", function (evento) {
+    recordarValorReal(evento.detail ? evento.detail.elt : null);
+  });
+  cuerpo.addEventListener("htmx:responseError", function (evento) {
+    const detalle = evento.detail || {};
+    restaurarValorReal(detalle.elt);
+    avisarEnPantalla(mensajeDelErrorHtmx(detalle.xhr));
   });
 }

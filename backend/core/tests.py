@@ -319,6 +319,26 @@ class VendorAssetsTests(TestCase):
         self.assertEqual(encontrados, [], f"Plantillas con CDN externo: {encontrados}")
 
 
+class AvisoHtmxJsTests(TestCase):
+    """El único aviso de un cambio por HTMX que no se guardó vive en el JS.
+
+    Con un 4xx, HTMX no intercambia nada: el interruptor o el ``<select>`` se
+    quedan mostrando el valor que el usuario acaba de poner aunque el servidor
+    no haya guardado nada, y sin el manejador nadie avisa. Es una prueba de
+    grep a propósito —aquí no se ejecuta JavaScript—, para que el manejador no
+    desaparezca sin que nada falle.
+    """
+
+    def test_el_js_maneja_los_errores_de_htmx(self):
+        fuente = (
+            Path(settings.BASE_DIR) / "static" / "js" / "sysadmin.js"
+        ).read_text(encoding="utf-8")
+        # El manejador del error y el que recuerda el valor real del control
+        # para poder devolverlo a su sitio.
+        self.assertIn("htmx:responseError", fuente)
+        self.assertIn("htmx:load", fuente)
+
+
 class LimpiarHistorialCommandTests(TestCase):
     def test_dry_run_no_borra_nada(self):
         from administracion.models import RegistroAuditoria

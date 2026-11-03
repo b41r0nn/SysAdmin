@@ -16,6 +16,11 @@
   <p class="text-muted mb-0" style="font-size:.85rem;">
     Un módulo apagado desaparece del menú y sus páginas dejan de responder, también para el superadministrador.
   </p>
+  {% if not puede_escribir %}
+    <p class="text-muted mb-0 mt-1" style="font-size:.85rem;">
+      Solo lectura: puedes ver qué está encendido, pero no cambiarlo.
+    </p>
+  {% endif %}
 </div>
 
 <div class="sa-card p-0 overflow-hidden">
