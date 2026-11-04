@@ -101,6 +101,12 @@ def catalogo_modulos():
     además el nombre, el icono y la URL, y leerlos de la base en cada request
     sería una consulta por página.
 
+    Los de ``MODULOS_ESENCIALES`` se pintan siempre, diga lo que diga la fila,
+    por la misma razón que ``modulos_activos`` los fuerza: forzarlos solo allí
+    dejaría la configuración alcanzable escribiendo la URL pero **no
+    navegando**, porque el enlace se habría caído del menú. Media anti-meta no
+    es la anti-meta.
+
     Si no hay filas o la base falla devuelve una lista vacía: el menú se queda
     sin módulos, pero la página abre. Es un fallo cerrado (a diferencia de
     ``modulos_activos``) porque aquí no se concede ningún acceso, solo se
@@ -128,7 +134,7 @@ def catalogo_modulos():
     catalogo = [
         {campo: fila[campo] for campo in ("clave", "nombre", "icono", "url_nombre")}
         for fila in filas
-        if fila["activo"]
+        if fila["activo"] or fila["clave"] in MODULOS_ESENCIALES
     ]
     cache.set(CLAVE_CACHE_CATALOGO, catalogo, SEGUNDOS_CACHE)
     return catalogo

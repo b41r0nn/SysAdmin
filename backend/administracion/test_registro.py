@@ -186,6 +186,26 @@ class CatalogoParaElMenuTests(TestCase):
         modulo.save()
         self.assertIn("licencias", [m["clave"] for m in registro.catalogo_modulos()])
 
+    def test_un_esencial_apagado_por_update_sigue_en_el_menu(self):
+        """El enlace de Configuración no puede desaparecer del menú.
+
+        Compañera de ``modulos_activos``: forzar los esenciales solo allí deja
+        la configuración alcanzable escribiendo la URL pero NO navegando, que
+        es media anti-meta. ``queryset.update()`` se salta ``Modulo.save()``,
+        así que la fila puede decir ``activo=False`` y el menú tiene que
+        seguir pintando el enlace.
+        """
+        Modulo.objects.filter(clave="administracion").update(activo=False)
+        invalidar_cache()
+        claves = [modulo["clave"] for modulo in registro.catalogo_modulos()]
+        self.assertIn("administracion", claves)
+
+    def test_los_cuatro_esenciales_apagados_siguen_en_el_menu(self):
+        Modulo.objects.filter(es_esencial=True).update(activo=False)
+        invalidar_cache()
+        claves = {modulo["clave"] for modulo in registro.catalogo_modulos()}
+        self.assertEqual(set(MODULOS_ESENCIALES) - claves, set())
+
     def test_invalidar_cache_vacia_tambien_el_catalogo(self):
         registro.catalogo_modulos()  # llena la caché
         Modulo.objects.filter(clave="soporte").update(activo=False)  # sin señales
