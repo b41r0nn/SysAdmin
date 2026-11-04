@@ -106,6 +106,28 @@ class CorreoForm(forms.ModelForm):
         return instance
 
 
+class RetencionForm(forms.ModelForm):
+    """Los dos plazos de retención de datos.
+
+    Los mínimos (historial ≥ 30 días, archivos huérfanos ≥ 7) son validadores
+    del modelo y los corre ``_post_clean()``: así la regla vale también para un
+    comando de gestión o una importación, no solo para esta pantalla. El ``min``
+    del HTML es comodidad del navegador, no la validación.
+
+    Va aquí y no en ``ConfiguracionForm`` para que la pantalla de Empresa siga
+    declarando su lista explícita de campos: los dos campos nuevos del modelo no
+    se cuelan en ningún otro formulario.
+    """
+
+    class Meta:
+        model = ConfiguracionSistema
+        fields = ["retencion_dias", "retencion_media_dias"]
+        widgets = {
+            "retencion_dias": forms.NumberInput(attrs={"class": "form-control", "min": 30}),
+            "retencion_media_dias": forms.NumberInput(attrs={"class": "form-control", "min": 7}),
+        }
+
+
 # Nombre y cargo de la cuenta: salen en las actas que firma (p. ej. el técnico
 # de un mantenimiento).
 ETIQUETAS_PERSONA = {"first_name": "Nombres", "last_name": "Apellidos", "cargo": "Cargo"}

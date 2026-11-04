@@ -2,6 +2,10 @@
 import os
 from pathlib import Path
 
+# Solo constantes enteras: importarlo no carga ninguna app de Django, así que
+# es seguro desde los settings (ver MESSAGE_TAGS más abajo).
+from django.contrib.messages import constants as message_constants
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -68,6 +72,22 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'sysadmin.urls'
+
+# ─── Etiquetas de los mensajes ───────────────────────────────────────────────
+# Las plantillas pintan `class="alert alert-{{ message.tags }}"`, y la etiqueta
+# que Django da a ERROR es "error": el HTML salía `alert-error`, una clase que
+# NO EXISTE en Bootstrap 5 (es `alert-danger`). Resultado: todos los avisos de
+# error de todas las pantallas salían con la caja pero sin color. Se arregla
+# aquí y no en las plantillas para que valga de una vez para toda la aplicación
+# y no quede un `if` en el HTML.
+#
+# `success`, `warning` e `info` ya coinciden con Bootstrap y no se mapean.
+# `debug` no existe en Bootstrap y cae en `secondary`; esos mensajes están
+# apagados fuera de desarrollo.
+MESSAGE_TAGS = {
+    message_constants.DEBUG: 'secondary',
+    message_constants.ERROR: 'danger',
+}
 
 TEMPLATES = [
     {
