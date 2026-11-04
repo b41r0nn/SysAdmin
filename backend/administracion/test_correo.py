@@ -1,7 +1,7 @@
 """Pruebas de la pantalla de Correo: SMTP, remitente, prueba de envío y cola.
 
 Aquí vive la única credencial cifrada de la configuración, así que las pruebas
-que importan no son las que comprueban que un campo se guarda, sino las cuatro
+que importan no son las que comprueban que un campo se guarda, sino las cinco
 que vigilan el secreto:
 
 1. guardar con la casilla de la contraseña vacía conserva la guardada;
@@ -10,7 +10,11 @@ que vigilan el secreto:
    pueda pasar en verde sin haber auditado nada);
 3. el mensaje de error de la pantalla de prueba no la deja ver;
 4. el correo de prueba no pasa por ``NotificacionEmail``, porque esa tabla es un
-   histórico que otro proceso reenvía.
+   histórico que otro proceso reenvía;
+5. **la columna ``NotificacionEmail.error`` tampoco la contiene**, que es el
+   camino del cron y el único que corre en producción. Esa fila no se purgaba
+   nunca (``enviado=False``), se pinta en la pantalla de Correo y se ve desde
+   ``/admin/``: un secreto ahí se queda para siempre y entra en cada respaldo.
 """
 
 from smtplib import SMTPAuthenticationError
@@ -419,6 +423,220 @@ class ColaDeCorreoTests(TestCase):
         self.assertRedirects(resp, reverse("core:dashboard"))
         fallida.refresh_from_db()
         self.assertEqual(fallida.intentos, MAX_INTENTOS_EMAIL)
+
+
+class _ConexionQueFallaAlAbrir:
+    """Conexión falsa cuyo ``open()`` lanza lo que diga el servidor.
+
+    Es el camino del AUTH: ``connection.open()`` autentica, y la respuesta a un
+    AUTH fallido puede repetir lo que le mandamos.
+    """
+
+    def __init__(self, respuesta):
+        self.respuesta = respuesta
+
+    def open(self):
+        raise SMTPAuthenticationError(535, self.respuesta.encode())
+
+    def close(self):
+        pass
+
+
+class _ConexionQueFallaAlEnviar:
+    def __init__(self, respuesta):
+        self.respuesta = respuesta
+
+    def open(self):
+        return True
+
+    def send_messages(self, mensajes):
+        raise SMTPAuthenticationError(535, self.respuesta.encode())
+
+    def close(self):
+        pass
+
+
+class CredencialFueraDeLaColaTests(TestCase):
+    """La contraseña del SMTP no puede quedar guardada en la base.
+
+    La pantalla de prueba de envío ya tachaba la credencial, pero el camino que
+    corre de verdad —``procesar_cola_email()``, el del cron— escribía
+    ``str(exc)`` tal cual en ``NotificacionEmail.error``, en una fila que la
+    limpieza no purgaba, que se pinta en pantalla y que es visible desde
+    ``/admin/``.
+    """
+
+    def setUp(self):
+        self.config = ConfiguracionSistema.get_config()
+        self.config.smtp_host = "smtp.office365.com"
+        self.config.smtp_usuario = "soporte@redihos.co"
+        self.config.set_smtp_password(SECRETO)
+        self.config.save()
+
+    def _encolar(self):
+        return NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="S", cuerpo="C",
+        )
+
+    def _procesar_con(self, conexion):
+        with patch("notificaciones.services.get_connection", return_value=conexion):
+            return procesar_cola_email()
+
+    def test_un_fallo_al_abrir_la_conexion_no_guarda_la_credencial(self):
+        """El crítico: es el camino del AUTH y el que corre en producción."""
+        self._encolar()
+
+        total, enviados, fallos, quedan = self._procesar_con(
+            _ConexionQueFallaAlAbrir(f"5.7.8 rechazado: user=soporte pass={SECRETO}")
+        )
+
+        correo = NotificacionEmail.objects.get()
+        self.assertEqual((total, enviados, fallos), (1, 0, 1))
+        self.assertNotIn(SECRETO, correo.error)
+        self.assertIn("(oculta)", correo.error)
+        self.assertEqual(correo.intentos, 1)
+
+    def test_un_fallo_al_enviar_un_mensaje_no_guarda_la_credencial(self):
+        """La segunda escritura cruda: el fallo por mensaje, no por conexión."""
+        self._encolar()
+
+        self._procesar_con(
+            _ConexionQueFallaAlEnviar(f"5.7.8 rechazado: pass={SECRETO}")
+        )
+
+        correo = NotificacionEmail.objects.get()
+        self.assertNotIn(SECRETO, correo.error)
+        self.assertIn("(oculta)", correo.error)
+
+    def test_la_credencial_en_base64_tampoco_se_guarda(self):
+        """El AUTH de SMTP viaja en base64: el literal exacto no basta.
+
+        ``smtplib`` manda ``base64(contraseña)`` con AUTH LOGIN y
+        ``base64("\\0usuario\\0contraseña")`` con AUTH PLAIN. Un servidor que
+        repita el argumento recibido devuelve el blob, no el literal.
+        """
+        from email.base64mime import body_encode
+
+        blob = body_encode(f"\0soporte@redihos.co\0{SECRETO}".encode(), eol="")
+        solo_clave = body_encode(SECRETO.encode(), eol="")
+        self._encolar()
+
+        self._procesar_con(
+            _ConexionQueFallaAlAbrir(f"5.7.8 rechazado: {blob} / {solo_clave}")
+        )
+
+        correo = NotificacionEmail.objects.get()
+        self.assertNotIn(blob, correo.error)
+        self.assertNotIn(solo_clave, correo.error)
+
+    def test_si_el_descifrado_falla_no_revienta_ni_guarda_nada_crudo(self):
+        """El tachado necesita la clave en claro, y descifrarla puede fallar.
+
+        ``get_smtp_password()`` lanza ``InvalidToken`` si la clave Fernet rotó
+        sin ``rotar_clave_vault`` o si la base se restauró en otro host. Un
+        ``except`` que falla dentro de un ``except`` convierte un aviso de correo
+        en un cron muerto, y aquí además revienta antes: hoy
+        ``_get_smtp_connection()`` se construye FUERA del ``try``.
+        """
+        from cryptography.fernet import InvalidToken
+
+        from administracion.errores_correo import TEXTO_GENERICO
+
+        self._encolar()
+        fallo = patch.object(
+            ConfiguracionSistema, "get_smtp_password", side_effect=InvalidToken(),
+        )
+        with fallo, patch("notificaciones.services.get_connection"):
+            total, enviados, fallos, quedan = procesar_cola_email()
+
+        correo = NotificacionEmail.objects.get()
+        self.assertEqual((total, enviados, fallos), (1, 0, 1))
+        self.assertEqual(correo.error, TEXTO_GENERICO)
+        self.assertEqual(correo.intentos, 1)
+
+    def test_tls_y_ssl_a_la_vez_no_matan_el_cron(self):
+        """``get_connection()`` lanza ``ValueError`` con las dos marcadas.
+
+        Pasaba fuera del ``try``, así que el cron reventaba contra su propio
+        docstring, que promete que nunca revienta, y la portada seguía contando
+        ``error=""``: un fallo de correo en cada corrida sin marcar nada.
+        """
+        ConfiguracionSistema.objects.filter(pk=1).update(
+            smtp_usa_tls=True, smtp_usa_ssl=True,
+        )
+        self._encolar()
+
+        total, enviados, fallos, quedan = procesar_cola_email()
+
+        correo = NotificacionEmail.objects.get()
+        self.assertEqual((total, enviados, fallos), (1, 0, 1))
+        self.assertTrue(correo.error)
+        self.assertNotIn(SECRETO, correo.error)
+
+    def test_un_error_que_no_lleva_la_credencial_se_guarda_legible(self):
+        """Contraprueba, y no es decorativa: si se tacha de más, el
+        administrador pierde el diagnóstico y no lo nota ninguna prueba."""
+        self._encolar()
+
+        self._procesar_con(
+            _ConexionQueFallaAlAbrir("5.7.1 Relay access denied para a@b.co")
+        )
+
+        correo = NotificacionEmail.objects.get()
+        self.assertIn("Relay access denied", correo.error)
+        self.assertIn("a@b.co", correo.error)
+        self.assertNotIn("(oculta)", correo.error)
+
+    def test_una_cola_sin_credencial_configurada_sigue_guardando_el_error(self):
+        """Sin contraseña guardada no hay nada que tachar y el texto va entero."""
+        ConfiguracionSistema.objects.filter(pk=1).update(smtp_password_cifrado="")
+        self._encolar()
+
+        self._procesar_con(_ConexionQueFallaAlAbrir("5.7.1 Relay access denied"))
+
+        self.assertIn("Relay access denied", NotificacionEmail.objects.get().error)
+
+    def test_el_error_no_se_puede_editar_desde_el_admin(self):
+        """La segunda puerta: ``/admin/`` no declaraba ni ``fields`` ni ``exclude``."""
+        from notificaciones.admin import NotificacionEmailAdmin
+
+        self.assertIn("error", NotificacionEmailAdmin.readonly_fields)
+
+
+class TlsYSslExcluyentesTests(TestCase):
+    """Las dos casillas juntas son alcanzables desde la pantalla."""
+
+    def setUp(self):
+        self.config = ConfiguracionSistema.get_config()
+        self.config.smtp_host = "smtp.office365.com"
+        self.config.smtp_usuario = "soporte@redihos.co"
+        self.config.save()
+
+    def test_el_formulario_rechaza_tls_y_ssl_a_la_vez(self):
+        form = CorreoForm(
+            _datos_correo(self.config, smtp_usa_tls="on", smtp_usa_ssl="on"),
+            instance=self.config,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("STARTTLS", " ".join(form.errors["__all__"]))
+
+    def test_el_formulario_acepta_solo_una_de_las_dos(self):
+        """Contraprueba: la configuración normal (STARTTLS en el 587) pasa."""
+        for marcada in ("smtp_usa_tls", "smtp_usa_ssl"):
+            with self.subTest(marcada=marcada):
+                datos = _datos_correo(self.config)
+                datos.pop("smtp_usa_tls", None)
+                datos.pop("smtp_usa_ssl", None)
+                datos[marcada] = "on"
+                form = CorreoForm(datos, instance=self.config)
+                self.assertTrue(form.is_valid(), form.errors)
+
+    def test_el_formulario_acepta_las_dos_sin_marcar(self):
+        datos = _datos_correo(self.config)
+        datos.pop("smtp_usa_tls", None)
+        datos.pop("smtp_usa_ssl", None)
+        form = CorreoForm(datos, instance=self.config)
+        self.assertTrue(form.is_valid(), form.errors)
 
 
 class ConexionSmtpTests(TestCase):

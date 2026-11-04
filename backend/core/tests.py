@@ -403,6 +403,31 @@ class LimpiarHistorialCommandTests(TestCase):
         self.assertFalse(NotificacionEmail.objects.filter(pk=mail_viejo.pk).exists())
         self.assertTrue(NotificacionEmail.objects.filter(pk=mail_nuevo.pk).exists())
 
+    def test_borra_los_correos_viejos_sin_enviar(self):
+        """Una fila con error era inmortal: ``enviado=False`` por definición.
+
+        La limpieza solo purgaba ``enviado=True``, así que el texto del fallo del
+        servidor —que puede repetir la credencial que le mandamos— se quedaba
+        para siempre y entraba en cada respaldo.
+        """
+        from notificaciones.models import NotificacionEmail
+
+        viejo = timezone.now() - timedelta(days=400)
+
+        fallida = NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="s", cuerpo="c", intentos=5,
+            error="535 5.7.8 rechazado",
+        )
+        NotificacionEmail.objects.filter(pk=fallida.pk).update(fecha_creacion=viejo)
+        pendiente_nueva = NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="s2", cuerpo="c", error="535 de ayer",
+        )
+
+        call_command("limpiar_historial", dias=365, stdout=StringIO())
+
+        self.assertFalse(NotificacionEmail.objects.filter(pk=fallida.pk).exists())
+        self.assertTrue(NotificacionEmail.objects.filter(pk=pendiente_nueva.pk).exists())
+
     def test_borra_media_huerfana_y_respeta_referenciada(self):
         from inventario.tests import crear_activo
 

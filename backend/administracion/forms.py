@@ -96,6 +96,23 @@ class CorreoForm(forms.ModelForm):
             return 587
         return value
 
+    def clean(self):
+        """STARTTLS y SSL son excluyentes, y las dos casillas están juntas.
+
+        Con las dos marcadas, Django lanza ``ValueError`` al construir el
+        backend (``django/core/mail/backends/smtp.py``), así que no se cae la
+        pantalla sino **la cola**: cada corrida del cron falla, y antes del
+        arreglo del C2 ni siquiera dejaba rastro. Se rechaza aquí, que es donde
+        el administrador lo puede ver y corregir.
+        """
+        cleaned = super().clean()
+        if cleaned.get("smtp_usa_tls") and cleaned.get("smtp_usa_ssl"):
+            raise forms.ValidationError(
+                "STARTTLS y SSL son excluyentes: marca solo uno. "
+                "Lo habitual es STARTTLS en el puerto 587 y SSL en el 465."
+            )
+        return cleaned
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         raw = self.cleaned_data.get("smtp_password")

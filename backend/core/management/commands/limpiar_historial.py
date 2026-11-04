@@ -1,6 +1,6 @@
 """Limpieza del historial: la tarea semanal que recorta lo que ya no se mira.
 
-Tres cosas de este comando no son de estilo y conviene no deshacerlas:
+Cuatro cosas de este comando no son de estilo y conviene no deshacerlas:
 
 1. **Los dos plazos salen de ``ConfiguracionSistema``**, no de un valor fijo.
    Los argumentos ``--dias`` y ``--media-dias`` nacen en ``None`` y solo se
@@ -20,6 +20,11 @@ Tres cosas de este comando no son de estilo y conviene no deshacerlas:
    ``getmtime`` por archivo también en ``--dry-run``, sin cota: dentro de una
    petición HTTP eso es el disco de media entero. La simulación de la pantalla
    se queda en las tablas; el cron sí barre el disco.
+
+4. **La cola de correo se purga por los dos lados.** No solo los enviados:
+   también los que nunca salieron, que eran inmortales porque una fila con
+   error es ``enviado=False`` por definición. En esa columna va la respuesta
+   del servidor, que puede repetir la credencial que le mandamos.
 """
 
 import os
@@ -128,6 +133,22 @@ class Command(BaseCommand):
         self.stdout.write(f"Emails enviados: {email_borrados}")
         if not dry_run and email_borrados:
             NotificacionEmail.objects.filter(enviado=True, fecha_enviado__lt=corte).delete()
+
+        # Los que NUNCA salieron. Eran inmortales: la purga de arriba solo mira
+        # `enviado=True` y una fila con error es `enviado=False` por definición,
+        # así que el texto de la respuesta del servidor —que puede repetir la
+        # credencial que le mandamos— se quedaba para siempre y entraba en cada
+        # respaldo. Se filtra por `fecha_creacion` y no por la fecha del último
+        # intento, que no se guarda: pasada la retención general, un correo sin
+        # enviar ya no se va a enviar.
+        sin_enviar_viejos = NotificacionEmail.objects.filter(
+            enviado=False, fecha_creacion__lt=corte
+        )
+        email_sin_enviar = sin_enviar_viejos.count()
+        total_borrados += email_sin_enviar
+        self.stdout.write(f"Emails sin enviar antiguos: {email_sin_enviar}")
+        if not dry_run and email_sin_enviar:
+            sin_enviar_viejos.delete()
 
         # Sesiones vencidas (lo que hace clearsessions). Incluyen vistas previas de
         # importación de contraseñas abandonadas: claves cifradas con la clave del
