@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.permisos import nivel_permiso
+from administracion.errores_correo import LARGO_MAXIMO_GUARDADO, texto_de_error_smtp
 from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Activo
 from inventario.services import acta_pdf_bytes
@@ -296,6 +297,17 @@ def procesar_cola_email():
     (host caído / credenciales malas / firewall) marca toda la corrida con
     intentos+1 y el error, y sale limpio: el cron nunca revienta y la tabla
     NotificacionEmail queda con el rastro.
+
+    Dos cosas que sostienen ese «nunca revienta» y que no son de estilo:
+
+    - ``_get_smtp_connection()`` se construye DENTRO del try. Estaba fuera, y
+      ahí ya puede lanzar: ``get_connection()`` levanta ``ValueError`` si TLS y
+      SSL están marcados a la vez —alcanzable desde la pantalla— y
+      ``get_smtp_password()`` levanta ``InvalidToken`` si la clave Fernet rotó.
+      El cron moría contra su propio docstring y, como la portada cuenta
+      ``error=""``, sin marcar nada.
+    - El error se guarda por ``texto_de_error_smtp()``, nunca con ``str(exc)``:
+      esta columna no se purgaba, se pinta en pantalla y se ve en ``/admin/``.
     """
     config = ConfiguracionSistema.get_config()
     if not config.smtp_host:
@@ -306,12 +318,13 @@ def procesar_cola_email():
     ).order_by("fecha_creacion")
     total = pending.count()
 
-    connection = _get_smtp_connection()
+    connection = None
     try:
         try:
+            connection = _get_smtp_connection()
             connection.open()
         except Exception as exc:
-            error = str(exc)[:2000]
+            error = texto_de_error_smtp(exc, config, largo=LARGO_MAXIMO_GUARDADO)
             marcadas = pending.update(intentos=F("intentos") + 1, error=error)
             quedan = NotificacionEmail.objects.filter(
                 enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
@@ -347,12 +360,15 @@ def procesar_cola_email():
                 enviados += 1
             except Exception as exc:
                 correo.intentos += 1
-                correo.error = str(exc)[:2000]
+                correo.error = texto_de_error_smtp(
+                    exc, config, largo=LARGO_MAXIMO_GUARDADO,
+                )
                 correo.save(update_fields=["intentos", "error"])
                 fallos += 1
     finally:
         try:
-            connection.close()
+            if connection is not None:
+                connection.close()
         except Exception:
             pass
 

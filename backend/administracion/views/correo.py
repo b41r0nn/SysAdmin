@@ -9,9 +9,11 @@ manda sobre el resto del diseño:
 - el correo de prueba se manda **directo sobre la conexión**, sin pasar por
   ``NotificacionEmail``: esa tabla es un histórico que el cron reenvía, y un
   secreto de configuración no tiene por qué acabar ahí;
-- el texto del fallo que se muestra en pantalla se limpia antes: un ``except``
-  que vuelque la respuesta del servidor tal cual puede devolver lo que le
-  mandamos.
+- el texto del fallo que se muestra en pantalla se limpia antes con
+  ``administracion.errores_correo.texto_de_error_smtp()``, el **mismo** que usa
+  la cola: un ``except`` que vuelque la respuesta del servidor tal cual puede
+  devolver lo que le mandamos, y tener un tachado por camino es tener uno sin
+  tachado.
 """
 
 from django.contrib import messages
@@ -27,11 +29,11 @@ from notificaciones.models import NotificacionEmail
 from notificaciones.services import MAX_INTENTOS_EMAIL, _get_smtp_connection
 
 from ..auditoria import auditar_cambios
+from ..errores_correo import texto_de_error_smtp
 from ..forms import CorreoForm
 from ..models import ConfiguracionSistema
 from ..services import registrar_auditoria
 
-LARGO_MAXIMO_ERROR = 500
 SIN_SMTP = (
     "No hay servidor SMTP configurado: guarda el servidor y el usuario antes "
     "de probar el envío."
@@ -55,25 +57,6 @@ def _conteos_de_la_cola():
         )[:10],
         "max_intentos": MAX_INTENTOS_EMAIL,
     }
-
-
-def _texto_del_error(exc, config):
-    """Texto del fallo para la pantalla, sin la credencial y recortado.
-
-    Hace falta de verdad, no es paranoia: ``smtplib`` mete en la excepción la
-    respuesta del servidor **tal cual**, y la respuesta a un AUTH fallido puede
-    repetir lo que le mandamos. Sin esta limpieza, la prueba de envío pinta la
-    contraseña del correo en pantalla (y de ahí al portapapeles de quien pide
-    ayuda, o a una captura en un chat).
-
-    El reemplazo va ANTES del recorte: al revés, una contraseña partida por el
-    límite de 500 dejaría la mitad a la vista.
-    """
-    texto = str(exc)
-    secreto = config.get_smtp_password()
-    if secreto:
-        texto = texto.replace(secreto, "(oculta)")
-    return texto[:LARGO_MAXIMO_ERROR]
 
 
 @requiere_permiso("administracion", "escritura")
@@ -118,7 +101,7 @@ def probar_correo(request):
     try:
         conexion = _get_smtp_connection()
     except Exception as exc:
-        messages.error(request, f"No se pudo abrir la conexión: {_texto_del_error(exc, config)}")
+        messages.error(request, f"No se pudo abrir la conexión: {texto_de_error_smtp(exc, config)}")
         return redirect("administracion:correo")
 
     if conexion is None:
@@ -142,7 +125,7 @@ def probar_correo(request):
     except Exception as exc:
         messages.error(
             request,
-            f"No se pudo enviar el correo de prueba: {_texto_del_error(exc, config)}",
+            f"No se pudo enviar el correo de prueba: {texto_de_error_smtp(exc, config)}",
         )
     finally:
         try:

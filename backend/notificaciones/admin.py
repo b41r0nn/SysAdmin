@@ -23,7 +23,13 @@ class NotificacionEmailAdmin(admin.ModelAdmin):
     list_display = ("destinatario", "asunto", "enviado", "intentos", "fecha_creacion", "fecha_enviado")
     list_filter = ("enviado", "intentos", "fecha_creacion")
     search_fields = ("destinatario", "asunto")
-    readonly_fields = ("fecha_creacion", "fecha_enviado")
+    # `error` es de solo lectura, no excluido: es lo que el servidor contestó y
+    # es el único diagnóstico que hay cuando la cola no sale, así que se sigue
+    # viendo. Lo que se cierra es la segunda puerta —editarlo a mano, que no
+    # tiene ningún uso legítimo y sí sirve para fabricar un rastro falso—; de
+    # que el valor no traiga la credencial se encarga
+    # `administracion.errores_correo` al escribirlo.
+    readonly_fields = ("fecha_creacion", "fecha_enviado", "error")
 
     @admin.action(description="Reintentar las seleccionadas (resetear intentos)")
     def reintentar(self, request, queryset):
