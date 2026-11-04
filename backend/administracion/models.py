@@ -1,10 +1,42 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from accounts.permisos import MODULOS, ROL_SUPERADMIN
 from passwords.crypto import build_fernet
+
+
+# ─── Rango aceptable de la política de seguridad ─────────────────────────────
+# Los mínimos ya estaban desde la Tarea 9; los máximos entran porque un valor
+# grande es tan peligroso como un 0, y en un caso bastante peor:
+#
+# - `horas_de_bloqueo` por encima de unos 17,7 millones hace que el
+#   `attempt_time - cool_off` de axes (`axes/attempts.py`) lance
+#   `OverflowError`. No es `PermissionDenied`, así que no lo atrapa ni
+#   `authenticate()` ni el middleware de axes: **500 en cada intento de login,
+#   para todas las cuentas y también en `/admin/login/`**, y la recuperación por
+#   la web no sirve porque exige poder entrar.
+# - `sesion_minutos` enorme desborda el `http_date()` del
+#   `SessionMiddleware`: 500 en cada petición autenticada.
+# - `intentos_antes_de_bloquear` enorme es axes que nunca bloquea (fuerza bruta
+#   sin freno, con la pantalla diciendo que está configurado).
+# - `longitud_minima_password` enorme impide crear o resetear cualquier
+#   contraseña.
+#
+# Viven aquí y no en `administracion.seguridad` porque ese módulo importa este
+# (al revés sería un import circular). El resolvedor los **vuelve a aplicar al
+# leer**: un `queryset.update()` o un `UPDATE` por SQL se saltan los validadores
+# igual que se saltan `save()`, así que un tope que solo esté en el campo no
+# cierra nada.
+SESION_MINUTOS_MINIMO = 1
+SESION_MINUTOS_MAXIMO = 1440  # un día de inactividad
+INTENTOS_MINIMO = 1
+INTENTOS_MAXIMO = 100
+HORAS_DE_BLOQUEO_MINIMO = 0  # 0 = el bloqueo no caduca solo
+HORAS_DE_BLOQUEO_MAXIMO = 8760  # un año; tres órdenes de magnitud bajo el desborde
+LONGITUD_MINIMA_MINIMA = 8
+LONGITUD_MINIMA_MAXIMA = 64
 
 
 # Módulos sobre los que se conceden permisos. La auditoría añade "auth" porque
@@ -87,36 +119,62 @@ class ConfiguracionSistema(models.Model):
     # Se leen por `administracion.seguridad`, nunca directamente.
     sesion_minutos = models.PositiveIntegerField(
         default=30,
-        validators=[MinValueValidator(1)],
+        validators=[
+            MinValueValidator(SESION_MINUTOS_MINIMO),
+            MaxValueValidator(SESION_MINUTOS_MAXIMO),
+        ],
         verbose_name="Minutos de sesión",
-        help_text="Minutos de inactividad antes de cerrar la sesión. Mínimo 1.",
+        help_text=(
+            f"Minutos de inactividad antes de cerrar la sesión. "
+            f"Entre {SESION_MINUTOS_MINIMO} y {SESION_MINUTOS_MAXIMO} "
+            f"(un día): una sesión que no vence nunca es una sesión abierta en "
+            f"el equipo que alguien dejó encendido."
+        ),
     )
     intentos_antes_de_bloquear = models.PositiveIntegerField(
         default=5,
-        validators=[MinValueValidator(1)],
+        validators=[
+            MinValueValidator(INTENTOS_MINIMO),
+            MaxValueValidator(INTENTOS_MAXIMO),
+        ],
         verbose_name="Intentos antes de bloquear",
-        help_text="Intentos de acceso fallidos seguidos antes de bloquear la cuenta. Mínimo 1.",
+        help_text=(
+            f"Intentos de acceso fallidos seguidos antes de bloquear la cuenta. "
+            f"Entre {INTENTOS_MINIMO} y {INTENTOS_MAXIMO}: un número muy alto "
+            f"equivale a no bloquear nunca, con la pantalla diciendo lo contrario."
+        ),
     )
     horas_de_bloqueo = models.PositiveIntegerField(
         default=1,
-        validators=[MinValueValidator(0)],
+        validators=[
+            MinValueValidator(HORAS_DE_BLOQUEO_MINIMO),
+            MaxValueValidator(HORAS_DE_BLOQUEO_MAXIMO),
+        ],
         verbose_name="Horas de bloqueo",
         # NO decir «0 = sin bloqueo»: con 0 el bloqueo no caduca nunca y la
         # única salida es un comando en el servidor. Una etiqueta que lo
         # vendiera como «sin bloqueo» dejaría al administrador fuera de su
         # propio sistema sin saber cómo volver a entrar.
         help_text=(
-            "Horas que dura el bloqueo tras alcanzar el límite de intentos. "
-            "Con 0 el bloqueo NO caduca solo: la cuenta queda bloqueada hasta que "
-            "alguien lo levante en el servidor con «manage.py axes_reset» "
-            "(o axes_reset_username / axes_reset_ip_username para una sola cuenta)."
+            f"Horas que dura el bloqueo tras alcanzar el límite de intentos. "
+            f"Máximo {HORAS_DE_BLOQUEO_MAXIMO} (un año). "
+            f"Con 0 el bloqueo NO caduca solo: la cuenta queda bloqueada hasta que "
+            f"alguien lo levante en el servidor con «manage.py axes_reset» "
+            f"(o axes_reset_username / axes_reset_ip_username para una sola cuenta)."
         ),
     )
     longitud_minima_password = models.PositiveIntegerField(
         default=10,
-        validators=[MinValueValidator(8)],
+        validators=[
+            MinValueValidator(LONGITUD_MINIMA_MINIMA),
+            MaxValueValidator(LONGITUD_MINIMA_MAXIMA),
+        ],
         verbose_name="Longitud mínima de la contraseña",
-        help_text="Caracteres que debe tener como mínimo una contraseña nueva. Mínimo 8.",
+        help_text=(
+            f"Caracteres que debe tener como mínimo una contraseña nueva. "
+            f"Entre {LONGITUD_MINIMA_MINIMA} y {LONGITUD_MINIMA_MAXIMA}: por "
+            f"encima no se podría crear ni restablecer ninguna contraseña."
+        ),
     )
     # ─── Retención de datos ─────────────────────────────────────────────────
     # Los dos defaults reproducen los argumentos que el cron semanal pasaba a
@@ -152,6 +210,21 @@ class ConfiguracionSistema(models.Model):
 
     def __str__(self):
         return self.nombre_empresa
+
+    def save(self, *args, **kwargs):
+        # Como `Modulo.save()` y `Rol.save()`: la validación vive en el modelo y
+        # no solo en el formulario, así que también vale para un comando de
+        # gestión, un `obj.save()` desde el shell o una importación.
+        #
+        # Dos consecuencias que conviene tener presentes antes de quitarlo:
+        # - Valida la fila ENTERA, no los campos de la pantalla que guarda. Una
+        #   fila con un valor fuera de rango heredado haría fallar guardados de
+        #   pantallas que ni muestran ese campo, por eso la migración 0013 acota
+        #   lo que ya estuviera guardado.
+        # - NO es la red de seguridad del login: `queryset.update()` no pasa por
+        #   aquí. Esa es `administracion.seguridad`, que acota al leer.
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     @classmethod
     def get_config(cls):
