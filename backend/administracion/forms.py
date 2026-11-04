@@ -11,6 +11,17 @@ from .models import (
 
 CustomUser = get_user_model()
 
+# Largo mínimo de la contraseña SMTP. No es política de contraseñas —esa es
+# `ConfiguracionSistema.longitud_minima_password`, y aplica a las cuentas de la
+# aplicación, no a una credencial de un relé ajeno—: es lo que hace fiable el
+# tachado de `administracion.errores_correo`, que reemplaza por *substring*. Con
+# una credencial de tres letras, un error del servidor que las contuviera por
+# casualidad saldría con «(oculta)» en medio y el administrador perdería el
+# diagnóstico. Ocho caracteres hacen la coincidencia accidental inverosímil y
+# siguen por debajo de cualquier contraseña de aplicación real (las de
+# Microsoft 365 son de 16).
+LARGO_MINIMO_SMTP_PASSWORD = 8
+
 
 class ConfiguracionForm(forms.ModelForm):
     """Datos de la empresa y metadatos del acta.
@@ -61,7 +72,10 @@ class CorreoForm(forms.ModelForm):
             "class": "form-control",
             "autocomplete": "new-password",
         }),
-        help_text="Deja en blanco para conservar la contraseña actual.",
+        help_text=(
+            f"Deja en blanco para conservar la contraseña actual. "
+            f"Mínimo {LARGO_MINIMO_SMTP_PASSWORD} caracteres."
+        ),
     )
 
     class Meta:
@@ -101,6 +115,23 @@ class CorreoForm(forms.ModelForm):
         if not value:
             return 587
         return value
+
+    def clean_smtp_password(self):
+        """Vacío conserva la guardada; corta, se rechaza.
+
+        El vacío tiene que seguir siendo válido: es lo que hace que abrir la
+        pantalla y guardar otro campo no borre la credencial. El mínimo solo
+        aplica cuando de verdad se está escribiendo una contraseña nueva.
+        """
+        clave = self.cleaned_data.get("smtp_password") or ""
+        if clave and len(clave) < LARGO_MINIMO_SMTP_PASSWORD:
+            raise forms.ValidationError(
+                f"La contraseña del correo debe tener al menos "
+                f"{LARGO_MINIMO_SMTP_PASSWORD} caracteres. Una más corta hace "
+                f"que el texto de los errores del servidor se tache de más y se "
+                f"pierda el diagnóstico."
+            )
+        return clave
 
     def clean(self):
         """STARTTLS y SSL son excluyentes, y las dos casillas están juntas.

@@ -7,13 +7,19 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import OperationalError, ProgrammingError
+from django.db import InterfaceError, OperationalError, ProgrammingError
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.permisos import MODULOS, PERMISOS_POR_ROL, nivel_permiso
 from administracion.models import Modulo, PermisoRol, RegistroAuditoria, Rol
-from administracion.registro import invalidar_cache, modulos_activos, nivel_de, roles_choices
+from administracion.registro import (
+    catalogo_modulos,
+    invalidar_cache,
+    modulos_activos,
+    nivel_de,
+    roles_choices,
+)
 
 
 class ResolvedorPermisosTests(TestCase):
@@ -523,6 +529,76 @@ class MatrizSoloLecturaTests(TestCase):
         self.assertContains(
             resp, reverse("administracion:guardar_permiso", args=["tecnico", "documentos"])
         )
+
+
+class ErroresDeConexionDelRegistroTests(TestCase):
+    """``InterfaceError`` hereda de ``django.db.Error``, **no** de ``DatabaseError``.
+
+    Es el «connection already closed» de psycopg y solo muerde en PostgreSQL,
+    que es producción y no el entorno local. Aquí pesa más que en el login:
+    ``modulo_esta_activo()`` lo llama ``ModuloActivoMiddleware.process_view`` en
+    **cada** petición con namespace y ``catalogo_modulos()`` lo llama el
+    contexto del menú, así que un corte de conexión es un 500 en el tablero
+    entero, no solo al entrar.
+
+    Las cuatro lecturas tienen que caer al respaldo, que ya existía: lo único
+    que faltaba era que el ``except`` cubriera la rama correcta de la jerarquía.
+    """
+
+    CAIDA = "connection already closed"
+
+    def setUp(self):
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
+
+    def test_el_catalogo_de_modulos_activos_sobrevive(self):
+        with patch("administracion.registro.Modulo.objects") as objetos:
+            objetos.values_list.side_effect = InterfaceError(self.CAIDA)
+            with self.assertLogs("administracion.registro", level="WARNING"):
+                self.assertEqual(modulos_activos(), set(MODULOS))
+
+    def test_el_menu_sobrevive(self):
+        with patch("administracion.registro.Modulo.objects") as objetos:
+            objetos.order_by.return_value.values.side_effect = InterfaceError(self.CAIDA)
+            with self.assertLogs("administracion.registro", level="WARNING"):
+                self.assertEqual(catalogo_modulos(), [])
+
+    def test_la_matriz_de_permisos_sobrevive_y_cae_a_la_del_codigo(self):
+        with patch("administracion.registro.PermisoRol.objects") as objetos:
+            objetos.values_list.side_effect = InterfaceError(self.CAIDA)
+            with self.assertLogs("administracion.registro", level="WARNING"):
+                self.assertEqual(
+                    nivel_de("tecnico", "inventario"),
+                    PERMISOS_POR_ROL["tecnico"]["inventario"],
+                )
+
+    def test_los_choices_de_rol_sobreviven(self):
+        with patch("administracion.registro.Rol.objects") as objetos:
+            objetos.all.side_effect = InterfaceError(self.CAIDA)
+            claves = [c for c, _ in roles_choices()]
+        self.assertEqual(claves, ["superadmin", "admin", "tecnico", "lectura"])
+
+    def test_una_peticion_con_la_conexion_caida_no_da_500(self):
+        """La prueba que mide el efecto, y es el camino del middleware.
+
+        Se pide una ruta con ``app_name`` de módulo (``inventario``), no el
+        tablero: ``core`` está en ``APPS_SIEMPRE_ABIERTAS``, así que
+        ``process_view`` sale antes de consultar el catálogo y la prueba no
+        afirmaría nada.
+        """
+        usuario = get_user_model().objects.create_user(
+            username="registro_caida", password="clavelargadeseguridad",
+            rol="superadmin",
+        )
+        self.client.force_login(usuario)
+
+        with patch("administracion.registro.Modulo.objects") as objetos:
+            objetos.values_list.side_effect = InterfaceError(self.CAIDA)
+            objetos.order_by.return_value.values.side_effect = InterfaceError(self.CAIDA)
+            with self.assertLogs("administracion.registro", level="WARNING"):
+                resp = self.client.get(reverse("inventario:lista"))
+
+        self.assertEqual(resp.status_code, 200)
 
 
 class PuntoUnicoDeLecturaTests(TestCase):

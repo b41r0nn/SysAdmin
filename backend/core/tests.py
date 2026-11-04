@@ -12,7 +12,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.db import ProgrammingError
+from django.db import InterfaceError, ProgrammingError
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -96,6 +96,17 @@ class ModulosSembradosCheckTests(TestCase):
         """El chequeo corre también antes de ``migrate``: no puede tumbar manage.py."""
         with mock.patch("administracion.models.Modulo.objects") as objetos:
             objetos.values_list.side_effect = ProgrammingError("no existe la relacion")
+            self.assertEqual(self._run(), [])
+
+    def test_con_la_conexion_cerrada_tampoco_revienta(self):
+        """``InterfaceError`` hereda de ``django.db.Error``, no de ``DatabaseError``.
+
+        Es el «connection already closed» de psycopg, así que solo muerde en
+        PostgreSQL. Aquí tumbaría cualquier ``manage.py`` —incluido el
+        ``migrate`` de un despliegue— en vez de una petición.
+        """
+        with mock.patch("administracion.models.Modulo.objects") as objetos:
+            objetos.values_list.side_effect = InterfaceError("connection already closed")
             self.assertEqual(self._run(), [])
 
 

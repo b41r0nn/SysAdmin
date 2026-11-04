@@ -3,12 +3,22 @@
 ``invalidar_cache`` es el único invalidador de configuración del proyecto: toda
 clave de caché que dependa de la configuración editable se limpia aquí, para que
 quien cambie algo no tenga que acordarse de cuál borrar.
+
+Las cuatro lecturas caen a un respaldo de código cuando la base no responde, y
+capturan ``django.db.Error`` —la **base de la jerarquía**, no
+``DatabaseError``—. El ``InterfaceError`` de psycopg («connection already
+closed») hereda de ``Error`` y **no** de ``DatabaseError``, así que con el
+``except`` estrecho se escapaba, y aquí eso no es un fallo al entrar:
+``modulo_esta_activo()`` lo llama ``ModuloActivoMiddleware.process_view`` en
+**cada** petición con namespace y ``catalogo_modulos()`` lo llama el contexto
+del menú, de modo que un corte de conexión era un 500 en el tablero entero.
+Solo muerde en PostgreSQL, que es producción y no el entorno local.
 """
 
 import logging
 
 from django.core.cache import cache
-from django.db import DatabaseError
+from django.db import Error as ErrorDeBaseDeDatos
 
 from accounts.permisos import MODULOS, MODULOS_ESENCIALES, PERMISOS_POR_ROL
 
@@ -65,7 +75,7 @@ def modulos_activos():
         return activos
     try:
         filas = list(Modulo.objects.values_list("clave", "activo"))
-    except DatabaseError:
+    except ErrorDeBaseDeDatos:
         # Tabla inexistente o base caída: que el login no se caiga por esto. Pero
         # es un fallo abierto (reactiva los módulos que el administrador apagó),
         # así que no puede pasar en silencio.
@@ -122,7 +132,7 @@ def catalogo_modulos():
                 "clave", "nombre", "icono", "url_nombre", "activo"
             )
         )
-    except DatabaseError:
+    except ErrorDeBaseDeDatos:
         logger.warning(
             "No se pudo leer el catálogo de módulos; el menú queda sin módulos.",
             exc_info=True,
@@ -154,7 +164,7 @@ def _matriz_permisos():
         return matriz
     try:
         filas = list(PermisoRol.objects.values_list("rol__clave", "modulo", "nivel"))
-    except DatabaseError:
+    except ErrorDeBaseDeDatos:
         logger.warning(
             "No se pudo leer la matriz de permisos; se usa la del código.",
             exc_info=True,
@@ -196,7 +206,7 @@ def roles_choices():
         return opciones
     try:
         opciones = list(Rol.objects.all().values_list("clave", "nombre"))
-    except DatabaseError:
+    except ErrorDeBaseDeDatos:
         return _roles_de_respaldo()
     if not opciones:
         return _roles_de_respaldo()

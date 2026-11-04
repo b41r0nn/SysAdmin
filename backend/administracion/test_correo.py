@@ -603,6 +603,65 @@ class CredencialFueraDeLaColaTests(TestCase):
         self.assertIn("error", NotificacionEmailAdmin.readonly_fields)
 
 
+class LargoMinimoDeLaCredencialTests(TestCase):
+    """Una credencial muy corta hace que el tachado se coma el diagnóstico.
+
+    ``texto_de_error_smtp()`` reemplaza por *substring*: con una contraseña de
+    tres letras, cualquier error del servidor que las contuviera por casualidad
+    saldría con «(oculta)» en medio. No es una fuga —es ruido—, y la solución
+    está en el campo y no en relajar el tachado, que es lo único que mantiene la
+    credencial fuera de la base.
+    """
+
+    def setUp(self):
+        self.config = ConfiguracionSistema.get_config()
+        self.config.smtp_host = "smtp.office365.com"
+        self.config.smtp_usuario = "soporte@redihos.co"
+        self.config.save()
+
+    def _form(self, clave):
+        return CorreoForm(
+            _datos_correo(self.config, smtp_password=clave), instance=self.config,
+        )
+
+    def test_el_formulario_rechaza_una_contrasena_demasiado_corta(self):
+        from .forms import LARGO_MINIMO_SMTP_PASSWORD
+
+        form = self._form("abc")
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            str(LARGO_MINIMO_SMTP_PASSWORD), " ".join(form.errors["smtp_password"]),
+        )
+        self.assertEqual(ConfiguracionSistema.get_config().get_smtp_password(), "")
+
+    def test_una_contrasena_justo_en_el_minimo_se_acepta(self):
+        """Contraprueba: el mínimo es el primer valor válido."""
+        from .forms import LARGO_MINIMO_SMTP_PASSWORD
+
+        clave = "a" * LARGO_MINIMO_SMTP_PASSWORD
+        form = self._form(clave)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.assertEqual(ConfiguracionSistema.get_config().get_smtp_password(), clave)
+
+    def test_la_casilla_vacia_sigue_conservando_la_guardada(self):
+        """Contraprueba: el mínimo no puede convertir «vacío» en un error.
+
+        Vacío significa «no la cambies», y es lo que hace que abrir la pantalla
+        y guardar otro campo no borre la credencial.
+        """
+        self.config.set_smtp_password(SECRETO)
+        self.config.save()
+
+        form = self._form("")
+
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.assertEqual(ConfiguracionSistema.get_config().get_smtp_password(), SECRETO)
+
+
 class TlsYSslExcluyentesTests(TestCase):
     """Las dos casillas juntas son alcanzables desde la pantalla."""
 
