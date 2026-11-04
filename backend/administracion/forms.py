@@ -7,6 +7,47 @@ CustomUser = get_user_model()
 
 
 class ConfiguracionForm(forms.ModelForm):
+    """Datos de la empresa y metadatos del acta.
+
+    Los campos del correo SMTP **no** están aquí: viven en ``CorreoForm``, que es
+    la única pantalla que escribe la credencial y la única que audita el cambio.
+    Tenerlos en dos formularios dejaba una mitad auditada y la otra no.
+    """
+
+    class Meta:
+        model = ConfiguracionSistema
+        fields = [
+            "nombre_empresa",
+            "nit",
+            "direccion",
+            "telefono",
+            "email_contacto",
+            "pie_firma_reporte",
+            "acta_mant_codigo",
+            "acta_mant_version",
+        ]
+        widgets = {
+            "nombre_empresa": forms.TextInput(attrs={"class": "form-control"}),
+            "nit": forms.TextInput(attrs={"class": "form-control"}),
+            "direccion": forms.TextInput(attrs={"class": "form-control"}),
+            "telefono": forms.TextInput(attrs={"class": "form-control"}),
+            "email_contacto": forms.EmailInput(attrs={"class": "form-control"}),
+            "pie_firma_reporte": forms.TextInput(attrs={"class": "form-control"}),
+            "acta_mant_codigo": forms.TextInput(attrs={"class": "form-control", "placeholder": "FT-TI-002"}),
+            "acta_mant_version": forms.TextInput(attrs={"class": "form-control", "placeholder": "01"}),
+        }
+
+
+class CorreoForm(forms.ModelForm):
+    """Servidor SMTP, usuario, contraseña cifrada y remitente.
+
+    ``smtp_password`` se declara aparte porque el modelo solo guarda la versión
+    cifrada (``smtp_password_cifrado``): el formulario recibe el texto en claro,
+    lo pasa a ``set_smtp_password()`` y nunca lo devuelve al navegador. Dejarla
+    en blanco conserva la que ya estaba guardada, así que abrir la pantalla y
+    guardar cualquier otro campo no borra la credencial.
+    """
+
     smtp_password = forms.CharField(
         label="Contraseña SMTP",
         required=False,
@@ -20,27 +61,14 @@ class ConfiguracionForm(forms.ModelForm):
     class Meta:
         model = ConfiguracionSistema
         fields = [
-            "nombre_empresa",
-            "nit",
-            "direccion",
-            "telefono",
-            "email_contacto",
-            "pie_firma_reporte",
             "smtp_host",
             "smtp_puerto",
             "smtp_usuario",
+            "correo_remitente",
             "smtp_usa_tls",
             "smtp_usa_ssl",
-            "acta_mant_codigo",
-            "acta_mant_version",
         ]
         widgets = {
-            "nombre_empresa": forms.TextInput(attrs={"class": "form-control"}),
-            "nit": forms.TextInput(attrs={"class": "form-control"}),
-            "direccion": forms.TextInput(attrs={"class": "form-control"}),
-            "telefono": forms.TextInput(attrs={"class": "form-control"}),
-            "email_contacto": forms.EmailInput(attrs={"class": "form-control"}),
-            "pie_firma_reporte": forms.TextInput(attrs={"class": "form-control"}),
             "smtp_host": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "smtp.office365.com",
@@ -50,10 +78,12 @@ class ConfiguracionForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "soporte@redihos.co",
             }),
+            "correo_remitente": forms.EmailInput(attrs={
+                "class": "form-control",
+                "placeholder": "soporte@redihos.co",
+            }),
             "smtp_usa_tls": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "smtp_usa_ssl": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "acta_mant_codigo": forms.TextInput(attrs={"class": "form-control", "placeholder": "FT-TI-002"}),
-            "acta_mant_version": forms.TextInput(attrs={"class": "form-control", "placeholder": "01"}),
         }
 
     def __init__(self, *args, **kwargs):

@@ -68,6 +68,14 @@ class ConfiguracionSistema(models.Model):
     smtp_password_cifrado = models.TextField(blank=True, verbose_name="Contraseña SMTP")
     smtp_usa_tls = models.BooleanField(default=True, verbose_name="Usar STARTTLS")
     smtp_usa_ssl = models.BooleanField(default=False, verbose_name="Usar SSL")
+    correo_remitente = models.EmailField(
+        blank=True,
+        verbose_name="Remitente",
+        help_text=(
+            "Dirección que verán los destinatarios en el campo «De». "
+            "Déjala vacía para usar el usuario SMTP."
+        ),
+    )
     # Encabezado y pie del acta de mantenimiento; vacíos, el acta muestra "—".
     acta_mant_codigo = models.CharField("Código del acta de mantenimiento", max_length=30, blank=True)
     acta_mant_version = models.CharField("Versión del acta de mantenimiento", max_length=10, blank=True)
@@ -133,6 +141,17 @@ class ConfiguracionSistema(models.Model):
         if not self.smtp_password_cifrado:
             return ""
         return build_fernet().decrypt(self.smtp_password_cifrado.encode()).decode()
+
+    def remitente_efectivo(self):
+        """Dirección que va en el «De» de los correos que manda el sistema.
+
+        Casi siempre el remitente y el usuario SMTP son la misma dirección, así
+        que el campo se deja vacío y se usa el usuario. Se separan cuando el
+        buzón que autentica no es el que se quiere mostrar (un usuario de
+        servicio enviando como «avisos@…», con el permiso «enviar como» dado en
+        el servidor de correo).
+        """
+        return self.correo_remitente or self.smtp_usuario
 
 
 class Modulo(models.Model):
