@@ -1,11 +1,18 @@
+"""Pruebas de ``auditar_cambios`` sobre el formulario de Empresa.
+
+Las tres pruebas del campo secreto (``smtp_password``) **no** están aquí: se
+mudaron a ``test_correo.py`` junto con los campos SMTP, que salieron de
+``ConfiguracionForm``. La tercera de ellas tenía solo aserciones negativas y
+habría pasado en falso verde al quedarse sin el campo que vigilaba, así que allí
+lleva además una aserción positiva.
+"""
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from .auditoria import auditar_cambios
 from .forms import ConfiguracionForm
 from .models import ConfiguracionSistema, RegistroAuditoria
-
-SECRETO = "Sup3rS3cr3ta!"
 
 
 def _datos(config, **cambios):
@@ -16,16 +23,9 @@ def _datos(config, **cambios):
         "telefono": config.telefono,
         "email_contacto": config.email_contacto,
         "pie_firma_reporte": config.pie_firma_reporte,
-        "smtp_host": config.smtp_host,
-        "smtp_puerto": config.smtp_puerto,
-        "smtp_usuario": config.smtp_usuario,
         "acta_mant_codigo": config.acta_mant_codigo,
         "acta_mant_version": config.acta_mant_version,
     }
-    if config.smtp_usa_tls:
-        datos["smtp_usa_tls"] = "on"
-    if config.smtp_usa_ssl:
-        datos["smtp_usa_ssl"] = "on"
     datos.update(cambios)
     return datos
 
@@ -71,30 +71,3 @@ class AuditarCambiosTests(TestCase):
         detalle = RegistroAuditoria.objects.get().detalle
         self.assertIn("x" * 100, detalle)
         self.assertNotIn("x" * 101, detalle)
-
-    def test_un_campo_declarado_secreto_se_registra_sin_su_valor(self):
-        form = self._form(smtp_password=SECRETO)
-        self.assertEqual(auditar_cambios(self.user, form, secretos=("smtp_password",)), 1)
-        detalles = " ".join(RegistroAuditoria.objects.values_list("detalle", flat=True))
-        self.assertNotIn(SECRETO, detalles)
-        self.assertIn("(cambiada)", detalles)
-        self.assertIn("Contraseña SMTP", detalles)
-
-    def test_ningun_registro_de_auditoria_contiene_el_secreto_en_claro(self):
-        form = self._form(smtp_password=SECRETO, telefono="333")
-        auditar_cambios(self.user, form, secretos=("smtp_password",), ip="10.0.0.1")
-        self.assertEqual(RegistroAuditoria.objects.count(), 2)
-        for registro in RegistroAuditoria.objects.all():
-            for campo in registro._meta.get_fields():
-                if not getattr(campo, "concrete", False) or campo.is_relation:
-                    continue
-                self.assertNotIn(SECRETO, str(getattr(registro, campo.name)), campo.name)
-
-    def test_el_secreto_anterior_tampoco_entra_en_el_texto(self):
-        self.config.set_smtp_password(SECRETO)
-        self.config.save()
-        form = self._form(smtp_password="Otra#Clave9")
-        auditar_cambios(self.user, form, secretos=("smtp_password",))
-        detalles = " ".join(RegistroAuditoria.objects.values_list("detalle", flat=True))
-        self.assertNotIn(SECRETO, detalles)
-        self.assertNotIn("Otra#Clave9", detalles)

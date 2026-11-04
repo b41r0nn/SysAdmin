@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Correo — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'administracion:inicio' %}" class="text-decoration-none">Configuración</a></li>
+    <li class="breadcrumb-item active">Correo</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-8">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-envelope"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Correo</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Servidor SMTP, remitente y cola de envíos.
+          </p>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Servidor SMTP</legend>
+          <p class="text-muted mb-3" style="font-size:.8rem;">
+            Lo usa la cola de notificaciones por correo. Compatible con
+            Microsoft 365 (Office 365) vía STARTTLS en el puerto 587.
+          </p>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.smtp_host.id_for_label }}">Servidor</label>
+              {{ form.smtp_host }}
+              {% if form.smtp_host.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_host.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-semibold" for="{{ form.smtp_puerto.id_for_label }}">Puerto</label>
+              {{ form.smtp_puerto }}
+              <div class="form-text">Vacío = 587.</div>
+              {% if form.smtp_puerto.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_puerto.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label fw-semibold" for="{{ form.smtp_usuario.id_for_label }}">Usuario</label>
+              {{ form.smtp_usuario }}
+              {% if form.smtp_usuario.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_usuario.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.smtp_password.id_for_label }}">
+                {{ form.smtp_password.label }}
+              </label>
+              {{ form.smtp_password }}
+              <div class="form-text">{{ form.smtp_password.help_text }}</div>
+              {% if form.smtp_password.errors %}
+                <div class="invalid-feedback d-block">{{ form.smtp_password.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.correo_remitente.id_for_label }}">
+                {{ form.correo_remitente.label }}
+              </label>
+              {{ form.correo_remitente }}
+              <div class="form-text">{{ form.correo_remitente.help_text }}</div>
+              {% if form.correo_remitente.errors %}
+                <div class="invalid-feedback d-block">{{ form.correo_remitente.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <div class="d-flex gap-4 flex-wrap">
+                <div class="form-check">
+                  {{ form.smtp_usa_tls }}
+                  <label class="form-check-label" for="{{ form.smtp_usa_tls.id_for_label }}">
+                    Usar STARTTLS
+                  </label>
+                </div>
+                <div class="form-check">
+                  {{ form.smtp_usa_ssl }}
+                  <label class="form-check-label" for="{{ form.smtp_usa_ssl.id_for_label }}">
+                    Usar SSL (puerto 465)
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3 mt-4"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'administracion:inicio' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2-circle me-2"></i>Guardar cambios
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="sa-card p-4 mt-4">
+      <h6 class="fw-bold mb-1">Probar el envío</h6>
+      <p class="text-muted mb-3" style="font-size:.8rem;">
+        Manda un correo real con la configuración guardada arriba. No entra en la
+        cola: se envía en el momento y el servidor contesta aquí mismo.
+      </p>
+      <form method="post" action="{% url 'administracion:probar_correo' %}" class="row g-2 align-items-end" novalidate>
+        {% csrf_token %}
+        <div class="col-12 col-md-7">
+          <label class="form-label fw-semibold" for="destino">Enviar a</label>
+          <input type="email" class="form-control" id="destino" name="destino"
+                 placeholder="tu.correo@redihos.co"
+                 value="{{ config.email_contacto }}" required>
+        </div>
+        <div class="col-12 col-md-5">
+          <button type="submit" class="btn btn-outline-primary w-100">
+            <i class="bi bi-send me-2"></i>Enviar correo de prueba
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="sa-card p-4 mt-4">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div>
+          <h6 class="fw-bold mb-1">Cola de correo</h6>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Los avisos por correo se encolan y los manda la tarea programada.
+            Un correo que agota los {{ max_intentos }} intentos queda fuera de la
+            cola hasta que se reintente a mano.
+          </p>
+        </div>
+        <form method="post" action="{% url 'administracion:reintentar_correos' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-secondary btn-sm"
+                  {% if not pendientes and not fallidos %}disabled{% endif %}>
+            <i class="bi bi-arrow-repeat me-1"></i>Reintentar los no enviados
+          </button>
+        </form>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-4">
+          <div class="border rounded p-3 text-center">
+            <div class="fw-bold fs-4">{{ pendientes }}</div>
+            <div class="text-muted" style="font-size:.78rem;">Pendientes</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="border rounded p-3 text-center {% if fallidos %}text-warning{% endif %}">
+            <div class="fw-bold fs-4">{{ fallidos }}</div>
+            <div class="text-muted" style="font-size:.78rem;">Fallidos</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="border rounded p-3 text-center">
+            <div class="fw-bold fs-4">{{ enviados }}</div>
+            <div class="text-muted" style="font-size:.78rem;">Enviados</div>
+          </div>
+        </div>
+      </div>
+
+      {% if ultimos %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Destinatario</th>
+                <th>Asunto</th>
+                <th class="text-center">Intentos</th>
+                <th>Último error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for correo in ultimos %}
+                <tr>
+                  <td>{{ correo.destinatario }}</td>
+                  <td>{{ correo.asunto }}</td>
+                  <td class="text-center">{{ correo.intentos }}</td>
+                  <td class="text-muted" style="font-size:.78rem;">{{ correo.error|truncatechars:80|default:"—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0" style="font-size:.85rem;">No hay correos sin enviar.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

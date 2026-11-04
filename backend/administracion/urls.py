@@ -18,6 +18,8 @@ urlpatterns = [
     path("roles/", views.roles, name="roles"),
     path("roles/<str:rol>/<str:modulo>/", views.guardar_permiso, name="guardar_permiso"),
     path("correo/", views.correo, name="correo"),
+    path("correo/probar/", views.probar_correo, name="probar_correo"),
+    path("correo/reintentar/", views.reintentar_correos, name="reintentar_correos"),
     path("seguridad/", views.seguridad, name="seguridad"),
     path("datos/", views.datos, name="datos"),
 ]

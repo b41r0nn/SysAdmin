@@ -1,5 +1,5 @@
 from .auditoria import lista_auditoria  # noqa: F401
-from .correo import correo  # noqa: F401
+from .correo import correo, probar_correo, reintentar_correos  # noqa: F401
 from .cuentas import (  # noqa: F401
     cambiar_rol_cuenta,
     crear_cuenta,

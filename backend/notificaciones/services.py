@@ -232,6 +232,13 @@ def generar_notificaciones(user):
 
 # ── Cola de emails (patrón GLPI: cola + cron) ────────────────────────────────
 
+# Intentos tras los cuales un correo se da por fallido y la cola lo deja de
+# tomar. Es una constante y no un 5 repetido porque la pantalla de Correo cuenta
+# los fallidos con este mismo número y su botón de reintentar los devuelve a 0:
+# si los dos lados no dijeran lo mismo, la pantalla mostraría una cola distinta
+# de la que el cron despacha.
+MAX_INTENTOS_EMAIL = 5
+
 
 def encolar_email(destinatario_email, asunto, cuerpo, adjunto_tipo="", adjunto_objeto_id=None):
     """Encola un email. Sin destinatario → sin acción, no es error.
@@ -262,6 +269,12 @@ def _get_smtp_connection():
         password=config.get_smtp_password(),
         use_tls=config.smtp_usa_tls,
         use_ssl=config.smtp_usa_ssl,
+        # Sin timeout, un host SMTP inalcanzable cuelga a quien abra la conexión
+        # hasta que el sistema operativo corte. Desde el cron solo retrasa una
+        # corrida, pero la pantalla de Correo llama aquí desde una petición web:
+        # sin esto se queda un worker de gunicorn ocupado hasta el
+        # GUNICORN_TIMEOUT.
+        timeout=10,
     )
 
 
@@ -289,7 +302,7 @@ def procesar_cola_email():
         return 0, 0, 0, 0  # sin config SMTP → no es error
 
     pending = NotificacionEmail.objects.filter(
-        enviado=False, intentos__lt=5
+        enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
     ).order_by("fecha_creacion")
     total = pending.count()
 
@@ -300,7 +313,9 @@ def procesar_cola_email():
         except Exception as exc:
             error = str(exc)[:2000]
             marcadas = pending.update(intentos=F("intentos") + 1, error=error)
-            quedan = NotificacionEmail.objects.filter(enviado=False, intentos__lt=5).count()
+            quedan = NotificacionEmail.objects.filter(
+                enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
+            ).count()
             return total, 0, marcadas, quedan
 
         enviados = 0
@@ -315,6 +330,10 @@ def procesar_cola_email():
                 mensaje = EmailMessage(
                     subject=correo.asunto,
                     body=correo.cuerpo,
+                    # Sin remitente explícito el From sería el
+                    # DEFAULT_FROM_EMAIL de Django («webmaster@localhost»), que
+                    # ningún relé corporativo acepta. Vacío cae al usuario SMTP.
+                    from_email=config.remitente_efectivo(),
                     to=[correo.destinatario],
                     attachments=adjuntos,
                     connection=connection,
@@ -337,4 +356,6 @@ def procesar_cola_email():
         except Exception:
             pass
 
-    return total, enviados, fallos, NotificacionEmail.objects.filter(enviado=False, intentos__lt=5).count()
+    return total, enviados, fallos, NotificacionEmail.objects.filter(
+        enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
+    ).count()
