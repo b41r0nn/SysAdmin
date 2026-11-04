@@ -22,4 +22,5 @@ urlpatterns = [
     path("correo/reintentar/", views.reintentar_correos, name="reintentar_correos"),
     path("seguridad/", views.seguridad, name="seguridad"),
     path("datos/", views.datos, name="datos"),
+    path("datos/simular/", views.simular_limpieza, name="simular_limpieza"),
 ]

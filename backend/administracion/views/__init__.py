@@ -7,7 +7,7 @@ from .cuentas import (  # noqa: F401
     resetear_password,
     toggle_cuenta,
 )
-from .datos import datos  # noqa: F401
+from .datos import datos, simular_limpieza  # noqa: F401
 from .general import configuracion  # noqa: F401
 from .inicio import inicio  # noqa: F401
 from .modulos import modulos, toggle_modulo  # noqa: F401

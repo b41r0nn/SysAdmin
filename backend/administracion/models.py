@@ -118,6 +118,32 @@ class ConfiguracionSistema(models.Model):
         verbose_name="Longitud mínima de la contraseña",
         help_text="Caracteres que debe tener como mínimo una contraseña nueva. Mínimo 8.",
     )
+    # ─── Retención de datos ─────────────────────────────────────────────────
+    # Los dos defaults reproducen los argumentos que el cron semanal pasaba a
+    # mano (`limpiar_historial --dias 365 --media-dias 30`): mover el valor a la
+    # base de datos no puede cambiar lo que una instalación ya venía borrando.
+    # Los lee `core.management.commands.limpiar_historial`, que mantiene los
+    # mismos números como respaldo si la base no responde.
+    retencion_dias = models.PositiveIntegerField(
+        default=365,
+        validators=[MinValueValidator(30)],
+        verbose_name="Días de historial que se conservan",
+        help_text=(
+            "La limpieza semanal borra la auditoría, los registros de acceso y "
+            "las notificaciones anteriores a esta cantidad de días. Mínimo 30. "
+            "Lo que se borra NO se puede recuperar."
+        ),
+    )
+    retencion_media_dias = models.PositiveIntegerField(
+        default=30,
+        validators=[MinValueValidator(7)],
+        verbose_name="Días que se conservan los archivos huérfanos",
+        help_text=(
+            "Un archivo subido que ya no está referenciado por ningún activo, "
+            "movimiento ni acta se borra del disco cuando pasa de esta edad. "
+            "Mínimo 7."
+        ),
+    )
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
     class Meta:
