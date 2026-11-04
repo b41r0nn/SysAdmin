@@ -4,7 +4,7 @@ Lo que antes estaba fijo en los settings —el límite de intentos de axes, la
 duración del bloqueo, la longitud mínima de la contraseña y el vencimiento de
 la sesión— se lee aquí de ``ConfiguracionSistema``.
 
-Dos reglas gobiernan este módulo y no son de estilo:
+Tres reglas gobiernan este módulo y no son de estilo:
 
 1. **Se lee en vivo, sin caché.** Cuesta una consulta por petición autenticada
    y es un coste asumido: ``SESSION_SAVE_EVERY_REQUEST`` ya escribe la sesión
@@ -15,8 +15,20 @@ Dos reglas gobiernan este módulo y no son de estilo:
 2. **Ninguna lectura puede tumbar el login.** ``get_config()`` es un
    ``get_or_create``: escribe, y revienta si la tabla todavía no existe (base
    nueva, ``migrate`` a medias). Cada lectura va envuelta en
-   ``try/except DatabaseError`` y cae a un valor de respaldo, porque un candado
-   sin llave es peor que un candado flojo.
+   ``try/except`` de ``django.db.Error`` —la base de la jerarquía, no
+   ``DatabaseError``: el ``InterfaceError`` de psycopg («connection already
+   closed») hereda de ``Error`` y **no** de ``DatabaseError``, y solo muerde en
+   PostgreSQL, que es producción— y cae a un valor de respaldo, porque un
+   candado sin llave es peor que un candado flojo.
+
+3. **El resolvedor no se fía de la columna.** Cada valor se acota al rango
+   aceptable *al leerlo* (``_acotado()``). Los validadores del campo no bastan:
+   un ``queryset.update()`` o un ``UPDATE`` por SQL se los saltan igual que se
+   saltan ``save()``, y un ``horas_de_bloqueo`` desbordante deja el login en 500
+   para todo el mundo —``/admin/login/`` incluido— sin ninguna vuelta por la
+   web. Es el mismo principio que ``accounts.permisos.modulos_activos()`` con
+   ``MODULOS_ESENCIALES`` y que ``nivel_permiso`` con el superadministrador: la
+   decisión sale de una constante de código, no del dato.
 """
 
 import logging
@@ -24,9 +36,19 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.password_validation import MinimumLengthValidator
-from django.db import DatabaseError
+from django.db import Error as ErrorDeBaseDeDatos
 
-from .models import ConfiguracionSistema
+from .models import (
+    HORAS_DE_BLOQUEO_MAXIMO,
+    HORAS_DE_BLOQUEO_MINIMO,
+    INTENTOS_MAXIMO,
+    INTENTOS_MINIMO,
+    LONGITUD_MINIMA_MAXIMA,
+    LONGITUD_MINIMA_MINIMA,
+    SESION_MINUTOS_MAXIMO,
+    SESION_MINUTOS_MINIMO,
+    ConfiguracionSistema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +71,36 @@ HORAS_DE_BLOQUEO_POR_DEFECTO = 1
 BLOQUEO_SIN_CADUCIDAD = timedelta(days=365 * 100)
 
 
+def _acotado(valor, minimo, maximo, etiqueta):
+    """Acota al rango ``[minimo, maximo]`` un número que viene de la base.
+
+    Es la capa que de verdad cierra el agujero del C1 y no se puede sustituir
+    por los validadores del campo: ``queryset.update()`` y un ``UPDATE`` por SQL
+    no corren ``save()`` ni ``full_clean()``, así que la fila puede contener
+    cualquier entero positivo. Si se saliera del rango, se usa el tope más
+    cercano y **queda traza en el log**, igual que ya hace este módulo cuando la
+    base no responde: un valor silenciosamente distinto del guardado sería peor
+    que el agujero.
+
+    El ``None`` se trata aparte porque las columnas son ``NOT NULL`` hoy, pero
+    un ``None`` llegando aquí daría un ``TypeError`` en la comparación, es decir
+    el mismo 500 que se está evitando.
+    """
+    if valor is None or valor < minimo:
+        logger.warning(
+            "%s guardado fuera de rango (%r); se usa el mínimo de %s.",
+            etiqueta, valor, minimo,
+        )
+        return minimo
+    if valor > maximo:
+        logger.warning(
+            "%s guardado fuera de rango (%r); se usa el máximo de %s.",
+            etiqueta, valor, maximo,
+        )
+        return maximo
+    return valor
+
+
 def limite_de_intentos(request=None, credentials=None):
     """Intentos fallidos que axes tolera antes de bloquear.
 
@@ -57,13 +109,14 @@ def limite_de_intentos(request=None, credentials=None):
     (``axes/helpers.py:446-455``).
     """
     try:
-        return ConfiguracionSistema.get_config().intentos_antes_de_bloquear
-    except DatabaseError:
+        guardado = ConfiguracionSistema.get_config().intentos_antes_de_bloquear
+    except ErrorDeBaseDeDatos:
         logger.warning(
             "No se pudo leer el límite de intentos de la configuración; "
             "se usa el respaldo de %s.", INTENTOS_POR_DEFECTO,
         )
         return INTENTOS_POR_DEFECTO
+    return _acotado(guardado, INTENTOS_MINIMO, INTENTOS_MAXIMO, "El límite de intentos")
 
 
 def tiempo_de_bloqueo(request=None):
@@ -74,15 +127,23 @@ def tiempo_de_bloqueo(request=None):
 
     Nunca devuelve ``None``, aunque sea lo que axes documenta como «sin bloqueo
     temporal»: ver ``BLOQUEO_SIN_CADUCIDAD``.
+
+    Y nunca devuelve un ``timedelta`` que desborde: axes lo resta de una fecha
+    (``axes/attempts.py``), y un ``OverflowError`` ahí es un 500 en cada intento
+    de login, para todo el mundo.
     """
     try:
-        horas = ConfiguracionSistema.get_config().horas_de_bloqueo
-    except DatabaseError:
+        guardado = ConfiguracionSistema.get_config().horas_de_bloqueo
+    except ErrorDeBaseDeDatos:
         logger.warning(
             "No se pudieron leer las horas de bloqueo de la configuración; "
             "se usa el respaldo de %s.", HORAS_DE_BLOQUEO_POR_DEFECTO,
         )
-        horas = HORAS_DE_BLOQUEO_POR_DEFECTO
+        guardado = HORAS_DE_BLOQUEO_POR_DEFECTO
+    horas = _acotado(
+        guardado, HORAS_DE_BLOQUEO_MINIMO, HORAS_DE_BLOQUEO_MAXIMO,
+        "Las horas de bloqueo",
+    )
     if not horas:
         return BLOQUEO_SIN_CADUCIDAD
     return timedelta(hours=horas)
@@ -91,14 +152,18 @@ def tiempo_de_bloqueo(request=None):
 def minutos_de_sesion():
     """Minutos de inactividad antes de cerrar la sesión."""
     try:
-        return ConfiguracionSistema.get_config().sesion_minutos
-    except DatabaseError:
+        guardado = ConfiguracionSistema.get_config().sesion_minutos
+    except ErrorDeBaseDeDatos:
         respaldo = settings.SESSION_COOKIE_AGE // 60
         logger.warning(
             "No se pudieron leer los minutos de sesión de la configuración; "
             "se usa el respaldo de %s.", respaldo,
         )
         return respaldo
+    return _acotado(
+        guardado, SESION_MINUTOS_MINIMO, SESION_MINUTOS_MAXIMO,
+        "Los minutos de sesión",
+    )
 
 
 class LongitudMinimaConfigurable(MinimumLengthValidator):
@@ -115,13 +180,17 @@ class LongitudMinimaConfigurable(MinimumLengthValidator):
 
     def longitud_minima(self):
         try:
-            return ConfiguracionSistema.get_config().longitud_minima_password
-        except DatabaseError:
+            guardado = ConfiguracionSistema.get_config().longitud_minima_password
+        except ErrorDeBaseDeDatos:
             logger.warning(
                 "No se pudo leer la longitud mínima de contraseña de la "
                 "configuración; se usa el respaldo de %s.", self.min_length,
             )
             return self.min_length
+        return _acotado(
+            guardado, LONGITUD_MINIMA_MINIMA, LONGITUD_MINIMA_MAXIMA,
+            "La longitud mínima de la contraseña",
+        )
 
     def validate(self, password, user=None):
         # Se delega en una instancia nueva en vez de reasignar self.min_length:
