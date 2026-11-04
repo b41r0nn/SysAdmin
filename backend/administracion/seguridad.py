@@ -22,7 +22,8 @@ Tres reglas gobiernan este módulo y no son de estilo:
    candado sin llave es peor que un candado flojo.
 
 3. **El resolvedor no se fía de la columna.** Cada valor se acota al rango
-   aceptable *al leerlo* (``_acotado()``). Los validadores del campo no bastan:
+   aceptable *al leerlo* (``core.utils.acotado()``, compartido con el comando de
+   limpieza, que tiene el mismo problema). Los validadores del campo no bastan:
    un ``queryset.update()`` o un ``UPDATE`` por SQL se los saltan igual que se
    saltan ``save()``, y un ``horas_de_bloqueo`` desbordante deja el login en 500
    para todo el mundo —``/admin/login/`` incluido— sin ninguna vuelta por la
@@ -37,6 +38,8 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth.password_validation import MinimumLengthValidator
 from django.db import Error as ErrorDeBaseDeDatos
+
+from core.utils import acotado
 
 from .models import (
     HORAS_DE_BLOQUEO_MAXIMO,
@@ -71,36 +74,6 @@ HORAS_DE_BLOQUEO_POR_DEFECTO = 1
 BLOQUEO_SIN_CADUCIDAD = timedelta(days=365 * 100)
 
 
-def _acotado(valor, minimo, maximo, etiqueta):
-    """Acota al rango ``[minimo, maximo]`` un número que viene de la base.
-
-    Es la capa que de verdad cierra el agujero del C1 y no se puede sustituir
-    por los validadores del campo: ``queryset.update()`` y un ``UPDATE`` por SQL
-    no corren ``save()`` ni ``full_clean()``, así que la fila puede contener
-    cualquier entero positivo. Si se saliera del rango, se usa el tope más
-    cercano y **queda traza en el log**, igual que ya hace este módulo cuando la
-    base no responde: un valor silenciosamente distinto del guardado sería peor
-    que el agujero.
-
-    El ``None`` se trata aparte porque las columnas son ``NOT NULL`` hoy, pero
-    un ``None`` llegando aquí daría un ``TypeError`` en la comparación, es decir
-    el mismo 500 que se está evitando.
-    """
-    if valor is None or valor < minimo:
-        logger.warning(
-            "%s guardado fuera de rango (%r); se usa el mínimo de %s.",
-            etiqueta, valor, minimo,
-        )
-        return minimo
-    if valor > maximo:
-        logger.warning(
-            "%s guardado fuera de rango (%r); se usa el máximo de %s.",
-            etiqueta, valor, maximo,
-        )
-        return maximo
-    return valor
-
-
 def limite_de_intentos(request=None, credentials=None):
     """Intentos fallidos que axes tolera antes de bloquear.
 
@@ -116,7 +89,10 @@ def limite_de_intentos(request=None, credentials=None):
             "se usa el respaldo de %s.", INTENTOS_POR_DEFECTO,
         )
         return INTENTOS_POR_DEFECTO
-    return _acotado(guardado, INTENTOS_MINIMO, INTENTOS_MAXIMO, "El límite de intentos")
+    return acotado(
+        guardado, INTENTOS_MINIMO, INTENTOS_MAXIMO,
+        "el límite de intentos", logger.warning,
+    )
 
 
 def tiempo_de_bloqueo(request=None):
@@ -140,9 +116,9 @@ def tiempo_de_bloqueo(request=None):
             "se usa el respaldo de %s.", HORAS_DE_BLOQUEO_POR_DEFECTO,
         )
         guardado = HORAS_DE_BLOQUEO_POR_DEFECTO
-    horas = _acotado(
+    horas = acotado(
         guardado, HORAS_DE_BLOQUEO_MINIMO, HORAS_DE_BLOQUEO_MAXIMO,
-        "Las horas de bloqueo",
+        "las horas de bloqueo", logger.warning,
     )
     if not horas:
         return BLOQUEO_SIN_CADUCIDAD
@@ -160,9 +136,9 @@ def minutos_de_sesion():
             "se usa el respaldo de %s.", respaldo,
         )
         return respaldo
-    return _acotado(
+    return acotado(
         guardado, SESION_MINUTOS_MINIMO, SESION_MINUTOS_MAXIMO,
-        "Los minutos de sesión",
+        "los minutos de sesión", logger.warning,
     )
 
 
@@ -187,9 +163,9 @@ class LongitudMinimaConfigurable(MinimumLengthValidator):
                 "configuración; se usa el respaldo de %s.", self.min_length,
             )
             return self.min_length
-        return _acotado(
+        return acotado(
             guardado, LONGITUD_MINIMA_MINIMA, LONGITUD_MINIMA_MAXIMA,
-            "La longitud mínima de la contraseña",
+            "la longitud mínima de la contraseña", logger.warning,
         )
 
     def validate(self, password, user=None):

@@ -36,7 +36,19 @@ from core.management.commands.limpiar_historial import (
     RETENCION_MEDIA_DIAS_POR_DEFECTO,
 )
 
-from .models import ConfiguracionSistema, RegistroAuditoria
+from .models import (
+    RETENCION_DIAS_MAXIMO,
+    RETENCION_DIAS_MINIMO,
+    RETENCION_MEDIA_DIAS_MAXIMO,
+    RETENCION_MEDIA_DIAS_MINIMO,
+    ConfiguracionSistema,
+    RegistroAuditoria,
+)
+
+# El valor que escribe de verdad quien cree que el campo es otra unidad. Con él
+# en «Días de historial», el `timezone.now() - timedelta(days=...)` del comando
+# lanza OverflowError y la limpieza semanal no purga nada nunca.
+VALOR_ABSURDO = 999999999
 
 
 def _cuenta(rol, username):
@@ -411,6 +423,32 @@ class RetencionFormularioTests(TestCase):
         self.assertEqual(ConfiguracionSistema.get_config().retencion_media_dias, 30)
         self.assertTrue(resp.context["form"].errors["retencion_media_dias"])
 
+    def test_el_formulario_rechaza_una_retencion_por_encima_del_tope(self):
+        """Capa 1: el máximo también es política, no solo el mínimo."""
+        for campo, valor in (
+            ("retencion_dias", RETENCION_DIAS_MAXIMO + 1),
+            ("retencion_media_dias", RETENCION_MEDIA_DIAS_MAXIMO + 1),
+        ):
+            with self.subTest(campo=campo):
+                antes = getattr(ConfiguracionSistema.get_config(), campo)
+                resp = self._post(**{campo: valor})
+                self.assertEqual(resp.status_code, 200)
+                self.assertTrue(resp.context["form"].errors[campo])
+                self.assertEqual(
+                    getattr(ConfiguracionSistema.get_config(), campo), antes
+                )
+
+    def test_el_formulario_acepta_los_valores_justo_en_el_tope(self):
+        """Contraprueba: el tope es el último valor válido, no el primero inválido."""
+        resp = self._post(
+            retencion_dias=RETENCION_DIAS_MAXIMO,
+            retencion_media_dias=RETENCION_MEDIA_DIAS_MAXIMO,
+        )
+        self.assertRedirects(resp, reverse("administracion:datos"))
+        config = ConfiguracionSistema.get_config()
+        self.assertEqual(config.retencion_dias, RETENCION_DIAS_MAXIMO)
+        self.assertEqual(config.retencion_media_dias, RETENCION_MEDIA_DIAS_MAXIMO)
+
     def test_el_minimo_tambien_vale_fuera_del_formulario(self):
         """La regla vive en el modelo: un comando o una importación la cumplen."""
         from django.core.exceptions import ValidationError
@@ -424,6 +462,144 @@ class RetencionFormularioTests(TestCase):
         self.client.force_login(_cuenta("tecnico", "datos_tec_ver"))
         resp = self.client.get(reverse("administracion:datos"))
         self.assertRedirects(resp, reverse("core:dashboard"))
+
+
+class TopesDeLaRetencionTests(TestCase):
+    """El mismo defecto del C1, en la ruta de retención.
+
+    ``handle()`` hace ``timezone.now() - timedelta(days=dias)`` con el valor que
+    salga de la configuración, y los dos campos de la Tarea 11 nacieron solo con
+    mínimo. Con un valor grande eso es ``OverflowError``: el cron semanal muere
+    y **nada se purga nunca**, con el fallo escondido en
+    ``/var/log/sysadmin-limpiar-historial.log``.
+
+    Como en el C1, el tope del campo no basta: ``queryset.update()`` se salta
+    los validadores, así que el comando los reaplica al resolver. Todas las
+    escrituras de aquí van por ``update()`` a propósito.
+    """
+
+    def test_los_topes_del_comando_coinciden_con_los_del_modelo(self):
+        from django.core.validators import MaxValueValidator
+
+        esperado = {
+            "retencion_dias": RETENCION_DIAS_MAXIMO,
+            "retencion_media_dias": RETENCION_MEDIA_DIAS_MAXIMO,
+        }
+        for campo, tope in esperado.items():
+            with self.subTest(campo=campo):
+                maximos = [
+                    v.limit_value
+                    for v in ConfiguracionSistema._meta.get_field(campo).validators
+                    if isinstance(v, MaxValueValidator)
+                ]
+                self.assertEqual(maximos, [tope])
+
+    def test_una_retencion_desbordante_no_revienta_el_comando(self):
+        """La prueba del defecto: hoy el comando lanza OverflowError."""
+        _configurar_retencion(dias=VALOR_ABSURDO)
+
+        salida = _limpiar(dry_run=True)
+
+        self.assertIn(f"Retención en uso: {RETENCION_DIAS_MAXIMO} días", salida)
+        self.assertIn("Total registros afectados", salida)
+
+    def test_una_retencion_de_media_desbordante_no_revienta_el_comando(self):
+        _configurar_retencion(media_dias=VALOR_ABSURDO)
+
+        salida = _limpiar(dry_run=True)
+
+        self.assertIn(
+            f"{RETENCION_MEDIA_DIAS_MAXIMO} días de archivos de media", salida,
+        )
+
+    def test_un_valor_por_debajo_del_minimo_tambien_se_acota(self):
+        """Un 0 llega por la misma puerta que el máximo: por un UPDATE."""
+        _configurar_retencion(dias=0, media_dias=0)
+
+        salida = _limpiar(dry_run=True)
+
+        self.assertIn(
+            f"Retención en uso: {RETENCION_DIAS_MINIMO} días de historial · "
+            f"{RETENCION_MEDIA_DIAS_MINIMO} días de archivos de media",
+            salida,
+        )
+
+    def test_un_argumento_explicito_absurdo_tambien_se_acota(self):
+        """La bandera de la línea de comandos gana, pero no por encima del tope.
+
+        Es la puerta de un humano depurando con la unidad equivocada, y acaba en
+        el mismo ``timedelta`` que la columna.
+        """
+        salida = _limpiar(dry_run=True, dias=VALOR_ABSURDO)
+
+        self.assertIn(f"Retención en uso: {RETENCION_DIAS_MAXIMO} días", salida)
+
+    def test_los_valores_de_siempre_pasan_intactos(self):
+        """Contraprueba: acotar no puede cambiar lo que una instalación ya borra."""
+        _configurar_retencion(dias=365, media_dias=30)
+        viejo = _auditoria_de(400)
+        reciente = _auditoria_de(10)
+
+        salida = _limpiar()
+
+        self.assertIn(
+            "Retención en uso: 365 días de historial · 30 días de archivos de media",
+            salida,
+        )
+        self.assertFalse(RegistroAuditoria.objects.filter(pk=viejo.pk).exists())
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=reciente.pk).exists())
+
+    def test_la_simulacion_de_la_pantalla_sobrevive_a_una_retencion_desbordante(self):
+        """La pantalla de Datos no da 500 —ya atrapaba la excepción—, pero sin
+        acotar devolvía una simulación vacía y un aviso de fallo, o sea nada."""
+        _configurar_retencion(dias=VALOR_ABSURDO)
+        self.client.force_login(_cuenta("superadmin", "datos_tope_sa"))
+
+        resp = self.client.post(reverse("administracion:simular_limpieza"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(
+            f"Retención en uso: {RETENCION_DIAS_MAXIMO} días",
+            resp.context["simulacion"],
+        )
+        self.assertNotContains(resp, "No se pudo simular")
+
+    def test_la_migracion_acota_la_retencion_ya_guardada(self):
+        """Un ``AlterField`` no revisa los datos, y con el ``full_clean()`` del
+        ``save()`` una fila heredada fuera de rango deja de ser guardable."""
+        from importlib import import_module
+
+        from django.apps import apps as registro_de_apps
+
+        migracion = import_module(
+            "administracion.migrations.0014_topes_retencion"
+        )
+        _configurar_retencion(dias=VALOR_ABSURDO, media_dias=VALOR_ABSURDO)
+
+        migracion.acotar_la_retencion(registro_de_apps, None)
+
+        config = ConfiguracionSistema.objects.get(pk=1)
+        self.assertEqual(config.retencion_dias, RETENCION_DIAS_MAXIMO)
+        self.assertEqual(config.retencion_media_dias, RETENCION_MEDIA_DIAS_MAXIMO)
+        # Y la fila vuelve a ser guardable, que es para lo que está la migración.
+        config.nombre_empresa = "Clinica X"
+        config.save()
+
+    def test_la_migracion_no_toca_una_fila_sana(self):
+        from importlib import import_module
+
+        from django.apps import apps as registro_de_apps
+
+        migracion = import_module(
+            "administracion.migrations.0014_topes_retencion"
+        )
+        _configurar_retencion(dias=365, media_dias=30)
+
+        migracion.acotar_la_retencion(registro_de_apps, None)
+
+        config = ConfiguracionSistema.objects.get(pk=1)
+        self.assertEqual(config.retencion_dias, 365)
+        self.assertEqual(config.retencion_media_dias, 30)
 
 
 class MensajesDeErrorTests(TestCase):

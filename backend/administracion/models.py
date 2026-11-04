@@ -38,6 +38,29 @@ HORAS_DE_BLOQUEO_MAXIMO = 8760  # un año; tres órdenes de magnitud bajo el des
 LONGITUD_MINIMA_MINIMA = 8
 LONGITUD_MINIMA_MAXIMA = 64
 
+# ─── Rango aceptable de la retención de datos ────────────────────────────────
+# Mismo defecto que arriba, en la otra ruta: los dos campos de la Tarea 11
+# nacieron solo con mínimo, y `limpiar_historial.handle()` hace
+# `timezone.now() - timedelta(days=dias)` con lo que salga de la columna. Por
+# encima de unos 999 999 999 días `timedelta` ya no se construye, y bastante
+# antes la resta desborda: `OverflowError`, el cron semanal muere y **nada se
+# purga nunca**, con el fallo escondido en el log del cron que nadie lee.
+#
+# Los topes son política, no solo un freno al desbordamiento: por encima de
+# ellos el campo deja de significar «retención» y significa «no purgar nunca»,
+# que es justo el problema de crecimiento que este comando existe para resolver.
+# `limpiar_historial` los reaplica al resolver, por el mismo motivo que
+# `administracion.seguridad`: un `queryset.update()` se salta los validadores.
+RETENCION_DIAS_MINIMO = 30
+RETENCION_DIAS_MAXIMO = 3650  # diez años: el horizonte más largo que un
+# historial de inventario puede necesitar, y cinco órdenes de magnitud bajo el
+# desborde.
+RETENCION_MEDIA_DIAS_MINIMO = 7
+RETENCION_MEDIA_DIAS_MAXIMO = 365  # un año. Son archivos HUÉRFANOS (ya no los
+# referencia ningún activo, movimiento ni acta): un año de gracia para
+# recuperar uno borrado por error es de sobra, y más allá el campo solo deja de
+# limpiar el disco.
+
 
 # Módulos sobre los que se conceden permisos. La auditoría añade "auth" porque
 # el inicio de sesión también se registra, pero no es un módulo con permisos.
@@ -184,22 +207,30 @@ class ConfiguracionSistema(models.Model):
     # mismos números como respaldo si la base no responde.
     retencion_dias = models.PositiveIntegerField(
         default=365,
-        validators=[MinValueValidator(30)],
+        validators=[
+            MinValueValidator(RETENCION_DIAS_MINIMO),
+            MaxValueValidator(RETENCION_DIAS_MAXIMO),
+        ],
         verbose_name="Días de historial que se conservan",
         help_text=(
-            "La limpieza semanal borra la auditoría, los registros de acceso y "
-            "las notificaciones anteriores a esta cantidad de días. Mínimo 30. "
-            "Lo que se borra NO se puede recuperar."
+            f"La limpieza semanal borra la auditoría, los registros de acceso y "
+            f"las notificaciones anteriores a esta cantidad de días. "
+            f"Entre {RETENCION_DIAS_MINIMO} y {RETENCION_DIAS_MAXIMO} "
+            f"(diez años). Lo que se borra NO se puede recuperar."
         ),
     )
     retencion_media_dias = models.PositiveIntegerField(
         default=30,
-        validators=[MinValueValidator(7)],
+        validators=[
+            MinValueValidator(RETENCION_MEDIA_DIAS_MINIMO),
+            MaxValueValidator(RETENCION_MEDIA_DIAS_MAXIMO),
+        ],
         verbose_name="Días que se conservan los archivos huérfanos",
         help_text=(
-            "Un archivo subido que ya no está referenciado por ningún activo, "
-            "movimiento ni acta se borra del disco cuando pasa de esta edad. "
-            "Mínimo 7."
+            f"Un archivo subido que ya no está referenciado por ningún activo, "
+            f"movimiento ni acta se borra del disco cuando pasa de esta edad. "
+            f"Entre {RETENCION_MEDIA_DIAS_MINIMO} y "
+            f"{RETENCION_MEDIA_DIAS_MAXIMO} (un año)."
         ),
     )
     fecha_actualizacion = models.DateTimeField(auto_now=True)
