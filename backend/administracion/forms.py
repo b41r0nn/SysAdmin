@@ -1,7 +1,13 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
-from .models import ConfiguracionSistema
+from .models import (
+    RETENCION_DIAS_MAXIMO,
+    RETENCION_DIAS_MINIMO,
+    RETENCION_MEDIA_DIAS_MAXIMO,
+    RETENCION_MEDIA_DIAS_MINIMO,
+    ConfiguracionSistema,
+)
 
 CustomUser = get_user_model()
 
@@ -126,10 +132,15 @@ class CorreoForm(forms.ModelForm):
 class RetencionForm(forms.ModelForm):
     """Los dos plazos de retención de datos.
 
-    Los mínimos (historial ≥ 30 días, archivos huérfanos ≥ 7) son validadores
-    del modelo y los corre ``_post_clean()``: así la regla vale también para un
-    comando de gestión o una importación, no solo para esta pantalla. El ``min``
-    del HTML es comodidad del navegador, no la validación.
+    Los mínimos y los máximos son validadores del modelo y los corre
+    ``_post_clean()``: así la regla vale también para un comando de gestión o una
+    importación, no solo para esta pantalla. El ``min``/``max`` del HTML es
+    comodidad del navegador, no la validación.
+
+    Y ni el formulario ni el modelo son la última línea: un ``queryset.update()``
+    se salta los dos, y la bandera ``--dias`` del comando no pasa por ninguno.
+    Quien garantiza que ningún plazo guardado mate la limpieza es
+    ``core.management.commands.limpiar_historial``, que acota al resolver.
 
     Va aquí y no en ``ConfiguracionForm`` para que la pantalla de Empresa siga
     declarando su lista explícita de campos: los dos campos nuevos del modelo no
@@ -140,8 +151,16 @@ class RetencionForm(forms.ModelForm):
         model = ConfiguracionSistema
         fields = ["retencion_dias", "retencion_media_dias"]
         widgets = {
-            "retencion_dias": forms.NumberInput(attrs={"class": "form-control", "min": 30}),
-            "retencion_media_dias": forms.NumberInput(attrs={"class": "form-control", "min": 7}),
+            "retencion_dias": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": RETENCION_DIAS_MINIMO,
+                "max": RETENCION_DIAS_MAXIMO,
+            }),
+            "retencion_media_dias": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": RETENCION_MEDIA_DIAS_MINIMO,
+                "max": RETENCION_MEDIA_DIAS_MAXIMO,
+            }),
         }
 
 

@@ -13,13 +13,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db import ProgrammingError
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from administracion.models import Modulo, PermisoRol
 from administracion.registro import invalidar_cache
-from core.utils import get_client_ip
+from core.utils import acotado, get_client_ip
 from core.views import MEDIA_PERMISOS
 
 CustomUser = get_user_model()
@@ -473,6 +473,66 @@ class LimpiarHistorialCommandTests(TestCase):
         call_command("limpiar_historial", dias=365, stdout=StringIO())
         self.assertFalse(Session.objects.filter(pk=vencida.session_key).exists())
         self.assertTrue(Session.objects.filter(pk=vigente.session_key).exists())
+
+
+class AcotadoTests(SimpleTestCase):
+    """El acotado compartido por los dos resolvedores que no se fían de la base.
+
+    Lo usan ``administracion.seguridad`` (política del login) y
+    ``core.management.commands.limpiar_historial`` (retención). Vive aquí, en una
+    sola función, porque lo delicado es el borde: un ``>`` donde va un ``>=``
+    cambia la política sin que nada falle. El aviso se inyecta porque los dos
+    tienen sinks distintos: el primero el logger y el segundo ``stderr``, que el
+    cron recoge (un logger ahí dejaría el aviso dos veces).
+    """
+
+    def _avisos(self):
+        avisos = []
+        return avisos, avisos.append
+
+    def test_un_valor_en_rango_pasa_intacto_y_sin_avisar(self):
+        avisos, avisar = self._avisos()
+        for valor in (1, 50, 100):
+            self.assertEqual(acotado(valor, 1, 100, "X", avisar), valor)
+        self.assertEqual(avisos, [])
+
+    def test_los_bordes_son_validos(self):
+        """El tope es el último valor aceptable, no el primero rechazado."""
+        avisos, avisar = self._avisos()
+        self.assertEqual(acotado(1, 1, 100, "X", avisar), 1)
+        self.assertEqual(acotado(100, 1, 100, "X", avisar), 100)
+        self.assertEqual(avisos, [])
+
+    def test_por_encima_y_por_debajo_se_acota_y_se_avisa(self):
+        avisos, avisar = self._avisos()
+        self.assertEqual(acotado(101, 1, 100, "Los minutos", avisar), 100)
+        self.assertEqual(acotado(0, 1, 100, "Los minutos", avisar), 1)
+        self.assertEqual(len(avisos), 2)
+        for aviso in avisos:
+            self.assertIn("Los minutos", aviso)
+
+    def test_un_none_cae_al_minimo_en_vez_de_reventar(self):
+        """Comparar None con un int es TypeError, o sea el 500 que se evita."""
+        avisos, avisar = self._avisos()
+        self.assertEqual(acotado(None, 7, 30, "X", avisar), 7)
+        self.assertEqual(len(avisos), 1)
+
+    def test_el_aviso_no_depende_del_genero_de_la_etiqueta(self):
+        """Es texto en español que se lee en el log de producción.
+
+        Con un ``"%s guardado fuera de rango"`` salía «Los minutos de sesión
+        guardado» y «Las horas de bloqueo guardado».
+        """
+        avisos, avisar = self._avisos()
+        for etiqueta in (
+            "los minutos de sesión",
+            "las horas de bloqueo",
+            "la longitud mínima de la contraseña",
+            "el límite de intentos",
+        ):
+            acotado(99999, 1, 10, etiqueta, avisar)
+        for aviso in avisos:
+            self.assertNotIn("guardado", aviso)
 
 
 class GuardarExcelTests(TestCase):

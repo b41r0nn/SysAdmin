@@ -13,7 +13,10 @@ Cuatro cosas de este comando no son de estilo y conviene no deshacerlas:
 2. **La lectura de la configuración tolera que la base no responda** y cae a
    los respaldos de abajo, que son los números que el cron pasaba a mano antes
    de este cambio. Un comando de cron que revienta no deja rastro más que en su
-   log. El aviso va a ``stderr`` para que se vea en ese log.
+   log. El aviso va a ``stderr`` para que se vea en ese log. Y por el mismo
+   motivo **los dos plazos se acotan al resolverlos** (``_plazos()``): el
+   comando no se fía de la columna, porque un ``queryset.update()`` se salta los
+   validadores del modelo.
 
 3. **``--sin-media`` existe para la pantalla**, no para el cron.
    ``_limpiar_media_huerfana()`` hace un ``os.walk`` sobre ``MEDIA_ROOT`` y un
@@ -35,6 +38,8 @@ from django.contrib.admin.models import LogEntry
 from django.core.management.base import BaseCommand
 from django.db import DatabaseError
 from django.utils import timezone
+
+from core.utils import acotado
 
 # Respaldos para cuando `ConfiguracionSistema` no se puede leer. Son los mismos
 # números que los `default` de los campos del modelo y hay una prueba que lo
@@ -182,7 +187,26 @@ class Command(BaseCommand):
         depurando pueda forzar un valor. Solo se consulta la base cuando falta
         alguno de los dos, así que una invocación con las dos banderas no
         escribe nada (``get_config()`` es un ``get_or_create``).
+
+        **Los dos valores se acotan al final, venga de donde venga el número.**
+        No es una comodidad: ``handle()`` construye con ellos un
+        ``timezone.now() - timedelta(days=...)``, y ahí un valor grande lanza
+        ``OverflowError`` —el cron muere y no purga nada, con el fallo escondido
+        en su log— mientras un 0 pone el corte en «ahora» y **borra el historial
+        entero sin avisar**. Los validadores del campo no alcanzan: un
+        ``queryset.update()`` se los salta, igual que la bandera de la línea de
+        comandos, que no pasa por el modelo en absoluto.
         """
+        # El import va aquí dentro por el mismo motivo que en
+        # `_retencion_configurada()`: no cargar `administracion` al importar el
+        # módulo del comando.
+        from administracion.models import (
+            RETENCION_DIAS_MAXIMO,
+            RETENCION_DIAS_MINIMO,
+            RETENCION_MEDIA_DIAS_MAXIMO,
+            RETENCION_MEDIA_DIAS_MINIMO,
+        )
+
         dias = options["dias"]
         media_dias = options["media_dias"]
         if dias is None or media_dias is None:
@@ -191,7 +215,19 @@ class Command(BaseCommand):
                 dias = dias_config
             if media_dias is None:
                 media_dias = media_config
-        return dias, media_dias
+        # El aviso va por `stderr` y no por un logger, por lo mismo que el de
+        # `_retencion_configurada()`: el cron recoge las dos salidas en el mismo
+        # archivo y un logger dejaría el aviso dos veces.
+        return (
+            acotado(
+                dias, RETENCION_DIAS_MINIMO, RETENCION_DIAS_MAXIMO,
+                "los días de historial", self.stderr.write,
+            ),
+            acotado(
+                media_dias, RETENCION_MEDIA_DIAS_MINIMO, RETENCION_MEDIA_DIAS_MAXIMO,
+                "los días de archivos de media", self.stderr.write,
+            ),
+        )
 
     def _retencion_configurada(self):
         """Los dos plazos de ``ConfiguracionSistema``, con respaldo si falla.
