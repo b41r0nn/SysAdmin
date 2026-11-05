@@ -223,7 +223,7 @@ tail -20 /var/log/sysadmin-software-sync.log
 ```
 
 Si se edita la frecuencia: cambiar la última línea del `.cron` y
-`sudo systemctl reload cron`.
+`sudo service cron reload`.
 
 ---
 
@@ -248,9 +248,11 @@ usa los mismos 365 y 30 de fábrica), en el servidor:
 
 ```bash
 sudo bash /opt/sysadmin/app/deploy/instalar_cron_limpieza.sh
-sudo systemctl reload cron
 sudo cat /etc/cron.d/sysadmin-limpiar-historial
+sudo journalctl -u cron --since "-2 min" | grep RELOAD
 ```
+
+> **`systemctl reload cron` no funciona en este servidor**: responde *Job type reload is not applicable for unit cron.service*. El que sirve es `sudo service cron reload`. Y en realidad **no hace falta ninguno**: cron vigila `/etc/cron.d` y relee solo — se comprueba en `sudo journalctl -u cron`, que deja un renglón `(*system*<archivo>) RELOAD`. El reload es por si no quieres esperar ese minuto.
 
 Espera `0 4 * * 0 root cd /opt/sysadmin/app && docker exec sysadmin_django python
 manage.py limpiar_historial >> /var/log/sysadmin-limpiar-historial.log 2>&1`:

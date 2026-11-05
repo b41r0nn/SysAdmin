@@ -1,6 +1,6 @@
 # SysAdmin · HANDOFF DOCUMENT
 > Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración) · 1013 tests OK · **desplegado en producción el 2026-11-05**
-> Queda **un paso pendiente que pide `sudo` en el host**: reinstalar el cron de limpieza (§7c de la guía). Hasta que se haga, la pantalla de retención no tiene efecto sobre la limpieza semanal. Detalle en «MÓDULO DE CONFIGURACIÓN» → «Despliegue de v1.14».
+> Despliegue **completo, incluido el cron de §7c**: el de `/etc/cron.d` ya corre `limpiar_historial` sin banderas, así que la pantalla de retención manda sobre la limpieza semanal. Detalle en «MÓDULO DE CONFIGURACIÓN» → «Despliegue de v1.14».
 
 ---
 
@@ -1772,7 +1772,7 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 Diseño: `docs/superpowers/specs/2026-10-29-configuracion-y-mesa-de-ayuda-design.md` (Fase A). Plan: `docs/superpowers/plans/2026-10-29-modulo-configuracion.md`. Ledger tarea por tarea, revisión final y auditoría de la deuda: `.superpowers/sdd/2026-10-29-modulo-configuracion/` (`progress.md`, `revision-final.md`, `auditoria-minores.md`).
 
-> **Estado (2026-11-05)**: las **12 tareas hechas, fusionadas en `master` (PR #4) y desplegadas**. **1013 pruebas, 0 fallos** (6 omitidas en Windows; en el CI ninguna), `ruff` limpio, `makemigrations --check` sin cambios. Todo lo de abajo está confirmado contra el código, no contra el plan. **Pendiente: el cron de §7c.**
+> **Estado (2026-11-05)**: las **12 tareas hechas, fusionadas en `master` (PR #4) y desplegadas, con el cron de §7c ya reinstalado**. **1013 pruebas, 0 fallos** (6 omitidas en Windows; en el CI ninguna), `ruff` limpio, `makemigrations --check` sin cambios. Todo lo de abajo está confirmado contra el código, no contra el plan.
 
 ### Qué existe ahora
 
@@ -1868,7 +1868,8 @@ Cerrado y por tanto **no es deuda**: el 400/302 invisible de HTMX (`3c23f43`), e
 | Migraciones aplicadas | `administracion` `0005`–`0014`, `accounts` `0004` (las aplicó el `entrypoint.sh` al arrancar) |
 | Siembra verificada | `10 4 40` · activos los 8, `licencias` y `prestamos` apagados a propósito |
 | Verificación | humo con el test client dentro del contenedor (portada, las 5 pantallas de configuración y las 8 URL del catálogo resueltas por `reverse`, más 404 en los dos módulos apagados), `curl -sk` al 6060, 0 *tracebacks* y 0 respuestas 5xx en el log, `nginx -t` correcto, y **363 pruebas de `administracion`+`accounts`+`core` dentro del contenedor de producción, 0 fallos** |
-| **Pendiente** | **el cron de §7c** (pide `sudo` en el host) |
+| Cron de §7c | **reinstalado el 2026-11-05 08:10**: `/etc/cron.d/sysadmin-limpiar-historial` ya corre `limpiar_historial` **sin** `--dias` ni `--media-dias`, root:root 0644, y `journalctl -u cron` registró `(*system*sysadmin-limpiar-historial) RELOAD` a las 08:11 |
+| Pendiente | las 4 verificaciones manuales de abajo (piden interfaz y un SMTP real) |
 
 Tres cosas que el despliegue dejó aprendidas y conviene no repetir:
 
@@ -1893,9 +1894,11 @@ Receta general en `GUIA_DEPLOY_PASO_A_PASO.md` §8b (`git archive` con LF → `d
 
    ```bash
    sudo bash /opt/sysadmin/app/deploy/instalar_cron_limpieza.sh
-   sudo systemctl reload cron
    sudo cat /etc/cron.d/sysadmin-limpiar-historial   # sin --dias ni --media-dias
+   sudo journalctl -u cron --since "-2 min" | grep RELOAD   # cron releyo el archivo
    ```
+
+   `systemctl reload cron` **no existe en este servidor** (*Job type reload is not applicable*); el que sirve es `service cron reload`, y ni ese hace falta: cron relee `/etc/cron.d` por su cuenta.
 
 3. **Nada de nginx**: esta versión no toca `nginx/nginx.conf`.
 
