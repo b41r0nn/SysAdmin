@@ -1,6 +1,6 @@
 """Limpieza del historial: la tarea semanal que recorta lo que ya no se mira.
 
-Cuatro cosas de este comando no son de estilo y conviene no deshacerlas:
+Cinco cosas de este comando no son de estilo y conviene no deshacerlas:
 
 1. **Los dos plazos salen de ``ConfiguracionSistema``**, no de un valor fijo.
    Los argumentos ``--dias`` y ``--media-dias`` nacen en ``None`` y solo se
@@ -44,6 +44,12 @@ Cuatro cosas de este comando no son de estilo y conviene no deshacerlas:
    también los que nunca salieron, que eran inmortales porque una fila con
    error es ``enviado=False`` por definición. En esa columna va la respuesta
    del servidor, que puede repetir la credencial que le mandamos.
+
+5. **Los modelos con archivos se descubren con ``apps.get_models()``**, nunca
+   con una lista escrita a mano (``_modelos_con_archivos()``), y si la lectura
+   de referencias falla, el barrido de ``media`` también falla cerrado sin
+   borrar nada. Una lista a mano dejó fuera 5 de los 8 campos ``FileField`` del
+   proyecto y borró 179 archivos referenciados el 2026-11-01.
 """
 
 import os
@@ -52,7 +58,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.admin.models import LogEntry
 from django.core.management.base import BaseCommand
-from django.db import DatabaseError
+from django.db import DatabaseError, Error
 from django.utils import timezone
 
 from core.utils import acotado
@@ -209,7 +215,8 @@ class Command(BaseCommand):
             )
         else:
             huerfanos = self._limpiar_media_huerfana(corte_media, dry_run)
-            self.stdout.write(f"Archivos huérfanos de media: {huerfanos}")
+            if huerfanos is not None:
+                self.stdout.write(f"Archivos huérfanos de media: {huerfanos}")
 
         modo = "(simulación)" if dry_run else ""
         self.stdout.write(self.style.SUCCESS(f"Total registros afectados: {total_borrados} {modo}"))
@@ -322,30 +329,62 @@ class Command(BaseCommand):
             ("Accesos correctos registrados (axes)", "attempt_time", AccessLog.objects),
         ]
 
-    def _limpiar_media_huerfana(self, corte, dry_run):
-        """Elimina archivos en MEDIA_ROOT no referenciados por modelos conocidos.
+    def _modelos_con_archivos(self):
+        """Todos los modelos registrados que tienen algún ``FileField``.
 
-        Sólo toma campos FileField/ImageField de modelos propios. Ajustar a medida
-        que se agreguen nuevos campos de archivo.
+        Se descubren con ``apps.get_models()`` en vez de mantener una lista a
+        mano: hasta el incidente del 2026-11-01 la lista fija solo incluía
+        ``[Activo, Movimiento, ActaAsignacion]`` (3 de los 8 campos de archivo
+        del proyecto) y la limpieza semanal borró los archivos de Documentos,
+        Mantenimiento y Usuarios cuando cumplieron 30 días. ``ImageField``
+        hereda de ``FileField``, así que ``isinstance(f, FileField)`` cubre los
+        dos.
+        """
+        from django.apps import apps
+        from django.db.models import FileField
+
+        return [
+            modelo
+            for modelo in apps.get_models()
+            if any(isinstance(f, FileField) for f in modelo._meta.fields)
+        ]
+
+    def _archivos_referenciados(self):
+        """Rutas relativas a ``MEDIA_ROOT`` que algún registro tiene guardadas."""
+        from django.db.models import FileField
+
+        referenciados = set()
+        for modelo in self._modelos_con_archivos():
+            for field in modelo._meta.fields:
+                if isinstance(field, FileField):
+                    valores = modelo.objects.exclude(**{field.name: ""}).values_list(
+                        field.name, flat=True
+                    )
+                    for valor in valores:
+                        if valor:
+                            referenciados.add(valor.replace("\\", "/"))
+        return referenciados
+
+    def _limpiar_media_huerfana(self, corte, dry_run):
+        """Elimina archivos en MEDIA_ROOT no referenciados por ningún modelo.
 
         Recorre el disco entero y hace un ``getmtime`` por archivo **también en
         ``--dry-run``**: lo único que se salta es el ``os.remove``. Por eso la
         pantalla llama al comando con ``--sin-media`` y esto solo corre desde el
         cron, donde no hay nadie esperando una respuesta HTTP.
+
+        Si la consulta de referencias falla, **no borra nada**: los archivos de
+        los modelos que no se alcanzaron a consultar parecerían huérfanos y se
+        perderían sin vuelta atrás.
         """
-        from django.db.models import FileField
-
-        from inventario.models import ActaAsignacion, Activo, Movimiento
-
-        modelos_con_archivos = [Activo, Movimiento, ActaAsignacion]
-        referenciados = set()
-
-        for modelo in modelos_con_archivos:
-            for field in modelo._meta.fields:
-                if isinstance(field, FileField):
-                    for valor in modelo.objects.exclude(**{field.name: ""}).values_list(field.name, flat=True):
-                        if valor:
-                            referenciados.add(valor)
+        try:
+            referenciados = self._archivos_referenciados()
+        except Error:
+            self.stderr.write(
+                "Archivos huérfanos de media: no se revisó el disco porque no "
+                "se pudieron leer las referencias de la base de datos."
+            )
+            return None
 
         media_root = getattr(settings, "MEDIA_ROOT", None)
         if not media_root or not os.path.isdir(media_root):
