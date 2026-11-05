@@ -1,6 +1,6 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-10-28 · v1.13.1 (mantenimiento v2 + contraseñas + robustez y acta dinámica) · 723 tests OK · **desplegado en producción el 2026-10-28**
-> En la rama `feat/modulo-configuracion` (sin fusionar ni desplegar) está el **módulo de Configuración**: ver la sección «MÓDULO DE CONFIGURACIÓN», con la deuda conocida que queda.
+> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración) · 1013 tests OK · **pendiente de despliegue**
+> Producción sigue en **v1.13.1** (desplegada el 2026-10-28) hasta que v1.14 salga. El módulo de Configuración está terminado en la rama `feat/modulo-configuracion`: ver la sección «MÓDULO DE CONFIGURACIÓN», con su deuda conocida y, al final, **el paso del cron que un despliegue normal se salta**.
 
 ---
 
@@ -1772,7 +1772,7 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 Diseño: `docs/superpowers/specs/2026-10-29-configuracion-y-mesa-de-ayuda-design.md` (Fase A). Plan: `docs/superpowers/plans/2026-10-29-modulo-configuracion.md`. Ledger tarea por tarea, revisión final y auditoría de la deuda: `.superpowers/sdd/2026-10-29-modulo-configuracion/` (`progress.md`, `revision-final.md`, `auditoria-minores.md`).
 
-> **Estado al escribir esto**: la rama **no está fusionada ni desplegada**; producción sigue en v1.13.1. Tareas 1–10 (más 9B y 9C, que salieron de la revisión final) hechas y verificadas: **922 pruebas, 0 fallos** (6 omitidas en Windows), `ruff` limpio, `makemigrations --check` sin cambios. La Tarea 11 (retención, pantalla `datos`) y la 12 (cierre, PR, despliegue) estaban en curso; **la sección «Datos» de abajo describe lo que pide el plan: confirmarla contra el código antes de fiarse**. Al fusionar, completar aquí la versión, el total de pruebas y la fecha de despliegue.
+> **Estado al escribir esto (2026-11-05)**: las **12 tareas están hechas y verificadas** — **1013 pruebas, 0 fallos** (6 omitidas en Windows), `ruff` limpio, `makemigrations --check` sin cambios. Falta el despliegue; producción sigue en v1.13.1. Todo lo de abajo está confirmado contra el código, no contra el plan.
 
 ### Qué existe ahora
 
@@ -1795,7 +1795,9 @@ La configuración que antes eran constantes en código o variables del `.env` se
 - **Seguridad** (`/administracion/seguridad/`, migración `0010`): `sesion_minutos` (def. 30), `intentos_antes_de_bloquear` (5), `horas_de_bloqueo` (1) y `longitud_minima_password` (10). Los defaults coinciden con los settings de antes. Mecanismos: `SesionConfigurableMiddleware` (hereda de `MiddlewareMixin`), `AXES_FAILURE_LIMIT` y `AXES_COOLOFF_TIME` ahora son **rutas con puntos** a `administracion.seguridad.limite_de_intentos` / `tiempo_de_bloqueo`, y `LongitudMinimaConfigurable` reemplaza al validador de longitud. Cada lectura tolera la base caída y cae a constantes de módulo (`INTENTOS_POR_DEFECTO`, `HORAS_DE_BLOQUEO_POR_DEFECTO`), para que una migración a medias no tumbe el login.
   - **`horas_de_bloqueo = 0` significa bloqueo que no caduca** (`BLOQUEO_SIN_CADUCIDAD`, 100 años), no «sin bloqueo». La vía de recuperación son los comandos de axes `axes_reset`, `axes_reset_username` y `axes_reset_ip_username`; el `help_text` del campo lo dice.
 - **Correo** (`/administracion/correo/`, migración `0011`): servidor SMTP, contraseña, **remitente** (`correo_remitente`; `remitente_efectivo()` cae al usuario SMTP), botón «Probar envío» (`probar_correo`) y «Reintentar» la cola (`reintentar_correos`), ambos POST normales, no HTMX. **Los campos SMTP salieron del formulario de Empresa** (decisión R13): hay una sola puerta de escritura para la credencial. La pantalla de **Empresa** también audita ahora con `auditar_cambios` (antes guardaba sin renglón). La cola real de notificaciones ahora envía con `from_email=config.remitente_efectivo()` (antes salía como `webmaster@localhost`) y la conexión SMTP lleva `timeout=10`. Los errores del servidor se muestran con la contraseña tachada **antes** de recortar a 500 caracteres.
-- **Datos** (`/administracion/datos/`, Tarea 11, en curso): retención configurable (`retencion_dias` def. 365 mín. 30; `retencion_media_dias` def. 30 mín. 7) y simulación de limpieza (`simular_limpieza`, ejecuta `limpiar_historial --dry-run`). El comando sin argumentos pasa a leer la configuración; un argumento explícito sigue ganando. Para que el cron semanal la use hay que cambiar el cron del servidor (ver `GUIA_DEPLOY_PASO_A_PASO.md` §7c). El plan además pide incluir `axes_accessattempt` y `axes_accessfailurelog` en la limpieza, porque con el bloqueo sin caducidad esa tabla de axes ya no se purga sola.
+- **Datos** (`/administracion/datos/`, migraciones `0012`, `0013`): retención configurable (`retencion_dias` def. 365, mín. 30, máx. 3650; `retencion_media_dias` def. 30, mín. 7, máx. 3650) y simulación de limpieza (`simular_limpieza`, ejecuta `limpiar_historial --dry-run`). El comando sin argumentos lee la configuración; un argumento explícito sigue ganando. **Para que el cron semanal la use hay que reinstalar el cron en el host** (`GUIA_DEPLOY_PASO_A_PASO.md` §7c): es lo único de esta versión que un despliegue normal se salta, y sin él la pantalla es decorado. La limpieza incluye ahora `axes_accessattempt`, `axes_accessfailurelog` y `axes_accesslog`, que con el bloqueo sin caducidad ya no se purgaban solas (`AccessLog` nunca se purgó: crece una fila por inicio de sesión correcto).
+  - **Si la retención no se puede leer, no se borra nada.** Hasta la Tarea 11B el comando caía a unos respaldos de 365 y 30 días y borraba con ellos; en una instalación con retención mayor eso borraba **más** de lo que el administrador eligió conservar, y es irreversible. Ahora termina sin tocar nada y escribe `NO SE BORRÓ NADA` por `stderr`, que es donde el cron recoge su log. Con `--dias` y `--media-dias` explícitos la base no hace falta y borra igual. **Va a propósito contra el instinto del resto del módulo**, donde se falla abierto para que la aplicación no se esconda: en una limpieza, fallar abierto significa destruir.
+  - **Los cuatro campos de seguridad y los dos de retención tienen tope** (migración `0013`), y los lectores los acotan además al leerlos (`administracion/seguridad.py`, `core/utils.acotado`). No es cinturón y tirantes de más: un `queryset.update()` se salta los validadores del modelo, y con un valor desbordado el login daba 500 por dos caminos distintos (`axes` al calcular el bloqueo y el formateo de la cookie de sesión en cada petición autenticada), mientras la retención desbordada reventaba el cron entero. La `0013` además **acota lo ya guardado** antes de los `AlterField`, porque un `AlterField` no revisa los datos y una fila fuera de rango sobreviviría al despliegue y daría 500 en tres pantallas.
 
 **Qué se quedó en el `.env` y por qué**: `SECRET_KEY`, credenciales de PostgreSQL, `PASSWORDS_ENCRYPTION_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, los ajustes de HTTPS y `SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS` (nginx es la autoridad ahí). Son lo que hace falta para llegar a la base de datos o protegerla: si estuvieran en la base, un error de configuración no tendría cómo corregirse. `SESSION_COOKIE_AGE` del `.env` queda solo como respaldo si no se puede leer la tabla.
 
@@ -1856,6 +1858,31 @@ Ordenada de más a menos probable de morder. Todo lo de abajo es deliberado y es
 | **`"reportes": "reportes"` en `APP_A_MODULO`** | No es un `app_name` real (el real es `reports`). Muerto e inofensivo. |
 
 Cerrado y por tanto **no es deuda**: el 400/302 invisible de HTMX (`3c23f43`), el candado del módulo esencial por `update()` (`c0fd855`, `c4d4f64`), la contraseña SMTP en dos pantallas, el remitente que nunca llegaba a la cola real, la validación de `Rol`/`PermisoRol` al guardar y la matriz de fábrica congelada en la migración.
+
+### Despliegue de v1.14 (el paso que un despliegue normal se salta)
+
+Receta general en `GUIA_DEPLOY_PASO_A_PASO.md` §8b (`git archive` con LF → `docker compose build` → `up -d` → `migrate`), con respaldo `.dump` fechado antes. Lo propio de esta versión:
+
+1. **Seis migraciones de `administracion`** (`0005`–`0013`, incluidas las de datos que siembran el catálogo y la matriz). Después del `migrate`, confirmar la siembra en el contenedor:
+
+   ```bash
+   docker exec sysadmin_django python manage.py shell -c "
+   from administracion.models import Modulo, Rol, PermisoRol
+   print(Modulo.objects.count(), Rol.objects.count(), PermisoRol.objects.count())"
+   ```
+   Esperado: `10 4 40`. Si sale distinto, **parar**: el menú y los permisos salen de esas filas.
+
+2. **Reinstalar el cron de limpieza en el host** (§7c). Es lo único que un despliegue normal no toca: el archivo vive en `/etc/cron.d/sysadmin-limpiar-historial`, fuera del contenedor, y el viejo sigue pasando `--dias 365 --media-dias 30`, así que la pantalla de retención quedaría de decorado y nadie se enteraría.
+
+   ```bash
+   sudo bash /opt/sysadmin/app/deploy/instalar_cron_limpieza.sh
+   sudo systemctl reload cron
+   sudo cat /etc/cron.d/sysadmin-limpiar-historial   # sin --dias ni --media-dias
+   ```
+
+3. **Nada de nginx**: esta versión no toca `nginx/nginx.conf`.
+
+4. Lo que ninguna prueba cubre y hay que mirar a mano una vez, ya en producción: apagar **Soporte** y ver que desaparece del menú y que su URL da 404; volver a encenderlo y ver que regresa con sus tickets; poner `sesion_minutos` en 1, esperar y confirmar que vuelve a pedir login; y **probar el correo contra el SMTP real** desde `/administracion/correo/` y leer el resultado en pantalla.
 
 ---
 

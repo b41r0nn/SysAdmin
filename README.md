@@ -58,8 +58,11 @@
 | 🛡️ Seguridad del login (django-axes) + auditoría de fallos | `accounts` | ✅ Completa | Fase 7 |
 | 🔒 HTTPS interno (nginx + cert autofirmado) | infraestructura | ✅ Completa | Fase 7 |
 | 🧯 Auditoría de seguridad y hardening (2026-10-19) | todas | ✅ Completa | Auditoría |
+| ⚙️ Configuración del sistema (módulos, roles, seguridad, correo, retención) | `administracion` | ✅ Completa | Fase A |
 
 **Producción** (2026-10-28, v1.13.1): 26 activos · Django 5.2 LTS · contenedor sin root · **723 tests en verde** (SQLite y PostgreSQL, en CI). Incluye mantenimiento v2, la importación de contraseñas desde Excel y los arreglos de robustez del 28-oct. Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
+
+**v1.14 — módulo de Configuración: terminado y pendiente de despliegue** (1013 tests en verde). Ver el Changelog; al desplegar hay que **reinstalar el cron de limpieza en el host** (`GUIA_DEPLOY_PASO_A_PASO.md` §7c), que es el único paso que un despliegue normal se salta.
 
 ---
 
@@ -529,7 +532,7 @@ OCS_VERIFY_SSL=True
 
 1. **Archivos sensibles fuera de OneDrive** (PC de desarrollo): `.env`, `sysadmin_data.dump`, `*.sqlite3`, `nginx/certs/`, `backend/media/` no deben quedar en carpetas sincronizadas.
 2. **Etiquetas QR viejas**: las impresas antes de 2026-10-19 piden login al escanearlas. Reimprimir las que deban verse sin sesión.
-3. **Tests**: ✅ **465/465 OK** en SQLite y en PostgreSQL 15.
+3. **Tests**: ✅ **1013 OK** (6 omitidas en Windows: las 4 del acta, que piden WeasyPrint real, y las 2 de concurrencia, que piden PostgreSQL). En el CI no se omite ninguna.
 4. **Cron del inventario de software**: corre solo a las **03:07**. En un servidor nuevo: `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh`.
 
 ---
@@ -586,6 +589,22 @@ BD: PostgreSQL 15 en contenedor
 ---
 
 ## 📅 Changelog
+
+### 2026-11-05 — v1.14 · Módulo de Configuración (rama `feat/modulo-configuracion`, pendiente de despliegue)
+
+**Lo que antes era una constante en el código o una variable del `.env` ahora se cambia desde `/administracion/` y surte efecto en la petición siguiente, sin reiniciar el contenedor.**
+
+- **Catálogo de módulos** en base de datos (10 módulos): se encienden y apagan desde `/administracion/modulos/`. Un módulo apagado **desaparece del menú y del tablero, y todas sus URL dan 404** antes de llegar a la vista, también a un superusuario. Los 4 esenciales (Inventario, Usuarios, Administración, Configuración) no se pueden apagar, ni forzando el POST ni con un `UPDATE` a mano en la tabla. Licencias y Préstamos vienen apagados a propósito.
+- **Matriz de roles y permisos editable** (`/administracion/roles/`): 10 módulos × 3 roles, una celda por clic. La columna del superadministrador es fija y la vista la rechaza aunque se mande el POST a mano. Los permisos se leen **por un único punto** (`nivel_permiso`), así que no quedan dos verdades sobre quién puede qué.
+- **Seguridad configurable** (`/administracion/seguridad/`): minutos de sesión, intentos antes de bloquear, horas de bloqueo y longitud mínima de contraseña. `horas_de_bloqueo = 0` significa **bloqueo que no caduca**, no «sin bloqueo»; se sale con los comandos `axes_reset*`.
+- **Correo** (`/administracion/correo/`): servidor SMTP, contraseña, remitente, botón para **probar el envío** y para reintentar la cola. Los correos de la cola salían como `webmaster@localhost`; ahora llevan el remitente configurado. Y los errores del servidor se guardan con la contraseña tachada: si el SMTP rechazaba el login repitiendo la credencial en su respuesta, esa credencial quedaba **en texto plano** en la cola y en cada respaldo (también en base64, que es como viaja en el `AUTH`).
+- **Retención de datos** (`/administracion/datos/`): cuántos días se guardan el historial y los archivos de media, con un botón que **simula la limpieza** y dice qué borraría sin borrar nada. La limpieza semanal incluye ahora las tablas de `axes`, que con el bloqueo sin caducidad ya no se purgaban solas. **Si la retención no se puede leer, la limpieza no borra nada y lo dice**: antes caía a 365 días y borraba con ese número, lo que en una instalación con retención mayor destruía lo que el administrador había elegido conservar.
+- **Auditoría de la configuración**: todo cambio deja renglón, y **ningún secreto llega nunca a la auditoría** (se registra `(cambiada)`).
+- **Ningún valor de la pantalla puede tumbar la aplicación**: los seis campos numéricos tienen tope arriba y abajo, y los lectores los acotan además al leerlos, porque un `UPDATE` directo se salta los validadores del modelo. Sin eso, un `999999999` en «minutos de sesión» daba **500 en cada petición autenticada** y uno en «retención» reventaba el cron de limpieza sin que nadie lo viera.
+
+**Al desplegar hay un paso que no es automático**: el cron de limpieza vive en `/etc/cron.d` del host y hay que reinstalarlo (`GUIA_DEPLOY_PASO_A_PASO.md` §7c). Sin él la pantalla de retención no tiene efecto.
+
+**Pruebas**: 1013 OK (6 omitidas en Windows).
 
 ### 2026-10-28 — v1.13.1 · Robustez, acta que aprovecha la hoja y arreglo del borrado en la bóveda (en producción desde el 2026-10-28)
 
