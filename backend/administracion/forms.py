@@ -1,21 +1,35 @@
 from django import forms
 from django.contrib.auth import get_user_model
 
-from .models import ConfiguracionSistema
+from .models import (
+    RETENCION_DIAS_MAXIMO,
+    RETENCION_DIAS_MINIMO,
+    RETENCION_MEDIA_DIAS_MAXIMO,
+    RETENCION_MEDIA_DIAS_MINIMO,
+    ConfiguracionSistema,
+)
 
 CustomUser = get_user_model()
 
+# Largo mínimo de la contraseña SMTP. No es política de contraseñas —esa es
+# `ConfiguracionSistema.longitud_minima_password`, y aplica a las cuentas de la
+# aplicación, no a una credencial de un relé ajeno—: es lo que hace fiable el
+# tachado de `administracion.errores_correo`, que reemplaza por *substring*. Con
+# una credencial de tres letras, un error del servidor que las contuviera por
+# casualidad saldría con «(oculta)» en medio y el administrador perdería el
+# diagnóstico. Ocho caracteres hacen la coincidencia accidental inverosímil y
+# siguen por debajo de cualquier contraseña de aplicación real (las de
+# Microsoft 365 son de 16).
+LARGO_MINIMO_SMTP_PASSWORD = 8
+
 
 class ConfiguracionForm(forms.ModelForm):
-    smtp_password = forms.CharField(
-        label="Contraseña SMTP",
-        required=False,
-        widget=forms.PasswordInput(attrs={
-            "class": "form-control",
-            "autocomplete": "new-password",
-        }),
-        help_text="Deja en blanco para conservar la contraseña actual.",
-    )
+    """Datos de la empresa y metadatos del acta.
+
+    Los campos del correo SMTP **no** están aquí: viven en ``CorreoForm``, que es
+    la única pantalla que escribe la credencial y la única que audita el cambio.
+    Tenerlos en dos formularios dejaba una mitad auditada y la otra no.
+    """
 
     class Meta:
         model = ConfiguracionSistema
@@ -26,11 +40,6 @@ class ConfiguracionForm(forms.ModelForm):
             "telefono",
             "email_contacto",
             "pie_firma_reporte",
-            "smtp_host",
-            "smtp_puerto",
-            "smtp_usuario",
-            "smtp_usa_tls",
-            "smtp_usa_ssl",
             "acta_mant_codigo",
             "acta_mant_version",
         ]
@@ -41,6 +50,45 @@ class ConfiguracionForm(forms.ModelForm):
             "telefono": forms.TextInput(attrs={"class": "form-control"}),
             "email_contacto": forms.EmailInput(attrs={"class": "form-control"}),
             "pie_firma_reporte": forms.TextInput(attrs={"class": "form-control"}),
+            "acta_mant_codigo": forms.TextInput(attrs={"class": "form-control", "placeholder": "FT-TI-002"}),
+            "acta_mant_version": forms.TextInput(attrs={"class": "form-control", "placeholder": "01"}),
+        }
+
+
+class CorreoForm(forms.ModelForm):
+    """Servidor SMTP, usuario, contraseña cifrada y remitente.
+
+    ``smtp_password`` se declara aparte porque el modelo solo guarda la versión
+    cifrada (``smtp_password_cifrado``): el formulario recibe el texto en claro,
+    lo pasa a ``set_smtp_password()`` y nunca lo devuelve al navegador. Dejarla
+    en blanco conserva la que ya estaba guardada, así que abrir la pantalla y
+    guardar cualquier otro campo no borra la credencial.
+    """
+
+    smtp_password = forms.CharField(
+        label="Contraseña SMTP",
+        required=False,
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "autocomplete": "new-password",
+        }),
+        help_text=(
+            f"Deja en blanco para conservar la contraseña actual. "
+            f"Mínimo {LARGO_MINIMO_SMTP_PASSWORD} caracteres."
+        ),
+    )
+
+    class Meta:
+        model = ConfiguracionSistema
+        fields = [
+            "smtp_host",
+            "smtp_puerto",
+            "smtp_usuario",
+            "correo_remitente",
+            "smtp_usa_tls",
+            "smtp_usa_ssl",
+        ]
+        widgets = {
             "smtp_host": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "smtp.office365.com",
@@ -50,10 +98,12 @@ class ConfiguracionForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "soporte@redihos.co",
             }),
+            "correo_remitente": forms.EmailInput(attrs={
+                "class": "form-control",
+                "placeholder": "soporte@redihos.co",
+            }),
             "smtp_usa_tls": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "smtp_usa_ssl": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "acta_mant_codigo": forms.TextInput(attrs={"class": "form-control", "placeholder": "FT-TI-002"}),
-            "acta_mant_version": forms.TextInput(attrs={"class": "form-control", "placeholder": "01"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -66,6 +116,40 @@ class ConfiguracionForm(forms.ModelForm):
             return 587
         return value
 
+    def clean_smtp_password(self):
+        """Vacío conserva la guardada; corta, se rechaza.
+
+        El vacío tiene que seguir siendo válido: es lo que hace que abrir la
+        pantalla y guardar otro campo no borre la credencial. El mínimo solo
+        aplica cuando de verdad se está escribiendo una contraseña nueva.
+        """
+        clave = self.cleaned_data.get("smtp_password") or ""
+        if clave and len(clave) < LARGO_MINIMO_SMTP_PASSWORD:
+            raise forms.ValidationError(
+                f"La contraseña del correo debe tener al menos "
+                f"{LARGO_MINIMO_SMTP_PASSWORD} caracteres. Una más corta hace "
+                f"que el texto de los errores del servidor se tache de más y se "
+                f"pierda el diagnóstico."
+            )
+        return clave
+
+    def clean(self):
+        """STARTTLS y SSL son excluyentes, y las dos casillas están juntas.
+
+        Con las dos marcadas, Django lanza ``ValueError`` al construir el
+        backend (``django/core/mail/backends/smtp.py``), así que no se cae la
+        pantalla sino **la cola**: cada corrida del cron falla, y antes del
+        arreglo del C2 ni siquiera dejaba rastro. Se rechaza aquí, que es donde
+        el administrador lo puede ver y corregir.
+        """
+        cleaned = super().clean()
+        if cleaned.get("smtp_usa_tls") and cleaned.get("smtp_usa_ssl"):
+            raise forms.ValidationError(
+                "STARTTLS y SSL son excluyentes: marca solo uno. "
+                "Lo habitual es STARTTLS en el puerto 587 y SSL en el 465."
+            )
+        return cleaned
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         raw = self.cleaned_data.get("smtp_password")
@@ -74,6 +158,41 @@ class ConfiguracionForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class RetencionForm(forms.ModelForm):
+    """Los dos plazos de retención de datos.
+
+    Los mínimos y los máximos son validadores del modelo y los corre
+    ``_post_clean()``: así la regla vale también para un comando de gestión o una
+    importación, no solo para esta pantalla. El ``min``/``max`` del HTML es
+    comodidad del navegador, no la validación.
+
+    Y ni el formulario ni el modelo son la última línea: un ``queryset.update()``
+    se salta los dos, y la bandera ``--dias`` del comando no pasa por ninguno.
+    Quien garantiza que ningún plazo guardado mate la limpieza es
+    ``core.management.commands.limpiar_historial``, que acota al resolver.
+
+    Va aquí y no en ``ConfiguracionForm`` para que la pantalla de Empresa siga
+    declarando su lista explícita de campos: los dos campos nuevos del modelo no
+    se cuelan en ningún otro formulario.
+    """
+
+    class Meta:
+        model = ConfiguracionSistema
+        fields = ["retencion_dias", "retencion_media_dias"]
+        widgets = {
+            "retencion_dias": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": RETENCION_DIAS_MINIMO,
+                "max": RETENCION_DIAS_MAXIMO,
+            }),
+            "retencion_media_dias": forms.NumberInput(attrs={
+                "class": "form-control",
+                "min": RETENCION_MEDIA_DIAS_MINIMO,
+                "max": RETENCION_MEDIA_DIAS_MAXIMO,
+            }),
+        }
 
 
 # Nombre y cargo de la cuenta: salen en las actas que firma (p. ej. el técnico

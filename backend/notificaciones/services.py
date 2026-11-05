@@ -7,7 +7,8 @@ from django.db.models import F, Q
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.permisos import PERMISOS_POR_ROL
+from accounts.permisos import nivel_permiso
+from administracion.errores_correo import LARGO_MAXIMO_GUARDADO, texto_de_error_smtp
 from administracion.models import ConfiguracionSistema
 from inventario.models import ActaAsignacion, Activo
 from inventario.services import acta_pdf_bytes
@@ -25,8 +26,7 @@ DIAS_GARANTIA = 30
 
 
 def _puede_ver(user, modulo):
-    perm = PERMISOS_POR_ROL.get(user.rol, {})
-    return perm.get(modulo) in ("lectura", "escritura")
+    return nivel_permiso(user.rol, modulo) in ("lectura", "escritura")
 
 
 def _crear(user, tipo, titulo, mensaje, link="", objetokey=""):
@@ -233,6 +233,13 @@ def generar_notificaciones(user):
 
 # ── Cola de emails (patrón GLPI: cola + cron) ────────────────────────────────
 
+# Intentos tras los cuales un correo se da por fallido y la cola lo deja de
+# tomar. Es una constante y no un 5 repetido porque la pantalla de Correo cuenta
+# los fallidos con este mismo número y su botón de reintentar los devuelve a 0:
+# si los dos lados no dijeran lo mismo, la pantalla mostraría una cola distinta
+# de la que el cron despacha.
+MAX_INTENTOS_EMAIL = 5
+
 
 def encolar_email(destinatario_email, asunto, cuerpo, adjunto_tipo="", adjunto_objeto_id=None):
     """Encola un email. Sin destinatario → sin acción, no es error.
@@ -263,6 +270,12 @@ def _get_smtp_connection():
         password=config.get_smtp_password(),
         use_tls=config.smtp_usa_tls,
         use_ssl=config.smtp_usa_ssl,
+        # Sin timeout, un host SMTP inalcanzable cuelga a quien abra la conexión
+        # hasta que el sistema operativo corte. Desde el cron solo retrasa una
+        # corrida, pero la pantalla de Correo llama aquí desde una petición web:
+        # sin esto se queda un worker de gunicorn ocupado hasta el
+        # GUNICORN_TIMEOUT.
+        timeout=10,
     )
 
 
@@ -284,24 +297,38 @@ def procesar_cola_email():
     (host caído / credenciales malas / firewall) marca toda la corrida con
     intentos+1 y el error, y sale limpio: el cron nunca revienta y la tabla
     NotificacionEmail queda con el rastro.
+
+    Dos cosas que sostienen ese «nunca revienta» y que no son de estilo:
+
+    - ``_get_smtp_connection()`` se construye DENTRO del try. Estaba fuera, y
+      ahí ya puede lanzar: ``get_connection()`` levanta ``ValueError`` si TLS y
+      SSL están marcados a la vez —alcanzable desde la pantalla— y
+      ``get_smtp_password()`` levanta ``InvalidToken`` si la clave Fernet rotó.
+      El cron moría contra su propio docstring y, como la portada cuenta
+      ``error=""``, sin marcar nada.
+    - El error se guarda por ``texto_de_error_smtp()``, nunca con ``str(exc)``:
+      esta columna no se purgaba, se pinta en pantalla y se ve en ``/admin/``.
     """
     config = ConfiguracionSistema.get_config()
     if not config.smtp_host:
         return 0, 0, 0, 0  # sin config SMTP → no es error
 
     pending = NotificacionEmail.objects.filter(
-        enviado=False, intentos__lt=5
+        enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
     ).order_by("fecha_creacion")
     total = pending.count()
 
-    connection = _get_smtp_connection()
+    connection = None
     try:
         try:
+            connection = _get_smtp_connection()
             connection.open()
         except Exception as exc:
-            error = str(exc)[:2000]
+            error = texto_de_error_smtp(exc, config, largo=LARGO_MAXIMO_GUARDADO)
             marcadas = pending.update(intentos=F("intentos") + 1, error=error)
-            quedan = NotificacionEmail.objects.filter(enviado=False, intentos__lt=5).count()
+            quedan = NotificacionEmail.objects.filter(
+                enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
+            ).count()
             return total, 0, marcadas, quedan
 
         enviados = 0
@@ -316,6 +343,10 @@ def procesar_cola_email():
                 mensaje = EmailMessage(
                     subject=correo.asunto,
                     body=correo.cuerpo,
+                    # Sin remitente explícito el From sería el
+                    # DEFAULT_FROM_EMAIL de Django («webmaster@localhost»), que
+                    # ningún relé corporativo acepta. Vacío cae al usuario SMTP.
+                    from_email=config.remitente_efectivo(),
                     to=[correo.destinatario],
                     attachments=adjuntos,
                     connection=connection,
@@ -329,13 +360,18 @@ def procesar_cola_email():
                 enviados += 1
             except Exception as exc:
                 correo.intentos += 1
-                correo.error = str(exc)[:2000]
+                correo.error = texto_de_error_smtp(
+                    exc, config, largo=LARGO_MAXIMO_GUARDADO,
+                )
                 correo.save(update_fields=["intentos", "error"])
                 fallos += 1
     finally:
         try:
-            connection.close()
+            if connection is not None:
+                connection.close()
         except Exception:
             pass
 
-    return total, enviados, fallos, NotificacionEmail.objects.filter(enviado=False, intentos__lt=5).count()
+    return total, enviados, fallos, NotificacionEmail.objects.filter(
+        enviado=False, intentos__lt=MAX_INTENTOS_EMAIL
+    ).count()

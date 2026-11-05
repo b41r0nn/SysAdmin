@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Roles y permisos — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'administracion:inicio' %}" class="text-decoration-none">Configuración</a></li>
+    <li class="breadcrumb-item active">Roles y permisos</li>
+  </ol>
+</nav>
+
+<div class="mb-4">
+  <h4 class="fw-bold mb-1">Roles y permisos</h4>
+  {% if puede_escribir %}
+    <p class="text-muted mb-0" style="font-size:.85rem;">
+      Cada celda se guarda sola al cambiarla. La columna del Super Administrador no se puede
+      tocar: es la llave de repuesto del sistema y siempre tiene escritura.
+    </p>
+  {% else %}
+    <p class="text-muted mb-0" style="font-size:.85rem;">
+      Solo lectura: puedes ver qué puede hacer cada rol, pero no cambiarlo. La columna del
+      Super Administrador no se puede tocar nunca: es la llave de repuesto del sistema.
+    </p>
+  {% endif %}
+</div>
+
+<div class="sa-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    {% comment %}
+    El token CSRF va una sola vez, en la tabla: HTMX hereda sus atributos por el
+    DOM, así que lo recogen las treinta celdas editables y también la celda que
+    vuelve por el parcial, que queda dentro de esta misma tabla.
+    {% endcomment %}
+    <table class="table table-hover align-middle mb-0"
+           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      <thead class="table-light">
+        <tr>
+          <th class="px-3">Módulo</th>
+          {% for rol in roles %}
+            <th>{{ rol.nombre }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}
+          <tr>
+            <td class="px-3">
+              <i class="bi {{ fila.modulo.icono }} me-2 text-primary"></i>
+              <span class="fw-semibold">{{ fila.modulo.nombre }}</span>
+              {% if not fila.modulo.activo %}
+                <span class="badge text-bg-secondary ms-2">Apagado</span>
+                <div class="text-muted" style="font-size:.8rem;">
+                  Módulo apagado: estos permisos quedan listos para cuando se encienda.
+                </div>
+              {% endif %}
+            </td>
+            {% for celda in fila.celdas %}
+              {% include "administracion/partials/celda_permiso.html" %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

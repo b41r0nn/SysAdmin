@@ -8,7 +8,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
 from django.utils.http import content_disposition_header
 
-from accounts.permisos import PERMISOS_POR_ROL
+from accounts.permisos import nivel_permiso
 from inventario.models import Activo
 from mantenimiento.models import OrdenMantenimiento
 from mantenimiento.programacion import tablero
@@ -62,7 +62,7 @@ def media_protegido(request, ruta):
         raise Http404  # prefijo no registrado: denegar por defecto
 
     if not request.user.is_superuser:
-        nivel = PERMISOS_POR_ROL.get(request.user.rol, {}).get(modulo, "ninguno")
+        nivel = nivel_permiso(request.user.rol, modulo)
         if nivel == "ninguno":
             raise Http404
 

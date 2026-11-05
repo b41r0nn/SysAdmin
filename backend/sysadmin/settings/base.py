@@ -2,6 +2,10 @@
 import os
 from pathlib import Path
 
+# Solo constantes enteras: importarlo no carga ninguna app de Django, así que
+# es seguro desde los settings (ver MESSAGE_TAGS más abajo).
+from django.contrib.messages import constants as message_constants
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -57,6 +61,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Va DESPUÉS de la autenticación: necesita request.user para saber si hay
+    # sesión que vencer.
+    'administracion.middleware.SesionConfigurableMiddleware',
+    'administracion.middleware.ModuloActivoMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
@@ -64,6 +72,22 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'sysadmin.urls'
+
+# ─── Etiquetas de los mensajes ───────────────────────────────────────────────
+# Las plantillas pintan `class="alert alert-{{ message.tags }}"`, y la etiqueta
+# que Django da a ERROR es "error": el HTML salía `alert-error`, una clase que
+# NO EXISTE en Bootstrap 5 (es `alert-danger`). Resultado: todos los avisos de
+# error de todas las pantallas salían con la caja pero sin color. Se arregla
+# aquí y no en las plantillas para que valga de una vez para toda la aplicación
+# y no quede un `if` en el HTML.
+#
+# `success`, `warning` e `info` ya coinciden con Bootstrap y no se mapean.
+# `debug` no existe en Bootstrap y cae en `secondary`; esos mensajes están
+# apagados fuera de desarrollo.
+MESSAGE_TAGS = {
+    message_constants.DEBUG: 'secondary',
+    message_constants.ERROR: 'danger',
+}
 
 TEMPLATES = [
     {
@@ -76,6 +100,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'administracion.context_processors.menu_modulos',
             ],
         },
     },
@@ -95,7 +120,10 @@ LOGOUT_REDIRECT_URL = 'accounts:login'
 # ─── Validadores de contraseña ────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        # La longitud mínima vive en ConfiguracionSistema.longitud_minima_password
+        # y se resuelve en cada validación. El min_length de aquí es solo el
+        # respaldo para cuando la base de datos no responde.
+        'NAME': 'administracion.seguridad.LongitudMinimaConfigurable',
         'OPTIONS': {
             'min_length': 10,
         },
@@ -130,8 +158,18 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-AXES_FAILURE_LIMIT = 5
-AXES_COOLOFF_TIME = 1  # hora
+# El límite de intentos y la duración del bloqueo viven en
+# ConfiguracionSistema y se leen en cada intento de login. Se declaran como
+# RUTA CON PUNTOS y no como el callable importado: importar `administracion`
+# desde los settings dispararía la carga de apps antes de tiempo. axes resuelve
+# la ruta con import_string (axes/helpers.py:446-455 y :52-74), igual que ya se
+# hace abajo con AXES_CLIENT_IP_CALLABLE.
+#
+# Efecto conocido y ACEPTADO, para que nadie lo investigue como un error: el
+# /admin/ de axes deja de mostrar la columna «status» y su filtro, porque
+# axes/admin.py:45 solo los añade si AXES_FAILURE_LIMIT es un int.
+AXES_FAILURE_LIMIT = "administracion.seguridad.limite_de_intentos"
+AXES_COOLOFF_TIME = "administracion.seguridad.tiempo_de_bloqueo"
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_RESET_ON_SUCCESS = True
 AXES_CLIENT_IP_CALLABLE = "core.utils.get_client_ip"

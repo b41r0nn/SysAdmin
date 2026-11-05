@@ -1,5 +1,6 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-10-28 · v1.13.1 (mantenimiento v2 + contraseñas + robustez y acta dinámica) · 723 tests OK · **desplegado en producción el 2026-10-28**
+> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración) · 1013 tests OK · **pendiente de despliegue**
+> Producción sigue en **v1.13.1** (desplegada el 2026-10-28) hasta que v1.14 salga. El módulo de Configuración está terminado en la rama `feat/modulo-configuracion`: ver la sección «MÓDULO DE CONFIGURACIÓN», con su deuda conocida y, al final, **el paso del cron que un despliegue normal se salta**.
 
 ---
 
@@ -1767,6 +1768,124 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 ---
 
+## MÓDULO DE CONFIGURACIÓN (rama `feat/modulo-configuracion`, 2026-10-29 → 2026-11)
+
+Diseño: `docs/superpowers/specs/2026-10-29-configuracion-y-mesa-de-ayuda-design.md` (Fase A). Plan: `docs/superpowers/plans/2026-10-29-modulo-configuracion.md`. Ledger tarea por tarea, revisión final y auditoría de la deuda: `.superpowers/sdd/2026-10-29-modulo-configuracion/` (`progress.md`, `revision-final.md`, `auditoria-minores.md`).
+
+> **Estado al escribir esto (2026-11-05)**: las **12 tareas están hechas y verificadas** — **1013 pruebas, 0 fallos** (6 omitidas en Windows), `ruff` limpio, `makemigrations --check` sin cambios. Falta el despliegue; producción sigue en v1.13.1. Todo lo de abajo está confirmado contra el código, no contra el plan.
+
+### Qué existe ahora
+
+La configuración que antes eran constantes en código o variables del `.env` se cambia desde `/administracion/` y **surte efecto en la petición siguiente**, sin reiniciar el contenedor.
+
+| Pieza | Dónde vive | Qué hace |
+| --- | --- | --- |
+| Catálogo de módulos | `administracion.Modulo` (migraciones `0005`, `0006`); lectura cacheada en `administracion/registro.py` | Una fila por módulo (10): `clave`, `nombre`, `icono`, `url_nombre`, `orden`, `activo`, `es_esencial`. Licencias y Préstamos se siembran **apagados** a propósito. |
+| Matriz de permisos | `administracion.Rol` y `PermisoRol` (`0007`, `0008`) | 4 roles × 10 módulos = **40 filas** sembradas por la migración `0008` desde una copia congelada de la matriz de fábrica (la migración no importa `PERMISOS_POR_ROL`). |
+| Resolvedor único | `accounts.permisos.nivel_permiso(rol, modulo)` | Único punto de lectura de permisos. Orden de reglas: módulo apagado → `ninguno` para todos; `superadmin` → `escritura` (hardcodeado, no sale de la tabla); si no, la celda de `PermisoRol`. |
+| 404 en módulos apagados | `ModuloActivoMiddleware` (`process_view`) | Toda URL de un módulo inactivo responde 404 **antes** de la vista, también a un superusuario. `APPS_SIEMPRE_ABIERTAS` (login, tablero, avisos, `admin`) no se filtran. Un anónimo que entra a un módulo apagado recibe 404, no redirección al login: es el diseño. |
+| Menú y tablero desde datos | `administracion/context_processors.py` (`catalogo_modulos()`), `templates/base.html`, `core/dashboard.html` | El sidebar es un bucle sobre el catálogo filtrado por permiso. Las tarjetas del tablero van envueltas en `tiene_permiso`. El menú dice «Contraseñas» (nombre del catálogo) y **Yule (OCS) va justo debajo de Notificaciones**: confirmado por el usuario. |
+| Auditoría de configuración | `administracion/auditoria.py` (`auditar_cambios`), `administracion/services.py` (`registrar_auditoria`) | Ningún secreto llega nunca a un `RegistroAuditoria`: los campos de secreto se registran como `(cambiada)`. |
+
+**Pantallas** (paquete `administracion/views/`, portada en `/administracion/`):
+
+- **Portada** (`views/inicio.py`): tarjetas de las cinco áreas. El enlace «Configuración» del menú apunta aquí (migración `0009`), ya no a la auditoría.
+- **Módulos** (`/administracion/modulos/`): interruptor HTMX por fila (`toggle_modulo`, solo POST; un GET da 405). Los 4 esenciales salen `disabled` y la vista da 400 si se fuerza por POST. Audita con `registrar_auditoria`.
+- **Roles y permisos** (`/administracion/roles/`): matriz de 10 × 3 roles editables, una celda por POST (`guardar_permiso`). La columna del superadministrador es texto fijo «Escritura (fijo)» y la vista la rechaza con 400 aunque se mande el POST a mano. Se pinta con `nivel_de` (lo **guardado**), no con `nivel_permiso` (lo efectivo), a propósito: así Licencias y Préstamos, apagados, se pueden dejar listos antes de encenderlos; el apagado se avisa con una insignia en la fila.
+- **Seguridad** (`/administracion/seguridad/`, migración `0010`): `sesion_minutos` (def. 30), `intentos_antes_de_bloquear` (5), `horas_de_bloqueo` (1) y `longitud_minima_password` (10). Los defaults coinciden con los settings de antes. Mecanismos: `SesionConfigurableMiddleware` (hereda de `MiddlewareMixin`), `AXES_FAILURE_LIMIT` y `AXES_COOLOFF_TIME` ahora son **rutas con puntos** a `administracion.seguridad.limite_de_intentos` / `tiempo_de_bloqueo`, y `LongitudMinimaConfigurable` reemplaza al validador de longitud. Cada lectura tolera la base caída y cae a constantes de módulo (`INTENTOS_POR_DEFECTO`, `HORAS_DE_BLOQUEO_POR_DEFECTO`), para que una migración a medias no tumbe el login.
+  - **`horas_de_bloqueo = 0` significa bloqueo que no caduca** (`BLOQUEO_SIN_CADUCIDAD`, 100 años), no «sin bloqueo». La vía de recuperación son los comandos de axes `axes_reset`, `axes_reset_username` y `axes_reset_ip_username`; el `help_text` del campo lo dice.
+- **Correo** (`/administracion/correo/`, migración `0011`): servidor SMTP, contraseña, **remitente** (`correo_remitente`; `remitente_efectivo()` cae al usuario SMTP), botón «Probar envío» (`probar_correo`) y «Reintentar» la cola (`reintentar_correos`), ambos POST normales, no HTMX. **Los campos SMTP salieron del formulario de Empresa** (decisión R13): hay una sola puerta de escritura para la credencial. La pantalla de **Empresa** también audita ahora con `auditar_cambios` (antes guardaba sin renglón). La cola real de notificaciones ahora envía con `from_email=config.remitente_efectivo()` (antes salía como `webmaster@localhost`) y la conexión SMTP lleva `timeout=10`. Los errores del servidor se muestran con la contraseña tachada **antes** de recortar a 500 caracteres.
+- **Datos** (`/administracion/datos/`, migraciones `0012`, `0014`): retención configurable (`retencion_dias` def. 365, mín. 30, máx. 3650; `retencion_media_dias` def. 30, mín. 7, máx. 3650) y simulación de limpieza (`simular_limpieza`, ejecuta `limpiar_historial --dry-run`). El comando sin argumentos lee la configuración; un argumento explícito sigue ganando. **Para que el cron semanal la use hay que reinstalar el cron en el host** (`GUIA_DEPLOY_PASO_A_PASO.md` §7c): es lo único de esta versión que un despliegue normal se salta, y sin él la pantalla es decorado. La limpieza incluye ahora `axes_accessattempt`, `axes_accessfailurelog` y `axes_accesslog`, que con el bloqueo sin caducidad ya no se purgaban solas (`AccessLog` nunca se purgó: crece una fila por inicio de sesión correcto).
+  - **Si la retención no se puede leer, no se borra nada.** Hasta la Tarea 11B el comando caía a unos respaldos de 365 y 30 días y borraba con ellos; en una instalación con retención mayor eso borraba **más** de lo que el administrador eligió conservar, y es irreversible. Ahora termina sin tocar nada y escribe `NO SE BORRÓ NADA` por `stderr`, que es donde el cron recoge su log. Con `--dias` y `--media-dias` explícitos la base no hace falta y borra igual. **Va a propósito contra el instinto del resto del módulo**, donde se falla abierto para que la aplicación no se esconda: en una limpieza, fallar abierto significa destruir.
+  - **Los cuatro campos de seguridad y los dos de retención tienen tope** (migraciones `0013` y `0014`), y los lectores los acotan además al leerlos (`administracion/seguridad.py`, `core/utils.acotado`). No es cinturón y tirantes de más: un `queryset.update()` se salta los validadores del modelo, y con un valor desbordado el login daba 500 por dos caminos distintos (`axes` al calcular el bloqueo y el formateo de la cookie de sesión en cada petición autenticada), mientras la retención desbordada reventaba el cron entero. La `0013` además **acota lo ya guardado** antes de los `AlterField`, porque un `AlterField` no revisa los datos y una fila fuera de rango sobreviviría al despliegue y daría 500 en tres pantallas.
+
+**Qué se quedó en el `.env` y por qué**: `SECRET_KEY`, credenciales de PostgreSQL, `PASSWORDS_ENCRYPTION_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, los ajustes de HTTPS y `SOPORTE_REPORTE_PUBLICO_COOLDOWN_SEGUNDOS` (nginx es la autoridad ahí). Son lo que hace falta para llegar a la base de datos o protegerla: si estuvieran en la base, un error de configuración no tendría cómo corregirse. `SESSION_COOKIE_AGE` del `.env` queda solo como respaldo si no se puede leer la tabla.
+
+### Las cinco propiedades que no se pueden romper
+
+El plan las llama «foco de revisión». La revisión final (`revision-final.md`) las verificó con archivo y línea; cualquier cambio futuro en esta zona debe conservarlas.
+
+1. **Candado sin llave.** Ni desactivar `administracion` ni quitarle escritura al superadministrador pueden dejar la configuración inalcanzable desde la web. Mitad del superadmin: `nivel_permiso` lo concede sin mirar la tabla, así que ni `update()` ni SQL lo degradan. Mitad del módulo: `modulos_activos()` y `catalogo_modulos()` devuelven `activos | MODULOS_ESENCIALES`, una **constante de código** (`accounts/permisos.py`), no la columna `es_esencial`; además `Modulo.save()`/`delete()` y `PermisoRol.clean()` lo impiden por instancia, y un `update()` directo ya no apaga nada (commit `c0fd855`, `c4d4f64`). `/admin/` no registra `Modulo`, `Rol` ni `PermisoRol`.
+2. **Tablas de configuración vacías.** Base nueva, `migrate` a medias o caché frío no tumban el login: `modulos_activos()` falla **abierto** (todo activo, con traza en el log) y `catalogo_modulos()` falla **cerrado** (menú vacío). La asimetría es deliberada: no igualarlas.
+3. **Un rol que ya no existe** resuelve a `ninguno` y no revienta; `choices` llamable de `CustomUser.rol` no revienta `migrate` sobre una base sin la tabla.
+4. **El 404 que se come el login.** Con los 10 módulos apagados, login, tablero y avisos siguen en 200.
+5. **La contraseña SMTP.** Guardar el formulario con el campo vacío conserva la guardada, y ningún `RegistroAuditoria` ni ningún mensaje en pantalla contiene el valor.
+
+### Decisiones que parecen errores y no lo son
+
+No «arreglar» sin leer el motivo (todas en `revision-final.md` §d o en el ledger):
+
+- El atajo `is_superuser` en `requiere_permiso`/`tiene_permiso` no respeta el apagado de módulos: el corte lo da el middleware con el 404, antes de llegar al decorador.
+- `PERMISOS_POR_ROL` sigue existiendo: es el respaldo de `registro.py` cuando la tabla está vacía. La lista blanca de su vigilancia incluye ese archivo y las pruebas de roles; **las migraciones ya no están exentas** (la `0008` congela literales).
+- La matriz se pinta con `nivel_de` y no con `nivel_permiso` (arriba).
+- `queryset.update()` y `bulk_create` se saltan `clean()` en `PermisoRol`: es Django. La red real es `nivel_permiso`. Cerrar esa puerta pediría un `CheckConstraint` con migración.
+- Tres conteos de `test_roles.py` (4 roles, 10 módulos, «Escritura (fijo)» ×10) se rompen a propósito si alguien siembra un rol o módulo sin mirar la matriz.
+- No existe `forms_modulos.py` (el plan lo listaba): el interruptor es un POST suelto.
+- `AXES_COOLOFF_TIME` es una ruta con puntos y por eso **siempre es verdadera**: el mensaje de bloqueo dice «temporalmente bloqueada» incluso con 0 horas. Mitigado solo por el `help_text`; arreglarlo pide un `AXES_LOCKOUT_CALLABLE` propio.
+- Sin CSRF global en `base.html`: cada pantalla HTMX trae su `hx-headers` (la matriz lo pone una vez en la `<table>` y las celdas lo heredan).
+
+### Lecciones del proceso que costaron caro
+
+- **Un middleware de estilo nuevo no llama `process_request`.** El de sesión existía, estaba registrado y no corría; solo lo cazó una prueba que mira el efecto (`1800 != 300`). Ahora hereda de `MiddlewareMixin`.
+- **`cool_off = None` en axes tumba el login de todos**, no bloquea una cuenta: las guardas de axes miran el *setting* (que aquí es un `str`), no el valor devuelto. Por eso el 0 se resuelve a `BLOQUEO_SIN_CADUCIDAD`.
+- **`requiere_permiso` devolvía 302 y HTMX lo seguía**, metiendo el login o el tablero completo dentro de una celda. Desde el commit `3c23f43` responde **403** si la petición es de HTMX (también la anónima: `login_required` envuelve por dentro de esa decisión) y `sysadmin.js` tiene un manejador global de `htmx:responseError` que restaura el valor del control y avisa en pantalla.
+- **Mensajes de error sin color en toda la aplicación**: `base.html` pintaba `alert-{{ message.tags }}` y la etiqueta de Django para ERROR es `error`, que no existe en Bootstrap 5 (es `alert-danger`). El plan lo mete en la Tarea 11 (una línea, `MESSAGE_TAGS`); **verificar que quedó** (`grep MESSAGE_TAGS backend/sysadmin/settings/`).
+- **El ledger se equivocó dos veces sobre la caché** (ver `GUIA_DEPLOY_PASO_A_PASO.md` §7d) y R11 de la Tarea 9 habría tumbado el login. Regla: lo que suena plausible se verifica en el código instalado, no se deduce.
+
+### Deuda conocida que queda
+
+Ordenada de más a menos probable de morder. Todo lo de abajo es deliberado y está razonado en `auditoria-minores.md` y `revision-final.md`; nada concede acceso a quien no lo tiene.
+
+| Deuda | Detalle y por qué se dejó |
+| --- | --- |
+| **`ROLES_VER_SECRETOS` fijo en código** (`accounts/permisos.py`) | La matriz **no** controla quién ve secretos en claro: subir `passwords` a «escritura» para un rol le deja administrar credenciales pero no revelarlas; eso solo lo tienen `superadmin` y `admin` (`puede_ver_secretos`). Falla cerrado. Fuera de la spec. |
+| **No hay pantalla ni `/admin/` para crear o borrar roles** | Un rol nuevo solo se crea por shell y nace con todo en «ninguno» (fail-closed). No hay camino de usuario que lo dispare. Un rol nuevo exige tocar `test_roles.py` (los conteos de arriba). |
+| **`/admin/` no audita la configuración** | `ConfiguracionSistema` está en `admin.py` con `exclude` (no lista blanca): los campos de seguridad y retención nuevos aparecen allí y **ese camino no deja renglón de auditoría**. Es también la vía de recuperación si alguien se bloquea con una configuración mala. |
+| **Auditoría escrita después del `save()` y sin transacción** | Patrón de todo el repo. Si `registrar_auditoria` fallara, el cambio quedaría sin renglón. Envolverlo obligaría a `transaction.on_commit` y a `captureOnCommitCallbacks` en todas las pruebas. Si algún día una pantalla de configuración guarda dentro de `atomic()`, la invalidación de caché por `post_save` pasa a `on_commit`. |
+| **`accounts/migrations/0004` depende de `accounts.permisos.administracion_roles_choices`** | No mover ni renombrar esa función sin editar la migración. |
+| **Logs de respaldo (fail-open)** | Salen por el `lastResort` de Python: sin marca de tiempo ni nombre de logger (`LOGGING` solo configura el logger `security`), y repiten un traceback por lectura mientras la tabla esté ilegible (el menú lee ~20 veces por página). Solo ocurre con la tabla inexistente (migración a medias, segundos): con la base caída ni se llega al menú porque las sesiones están en base. Arreglo barato si molesta: un logger `administracion` con el handler `console` y cachear el respaldo 5–10 s. |
+| **`except DatabaseError` sin savepoint** (`registro.py`) | En PostgreSQL, una consulta fallida dentro de un `atomic()` aborta la transacción. El camino existe (`notificaciones.services._crear` → `_puede_ver` → `nivel_permiso` corre dentro de los movimientos de inventario con `atomic()`), pero solo se dispara con la tabla ilegible. |
+| **Portada: «N de M activos» cuenta por la columna** (`views/inicio.py`) | Si alguien deja un esencial con `activo=False` por SQL, la portada dice que está apagado mientras el resolvedor y el menú lo tratan como activo. Cosmético. Pendiente de la Tarea 12: `CheckConstraint` (con migración) que impida que esa fila exista. |
+| **Hay un system check, no un constraint** | `sysadmin.W002` (`core/checks.py`) avisa si una clave de `MODULOS` no tiene fila en `Modulo`; `test_la_migracion_siembra_los_diez_modulos` lo cubre en CI. Un módulo nuevo necesita su fila en `Modulo`, su entrada en `APP_A_MODULO` y sus filas en `PermisoRol` (migración de datos, con literales congelados). |
+| **`test_cada_app_del_urlconf_mapea_a_un_modulo_conocido` no mira el urlconf** | Recorre el diccionario, no los `app_name` reales: una app nueva entra sin filtro de módulos y ninguna prueba se queja. Se verificó a mano que hoy la cobertura es completa. |
+| **`media_protegido` no pasa por el middleware** | No tiene `app_name`, así que un superusuario puede seguir bajando archivos de un módulo apagado. El apagado es disponibilidad, no frontera de seguridad. |
+| **El atajo `is_superuser` no está en el template tag ni en el menú** | Una cuenta de `createsuperuser` nace con `rol="tecnico"`: ve el menú de un técnico pero entra a todo. Preexistente; ahora todo el menú depende de ese camino. |
+| **El literal `"superadmin"` sobrevive en `views/cuentas.py` y `partials/tabla_cuentas.html`** | `ROL_SUPERADMIN` debía unificarlos y quedaron fuera. Preexistente. |
+| **`_matriz_permisos()` devuelve `PERMISOS_POR_ROL` por referencia** | Hoy nadie lo muta; una mutación accidental envenenaría el respaldo del proceso entero. Una copia por rol o `MappingProxyType` lo cierra. |
+| **Un solo `ConfiguracionSistema` se lee en vivo** | No se cachea (R12): una consulta extra por petición autenticada en `SesionConfigurableMiddleware`. Aceptado porque `SESSION_SAVE_EVERY_REQUEST=True` ya escribe la sesión en cada petición. |
+| **Ruta `roles/<str:rol>/<str:modulo>/`** | Captura dos segmentos cualesquiera bajo `roles/`: cualquier ruta nueva de dos segmentos va **antes**. |
+| **Dos pruebas de `test_modulos.py` son frágiles** | Una cuenta la subcadena `"disabled"` en la página entera y exige 4 (un `disabled` nuevo en `base.html` la rompe); otra no afirma el código del técnico (hoy 302). |
+| **`"reportes": "reportes"` en `APP_A_MODULO`** | No es un `app_name` real (el real es `reports`). Muerto e inofensivo. |
+
+Cerrado y por tanto **no es deuda**: el 400/302 invisible de HTMX (`3c23f43`), el candado del módulo esencial por `update()` (`c0fd855`, `c4d4f64`), la contraseña SMTP en dos pantallas, el remitente que nunca llegaba a la cola real, la validación de `Rol`/`PermisoRol` al guardar y la matriz de fábrica congelada en la migración.
+
+### Despliegue de v1.14 (el paso que un despliegue normal se salta)
+
+Receta general en `GUIA_DEPLOY_PASO_A_PASO.md` §8b (`git archive` con LF → `docker compose build` → `up -d` → `migrate`), con respaldo `.dump` fechado antes. Lo propio de esta versión:
+
+1. **Diez migraciones de `administracion`** (`0005`–`0014`, incluidas las de datos que siembran el catálogo y la matriz) **y una de `accounts`** (`0004`, las opciones del campo `rol`; no mover ni renombrar `accounts.permisos.administracion_roles_choices`, que esa migración importa). Producción venía en `administracion 0004` y `accounts 0003`. Después del `migrate`, confirmar la siembra en el contenedor:
+
+   ```bash
+   docker exec sysadmin_django python manage.py shell -c "
+   from administracion.models import Modulo, Rol, PermisoRol
+   print(Modulo.objects.count(), Rol.objects.count(), PermisoRol.objects.count())"
+   ```
+   Esperado: `10 4 40`. Si sale distinto, **parar**: el menú y los permisos salen de esas filas.
+
+2. **Reinstalar el cron de limpieza en el host** (§7c). Es lo único que un despliegue normal no toca: el archivo vive en `/etc/cron.d/sysadmin-limpiar-historial`, fuera del contenedor, y el viejo sigue pasando `--dias 365 --media-dias 30`, así que la pantalla de retención quedaría de decorado y nadie se enteraría.
+
+   ```bash
+   sudo bash /opt/sysadmin/app/deploy/instalar_cron_limpieza.sh
+   sudo systemctl reload cron
+   sudo cat /etc/cron.d/sysadmin-limpiar-historial   # sin --dias ni --media-dias
+   ```
+
+3. **Nada de nginx**: esta versión no toca `nginx/nginx.conf`.
+
+4. Lo que ninguna prueba cubre y hay que mirar a mano una vez, ya en producción: apagar **Soporte** y ver que desaparece del menú y que su URL da 404; volver a encenderlo y ver que regresa con sus tickets; poner `sesion_minutos` en 1, esperar y confirmar que vuelve a pedir login; y **probar el correo contra el SMTP real** desde `/administracion/correo/` y leer el resultado en pantalla.
+
+---
+
 ## v1.13.1 (2026-10-28) — Robustez, acta dinámica y borrado en la bóveda
 
 Tres despliegues el mismo día, todos con backup previo y sin migraciones. Los dos primeros con CI verde; el tercero solo llevó documentación.
@@ -1817,7 +1936,7 @@ Tres despliegues el mismo día, todos con backup previo y sin migraciones. Los d
 
 - **El acta todavía no se ha generado con datos reales**: producción no tiene ninguna orden de formato 2 cerrada. Al cerrar el primer preventivo, descargarla y comprobar que sale en una sola hoja.
 - **Backup al NAS**: pendiente, las carpetas del NAS no están creadas. Los `.dump` fechados viven solo en `/opt/sysadmin/app/backups/` (2026-10-27-1754, 2026-10-28-0722, 2026-10-28-1230 y 2026-10-28-1716).
-- **Rama `fix/acta-dinamica-y-vault` en GitHub**: ya está contenida en `master` (merge `c671972`) y se puede borrar en el remoto; es la única que queda aparte de `master`. El entorno de Claude deniega tanto `git push --delete` como `gh api -X DELETE .../git/refs/heads/...`, así que lo tiene que correr el usuario.
+- **Rama `fix/acta-dinamica-y-vault` en GitHub**: borrada del remoto el 2026-10-29 con `git push origin --delete` (estaba contenida en `master`, merge `c671972`, sin commits propios fuera de él). En GitHub ya solo queda `master`.
 
 ---
 
@@ -1876,7 +1995,7 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 **Pendientes tras el despliegue del 2026-10-27**
 - **Acta real sin verificar**: producción no tiene todavía ninguna orden de formato 2 cerrada, así que el acta en PDF no se ha descargado con datos reales. Al cerrar el primer preventivo, bajarla y comprobar que sale en **una sola hoja carta**.
 - **Backup al NAS (§8 de la guía): pendiente** — las carpetas del NAS aún no están creadas. Por ahora el `.dump` del despliegue vive solo en `/opt/sysadmin/app/backups/2026-10-27-1754/`.
-- **Ramas viejas en GitHub**: `feat/mantenimiento-v2` y las tres `fix/auditoria-*` ya se borraron del remoto (al 2026-10-28 solo quedaba `fix/acta-dinamica-y-vault`, ver los pendientes de v1.13.1).
+- **Ramas viejas en GitHub**: resuelto. `feat/mantenimiento-v2`, las tres `fix/auditoria-*` y `fix/acta-dinamica-y-vault` (esta el 2026-10-29) ya no están en el remoto: solo queda `master`. En local sigue la rama `backup-antes-limpieza`, que se deja a propósito como respaldo y nunca se sube.
 
 **Tests**: **711 OK** (2026-10-27). En Windows se omiten 4 (las 3 de `ActaUnaHojaTests`, que necesitan WeasyPrint real, y la de concurrencia de PostgreSQL); en Linux con WeasyPrint real, Pango y DejaVu se omite 1 y las del acta confirman que cabe en una sola hoja carta.
 
