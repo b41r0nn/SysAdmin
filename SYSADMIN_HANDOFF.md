@@ -1,6 +1,6 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración) · 1013 tests OK · **desplegado en producción el 2026-11-05**
-> Despliegue **completo, incluido el cron de §7c**: el de `/etc/cron.d` ya corre `limpiar_historial` sin banderas, así que la pantalla de retención manda sobre la limpieza semanal. Detalle en «MÓDULO DE CONFIGURACIÓN» → «Despliegue de v1.14».
+> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración + fix `limpiar_historial` media) · 1017 tests OK · **desplegado en producción el 2026-11-05 (`8a88b46`)**
+> Despliegue **completo, incluido el cron de §7c** y el parche `8a88b46` que descubre todos los modelos con `FileField` en `limpiar_historial` y falla cerrado ante errores de BD (más la restauración de los documentos y actas de `media/` desde el snapshot `b3f81371` de `restic`). Detalle en «MÓDULO DE CONFIGURACIÓN» → «Despliegue de v1.14».
 
 ---
 
@@ -1877,6 +1877,19 @@ Tres cosas que el despliegue dejó aprendidas y conviene no repetir:
 - **`git archive` no borra lo que git renombró.** Esta versión convirtió `administracion/views.py` en el paquete `views/`, así que hubo que borrar el `views.py` viejo del host a mano después del `tar xzf`. Comprobar siempre con `git diff --diff-filter=RD --name-status <desplegado>..master`.
 - Correr la suite dentro del contenedor destapó **3 errores que ni el CI ni la suite local podían ver**, porque `MEDIA_ACCEL_REDIRECT` es `False` en `base.py` y `True` en `production.py` y `MediaProtegidoTests` la heredaba del entorno (arreglado en `d783f8c`). Es un argumento para seguir corriendo la suite en el contenedor como parte de la verificación: es el único sitio donde la suite ve los settings de producción.
 
+### Parche del mismo día (`8a88b46`, 2026-11-05 16:50) — `limpiar_historial` borraba archivos referenciados de `media`
+
+- **Incidente (2026-11-01 04:00)**: la corrida semanal de `limpiar_historial` reportó `Archivos huérfanos de media: 179`. Aunque la mayoría eran archivos de prueba de 8–9 bytes de septiembre (`test_*.txt`, `manual_*.pdf`), también borró los PDF reales de `documentos.Documento` (`RECUPERACION-SERVIDOR-REDHOS-192.168.1.250.pdf`, `Manual_recuperacion_archivos_veam.pdf`, `MANUAL_PARA_RESTAURAR_BASE_DE_DATOS.pdf`, `Actualizacion_version_de_DMS.pdf` y `ActivationCodes_*.txt`).
+- **Causa raíz**: `Command._limpiar_media_huerfana()` en `backend/core/management/commands/limpiar_historial.py` tenía una lista fija escrita a mano (`[Activo, Movimiento, ActaAsignacion]`) que solo cubría 3 de los 8 campos `FileField`/`ImageField` del proyecto (dejaba fuera `Documento.archivo`, `Usuario.foto`, `OrdenMantenimiento.foto`, `OrdenMantenimiento.acta_firmada` y `FotoMantenimiento.foto`). No se había notado antes porque el corte de `media` son 30 días y hasta el 25-oct todos los archivos tenían menos de 30 días.
+- **Arreglo (`8a88b46`, desplegado con backup previo `backups/2026-11-05-1650/db.dump`)**:
+  - `Command._modelos_con_archivos()` descubre dinámicamente todos los modelos de `apps.get_models()` que tengan algún `FileField` (`ImageField` hereda de `FileField`).
+  - `Command._archivos_referenciados()` recolecta todas las rutas relativas referenciadas normalizando separadores (`\` → `/`).
+  - `Command._limpiar_media_huerfana()` falla cerrado ante `django.db.Error` (incluye `DatabaseError` e `InterfaceError`): si la lectura de referencias falla, escribe por `stderr` que `"no se revisó el disco..."` y devuelve `None` sin borrar nada.
+  - **4 pruebas nuevas** en `core.tests.LimpiarHistorialCommandTests` (`test_no_borra_el_archivo_de_un_documento`, `test_no_borra_la_foto_de_un_empleado`, `test_la_limpieza_mira_todos_los_modelos_con_archivos`, `test_si_no_se_pueden_leer_las_referencias_no_borra_nada`). Total suite: **1017 pruebas OK** (6 omitidas en Windows; 42/42 de `core` verificadas dentro del contenedor de producción).
+- **Restauración de archivos en producción**:
+  - Desde el snapshot de `restic` `b3f81371` (`2026-10-31 02:33`, anterior al barrido del 1-nov) se extrajo únicamente `/opt/sysadmin/app/backend/media` a `/tmp/media-restore`, se copiaron sin sobrescribir (`cp -rn`) los archivos a `/opt/sysadmin/app/backend/media/` y se eliminó `/tmp/media-restore`.
+  - Quedaron restaurados en disco los 5 documentos de septiembre/octubre y las 2 actas firmadas (`doc01769020260925155811.pdf` y `doc01835820261001165616.pdf`). Nota: al copiar `documentos/2026/09/` con `cp -rn` también entraron los archivos huérfanos de prueba de 8–9 bytes (`test_*.txt`, `manual_*.pdf`) con `mtime` del 2026-11-05; el cron los purgará al cumplir 30 días (o se pueden borrar con `rm`).
+
 ### El paso que un despliegue normal se salta
 
 Receta general en `GUIA_DEPLOY_PASO_A_PASO.md` §8b (`git archive` con LF → `docker compose build` → `up -d` → `migrate`), con respaldo `.dump` fechado antes. Lo propio de esta versión:
@@ -2033,4 +2046,4 @@ Diseño: `docs/superpowers/specs/2026-10-23-mantenimiento-y-contrasenas-design.m
 
 ---
 
-*Última actualización: 2026-10-28 · v1.13.1 · Robustez, acta dinámica y arreglo del borrado en la bóveda (723 tests OK, desplegado en producción el 2026-10-28)*
+*Última actualización: 2026-11-05 · v1.14 · Módulo de Configuración + fix de `limpiar_historial` sobre todos los `FileField` y restauración de `media/` desde restic (1017 tests OK, desplegado en producción el 2026-11-05, commit `8a88b46`)*
