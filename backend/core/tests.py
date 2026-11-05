@@ -471,6 +471,116 @@ class LimpiarHistorialCommandTests(TestCase):
             self.assertTrue(referenciada.exists())
             self.assertFalse(huerfana.exists())
 
+    # --- Las tres de abajo salieron del incidente del 2026-11-01 ---
+    #
+    # La limpieza semanal borró 179 archivos de `media` que SÍ estaban
+    # referenciados: los PDF de Documentos, las fotos de Mantenimiento y las de
+    # los usuarios. `_limpiar_media_huerfana` decidía qué era huérfano contra una
+    # lista de modelos escrita a mano -- `[Activo, Movimiento, ActaAsignacion]` --
+    # que cubría 3 de los 8 campos de archivo del proyecto. La prueba de arriba no
+    # lo cazó porque usa `Activo`, que es justo uno de los tres de la lista.
+    #
+    # Y no se notó durante meses porque el corte son 30 días y hasta el 25-oct
+    # todo lo de `media` era más nuevo que eso: el 1-nov el corte llegó a
+    # septiembre y se llevó todo de golpe. No cambió el código, cambió el
+    # calendario, así que ninguna prueba de entonces podía avisar.
+
+    def _con_archivo_antiguo(self, tmp, ruta_rel, contenido=b"%PDF-1.4"):
+        """Crea en disco un archivo con fecha anterior al corte y devuelve su Path."""
+        destino = Path(tmp) / ruta_rel
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(contenido)
+        antiguo = (timezone.now() - timedelta(days=60)).timestamp()
+        os.utime(destino, (antiguo, antiguo))
+        return destino
+
+    def test_no_borra_el_archivo_de_un_documento(self):
+        """El caso exacto del incidente: `documentos.Documento.archivo`."""
+        from documentos.models import Documento
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta_rel = "documentos/2026/09/manual.pdf"
+            archivo = self._con_archivo_antiguo(tmp, ruta_rel)
+            Documento.objects.create(titulo="Manual de restauración", archivo=ruta_rel)
+
+            with override_settings(MEDIA_ROOT=tmp):
+                call_command("limpiar_historial", dias=365, media_dias=30, stdout=StringIO())
+
+            self.assertTrue(archivo.exists(), "se borró un archivo referenciado")
+
+    def test_no_borra_la_foto_de_un_empleado(self):
+        """Otra app distinta, para no arreglar solo el caso que se reportó.
+
+        `usuarios.Usuario` es la ficha del empleado, no la cuenta de login
+        (`accounts.CustomUser`); su `foto` es otro de los cinco campos que la
+        lista a mano no cubría.
+        """
+        from usuarios.models import Usuario
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta_rel = "usuarios/fotos/retrato.jpg"
+            archivo = self._con_archivo_antiguo(tmp, ruta_rel, b"jpg")
+            Usuario.objects.create(
+                nombre_completo="Empleado de prueba", documento_identidad="MEDIA-1",
+                cargo="Soporte", area="Sistemas", correo="e@b.co", foto=ruta_rel,
+            )
+
+            with override_settings(MEDIA_ROOT=tmp):
+                call_command("limpiar_historial", dias=365, media_dias=30, stdout=StringIO())
+
+            self.assertTrue(archivo.exists(), "se borró un archivo referenciado")
+
+    def test_la_limpieza_mira_todos_los_modelos_con_archivos(self):
+        """La invariante que impide que esto vuelva por un campo nuevo.
+
+        Es el equivalente, para la limpieza, de lo que
+        `test_todos_los_upload_to_estan_registrados` hace con `MEDIA_PERMISOS`:
+        ahí existía esa red y aquí no, y por eso el agujero duró meses. Si
+        alguien vuelve a una lista escrita a mano, o añade un modelo con un
+        `FileField` que la lista no contemple, esto falla.
+        """
+        from django.db.models import FileField
+
+        from core.management.commands.limpiar_historial import Command
+
+        con_archivos = {
+            modelo
+            for modelo in apps.get_models()
+            if any(isinstance(f, FileField) for f in modelo._meta.fields)
+        }
+        # Si esto falla, el proyecto perdió todos sus campos de archivo y la
+        # prueba ya no mide nada.
+        self.assertTrue(con_archivos)
+        self.assertEqual(set(Command()._modelos_con_archivos()), con_archivos)
+
+    def test_si_no_se_pueden_leer_las_referencias_no_borra_nada(self):
+        """Fallar cerrado, por la misma razón que la retención.
+
+        Si la consulta de referencias falla a medias, los archivos que no se
+        alcanzaron a leer parecen huérfanos y se borran. Un huérfano que
+        sobrevive cuesta disco; un archivo referenciado que se borra no se
+        recupera. Ante la duda, no se borra.
+        """
+        from django.db.utils import DatabaseError
+
+        from core.management.commands.limpiar_historial import Command
+
+        with tempfile.TemporaryDirectory() as tmp:
+            archivo = self._con_archivo_antiguo(tmp, "documentos/2026/09/x.pdf")
+            salida = StringIO()
+
+            with override_settings(MEDIA_ROOT=tmp), mock.patch.object(
+                Command, "_archivos_referenciados",
+                side_effect=DatabaseError("sin tabla"),
+            ):
+                call_command(
+                    "limpiar_historial", dias=365, media_dias=30,
+                    stdout=salida, stderr=salida,
+                )
+
+            self.assertTrue(archivo.exists(), "borró sin saber qué estaba referenciado")
+            self.assertIn("no se revisó", salida.getvalue())
+
     def test_borra_sesiones_vencidas(self):
         # Las vistas previas de importación abandonadas viven en django_session con
         # las claves cifradas: no deben quedar para siempre (ni tras rotar la clave).
