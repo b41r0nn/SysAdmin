@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.permisos import PERMISOS_POR_ROL
+from administracion.registro import invalidar_cache
 
 CustomUser = get_user_model()
 
@@ -24,6 +25,11 @@ class RequierePermisoTests(TestCase):
         return usuario
 
     def test_matriz_cubre_todos_los_roles_modulos(self):
+        """La matriz del código ya no es la fuente de verdad, pero sigue siendo
+        el respaldo de una base vacía: un hueco ahí daría «ninguno» por sorpresa
+        justo cuando la tabla no se puede leer. Lo que la tabla sembrada
+        reproduce esta matriz lo prueba administracion.test_roles.
+        """
         roles = dict(CustomUser.ROL_CHOICES).keys()
         for rol in roles:
             self.assertIn(rol, PERMISOS_POR_ROL, f"Falta rol {rol} en la matriz")
@@ -96,6 +102,70 @@ class RequierePermisoTests(TestCase):
         self.client.force_login(superuser)
         response = self.client.get(reverse("administracion:lista_auditoria"))
         self.assertEqual(response.status_code, 200)
+
+
+class RequierePermisoHtmxTests(TestCase):
+    """Una petición de HTMX sin permiso responde 403; una navegación normal, no.
+
+    Con un 302, HTMX sigue la redirección de forma transparente y acaba
+    intercambiando el HTML completo del tablero —o del formulario de login, si
+    la sesión caducó— dentro del ``<tr>`` o el ``<td>`` que disparó la petición.
+    Con un 4xx no intercambia nada, y el manejador de ``htmx:responseError`` del
+    JS es el que avisa en pantalla.
+    """
+
+    def setUp(self):
+        # La caché de permisos sobrevive al rollback de cada prueba.
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
+
+    def test_sin_sesion_una_peticion_de_htmx_recibe_403_sin_el_login(self):
+        """El disparador universal: la sesión caduca por inactividad.
+
+        ``login_required`` envuelve a la envoltura del decorador, así que corre
+        ANTES de su cuerpo y este caso NUNCA llega a la rama de permisos. Un 403
+        puesto solo en esa rama dejaría el bug principal abierto: aquí seguiría
+        llegando el formulario de login metido en una celda de la tabla.
+        """
+        for url in (
+            reverse("administracion:toggle_modulo", args=["soporte"]),
+            reverse("administracion:guardar_permiso", args=["tecnico", "documentos"]),
+        ):
+            with self.subTest(url=url):
+                resp = self.client.post(url, {"nivel": "escritura"}, HTTP_HX_REQUEST="true")
+                self.assertEqual(resp.status_code, 403)
+                cuerpo = resp.content.decode()
+                self.assertNotIn("<form", cuerpo)
+                self.assertNotIn("csrfmiddlewaretoken", cuerpo)
+                self.assertNotIn("password", cuerpo)
+
+    def test_sin_sesion_y_sin_la_cabecera_de_htmx_sigue_yendo_al_login(self):
+        """Regresión: una navegación normal no cambia."""
+        resp = self.client.get(reverse("administracion:modulos"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("accounts:login"), resp.url)
+
+    def test_el_403_lleva_el_motivo_en_espanol(self):
+        """El cuerpo del 403 es lo que el manejador del JS muestra en pantalla."""
+        self.client.force_login(crear_usuario("tecnico"))
+        resp = self.client.post(
+            reverse("administracion:toggle_modulo", args=["soporte"]),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("permiso", resp.content.decode().lower())
+
+    def test_una_lectura_por_htmx_sin_permiso_tambien_es_403(self):
+        """No es solo cosa del POST: la pantalla de cuentas se recarga por HTMX."""
+        self.client.force_login(crear_usuario("tecnico"))
+        resp = self.client.get(reverse("administracion:cuentas"), HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_con_sesion_y_sin_htmx_sigue_redirigiendo_al_tablero(self):
+        """Regresión: el mensaje y la redirección de hoy no se tocan."""
+        self.client.force_login(crear_usuario("tecnico"))
+        resp = self.client.get(reverse("administracion:modulos"))
+        self.assertRedirects(resp, reverse("core:dashboard"))
 
 
 class PermisosExtrasTagTests(TestCase):
@@ -265,9 +335,14 @@ class LoginSeguridadTests(TestCase):
         self.assertEqual(resp.get("Referrer-Policy"), "same-origin")
 
     def test_axes_configuracion_activa(self):
+        from axes.helpers import get_failure_limit
         from django.conf import settings
 
-        self.assertTrue(settings.AXES_FAILURE_LIMIT == 5)
+        # El límite ya no es el entero 5 en los settings: es la ruta con puntos
+        # de administracion.seguridad.limite_de_intentos, que lo lee de
+        # ConfiguracionSistema. Se comprueba el límite EFECTIVO, resolviéndolo
+        # como lo resuelve axes, que es lo que esta prueba siempre quiso decir.
+        self.assertEqual(get_failure_limit(None, {}), 5)
         self.assertEqual(settings.AXES_LOCKOUT_PARAMETERS, [["username", "ip_address"]])
         self.assertTrue(settings.AXES_RESET_ON_SUCCESS)
         self.assertIn(

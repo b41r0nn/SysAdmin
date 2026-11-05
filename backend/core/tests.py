@@ -4,6 +4,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from django.apps import apps
 from django.conf import settings
@@ -11,12 +12,14 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.test import Client, TestCase, override_settings
+from django.db import InterfaceError, ProgrammingError
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.permisos import PERMISOS_POR_ROL
-from core.utils import get_client_ip
+from administracion.models import Modulo, PermisoRol
+from administracion.registro import invalidar_cache
+from core.utils import acotado, get_client_ip
 from core.views import MEDIA_PERMISOS
 
 CustomUser = get_user_model()
@@ -65,6 +68,46 @@ class VaultKeyCheckTests(TestCase):
     @override_settings(PASSWORDS_ENCRYPTION_KEY="clave-fernet-de-prueba")
     def test_sin_warning_con_clave(self):
         self.assertEqual(self._run(), [])
+
+
+class ModulosSembradosCheckTests(TestCase):
+    """W002: un módulo de ``MODULOS`` sin fila queda fuera de la interfaz.
+
+    No aparece en la pantalla de módulos ni en la matriz de roles (las dos
+    iteran ``Modulo.objects.all()``), así que sus permisos son ineditables.
+    """
+
+    def _run(self):
+        from core.checks import check_modulos_sembrados
+
+        return check_modulos_sembrados(None)
+
+    def test_sin_warning_con_los_diez_sembrados(self):
+        self.assertEqual(Modulo.objects.count(), 10)
+        self.assertEqual(self._run(), [])
+
+    def test_w002_si_falta_la_fila_de_un_modulo(self):
+        Modulo.objects.filter(clave="soporte").delete()
+        avisos = self._run()
+        self.assertEqual([a.id for a in avisos], ["sysadmin.W002"])
+        self.assertIn("soporte", avisos[0].msg)
+
+    def test_con_la_base_sin_tablas_no_revienta(self):
+        """El chequeo corre también antes de ``migrate``: no puede tumbar manage.py."""
+        with mock.patch("administracion.models.Modulo.objects") as objetos:
+            objetos.values_list.side_effect = ProgrammingError("no existe la relacion")
+            self.assertEqual(self._run(), [])
+
+    def test_con_la_conexion_cerrada_tampoco_revienta(self):
+        """``InterfaceError`` hereda de ``django.db.Error``, no de ``DatabaseError``.
+
+        Es el «connection already closed» de psycopg, así que solo muerde en
+        PostgreSQL. Aquí tumbaría cualquier ``manage.py`` —incluido el
+        ``migrate`` de un despliegue— en vez de una petición.
+        """
+        with mock.patch("administracion.models.Modulo.objects") as objetos:
+            objetos.values_list.side_effect = InterfaceError("connection already closed")
+            self.assertEqual(self._run(), [])
 
 
 class DashboardTests(TestCase):
@@ -121,6 +164,9 @@ def _cerrar_archivo(resp):
 
 class MediaProtegidoTests(TestCase):
     def setUp(self):
+        # La caché de permisos sobrevive al rollback de cada prueba.
+        invalidar_cache()
+        self.addCleanup(invalidar_cache)
         self.tmpdir = tempfile.TemporaryDirectory()
         self.media_root = Path(self.tmpdir.name)
 
@@ -176,18 +222,18 @@ class MediaProtegidoTests(TestCase):
         _cerrar_archivo(resp)
 
     def test_usuario_sin_permiso_obtiene_404(self):
-        # Todos los roles reales tienen al menos lectura en los prefijos registrados.
-        # Forzamos un rol con permiso "ninguno" sobre inventario para este test.
-        original = PERMISOS_POR_ROL["tecnico"]["inventario"]
-        PERMISOS_POR_ROL["tecnico"]["inventario"] = "ninguno"
-        try:
-            client = Client()
-            client.force_login(self.user_tecnico)
-            with self._override_media():
-                resp = client.get(self._url("inventario/fotos/a.png"))
-            self.assertEqual(resp.status_code, 404)
-        finally:
-            PERMISOS_POR_ROL["tecnico"]["inventario"] = original
+        # Todos los roles reales tienen al menos lectura en los prefijos
+        # registrados. Dejamos al técnico en "ninguno" sobre inventario: el
+        # rollback de TestCase devuelve la fila y setUp limpia la caché.
+        PermisoRol.objects.filter(rol__clave="tecnico", modulo="inventario").update(
+            nivel="ninguno"
+        )
+        invalidar_cache()
+        client = Client()
+        client.force_login(self.user_tecnico)
+        with self._override_media():
+            resp = client.get(self._url("inventario/fotos/a.png"))
+        self.assertEqual(resp.status_code, 404)
 
     def test_path_traversal_devuelve_404(self):
         client = Client()
@@ -284,6 +330,26 @@ class VendorAssetsTests(TestCase):
         self.assertEqual(encontrados, [], f"Plantillas con CDN externo: {encontrados}")
 
 
+class AvisoHtmxJsTests(TestCase):
+    """El único aviso de un cambio por HTMX que no se guardó vive en el JS.
+
+    Con un 4xx, HTMX no intercambia nada: el interruptor o el ``<select>`` se
+    quedan mostrando el valor que el usuario acaba de poner aunque el servidor
+    no haya guardado nada, y sin el manejador nadie avisa. Es una prueba de
+    grep a propósito —aquí no se ejecuta JavaScript—, para que el manejador no
+    desaparezca sin que nada falle.
+    """
+
+    def test_el_js_maneja_los_errores_de_htmx(self):
+        fuente = (
+            Path(settings.BASE_DIR) / "static" / "js" / "sysadmin.js"
+        ).read_text(encoding="utf-8")
+        # El manejador del error y el que recuerda el valor real del control
+        # para poder devolverlo a su sitio.
+        self.assertIn("htmx:responseError", fuente)
+        self.assertIn("htmx:load", fuente)
+
+
 class LimpiarHistorialCommandTests(TestCase):
     def test_dry_run_no_borra_nada(self):
         from administracion.models import RegistroAuditoria
@@ -348,6 +414,31 @@ class LimpiarHistorialCommandTests(TestCase):
         self.assertFalse(NotificacionEmail.objects.filter(pk=mail_viejo.pk).exists())
         self.assertTrue(NotificacionEmail.objects.filter(pk=mail_nuevo.pk).exists())
 
+    def test_borra_los_correos_viejos_sin_enviar(self):
+        """Una fila con error era inmortal: ``enviado=False`` por definición.
+
+        La limpieza solo purgaba ``enviado=True``, así que el texto del fallo del
+        servidor —que puede repetir la credencial que le mandamos— se quedaba
+        para siempre y entraba en cada respaldo.
+        """
+        from notificaciones.models import NotificacionEmail
+
+        viejo = timezone.now() - timedelta(days=400)
+
+        fallida = NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="s", cuerpo="c", intentos=5,
+            error="535 5.7.8 rechazado",
+        )
+        NotificacionEmail.objects.filter(pk=fallida.pk).update(fecha_creacion=viejo)
+        pendiente_nueva = NotificacionEmail.objects.create(
+            destinatario="a@b.co", asunto="s2", cuerpo="c", error="535 de ayer",
+        )
+
+        call_command("limpiar_historial", dias=365, stdout=StringIO())
+
+        self.assertFalse(NotificacionEmail.objects.filter(pk=fallida.pk).exists())
+        self.assertTrue(NotificacionEmail.objects.filter(pk=pendiente_nueva.pk).exists())
+
     def test_borra_media_huerfana_y_respeta_referenciada(self):
         from inventario.tests import crear_activo
 
@@ -395,6 +486,66 @@ class LimpiarHistorialCommandTests(TestCase):
         self.assertTrue(Session.objects.filter(pk=vigente.session_key).exists())
 
 
+class AcotadoTests(SimpleTestCase):
+    """El acotado compartido por los dos resolvedores que no se fían de la base.
+
+    Lo usan ``administracion.seguridad`` (política del login) y
+    ``core.management.commands.limpiar_historial`` (retención). Vive aquí, en una
+    sola función, porque lo delicado es el borde: un ``>`` donde va un ``>=``
+    cambia la política sin que nada falle. El aviso se inyecta porque los dos
+    tienen sinks distintos: el primero el logger y el segundo ``stderr``, que el
+    cron recoge (un logger ahí dejaría el aviso dos veces).
+    """
+
+    def _avisos(self):
+        avisos = []
+        return avisos, avisos.append
+
+    def test_un_valor_en_rango_pasa_intacto_y_sin_avisar(self):
+        avisos, avisar = self._avisos()
+        for valor in (1, 50, 100):
+            self.assertEqual(acotado(valor, 1, 100, "X", avisar), valor)
+        self.assertEqual(avisos, [])
+
+    def test_los_bordes_son_validos(self):
+        """El tope es el último valor aceptable, no el primero rechazado."""
+        avisos, avisar = self._avisos()
+        self.assertEqual(acotado(1, 1, 100, "X", avisar), 1)
+        self.assertEqual(acotado(100, 1, 100, "X", avisar), 100)
+        self.assertEqual(avisos, [])
+
+    def test_por_encima_y_por_debajo_se_acota_y_se_avisa(self):
+        avisos, avisar = self._avisos()
+        self.assertEqual(acotado(101, 1, 100, "Los minutos", avisar), 100)
+        self.assertEqual(acotado(0, 1, 100, "Los minutos", avisar), 1)
+        self.assertEqual(len(avisos), 2)
+        for aviso in avisos:
+            self.assertIn("Los minutos", aviso)
+
+    def test_un_none_cae_al_minimo_en_vez_de_reventar(self):
+        """Comparar None con un int es TypeError, o sea el 500 que se evita."""
+        avisos, avisar = self._avisos()
+        self.assertEqual(acotado(None, 7, 30, "X", avisar), 7)
+        self.assertEqual(len(avisos), 1)
+
+    def test_el_aviso_no_depende_del_genero_de_la_etiqueta(self):
+        """Es texto en español que se lee en el log de producción.
+
+        Con un ``"%s guardado fuera de rango"`` salía «Los minutos de sesión
+        guardado» y «Las horas de bloqueo guardado».
+        """
+        avisos, avisar = self._avisos()
+        for etiqueta in (
+            "los minutos de sesión",
+            "las horas de bloqueo",
+            "la longitud mínima de la contraseña",
+            "el límite de intentos",
+        ):
+            acotado(99999, 1, 10, etiqueta, avisar)
+        for aviso in avisos:
+            self.assertNotIn("guardado", aviso)
+
+
 class GuardarExcelTests(TestCase):
     def test_texto_con_igual_no_queda_como_formula(self):
         from io import BytesIO
@@ -439,12 +590,23 @@ class SmokeVistasTests(TestCase):
         "yule:historial",
         "documentos:lista", "documentos:crear", "documentos:categorias_lista",
         "administracion:lista_auditoria", "administracion:cuentas", "administracion:crear_cuenta",
-        "administracion:configuracion",
+        "administracion:configuracion", "administracion:inicio", "administracion:modulos",
+        "administracion:roles", "administracion:correo", "administracion:seguridad",
+        "administracion:datos",
         "notificaciones:lista", "notificaciones:cantidad",
         "soporte:lista", "soporte:reportar_publico", "soporte:excel", "soporte:crear",
         "licencias:lista", "licencias:crear", "licencias:exportar_excel",
         "prestamos:lista", "prestamos:crear",
     ]
+
+    def setUp(self):
+        # Licencias y préstamos nacen apagados y un módulo apagado responde 404
+        # hasta al superadministrador. Aquí se comprueba que las páginas abren,
+        # así que se encienden todas: el apagado se prueba por su cuenta en
+        # administracion.test_roles.
+        Modulo.objects.update(activo=True)
+        invalidar_cache()  # update() no dispara señales
+        self.addCleanup(invalidar_cache)
 
     def test_paginas_de_lectura_responden_200(self):
         from inventario.models import Activo

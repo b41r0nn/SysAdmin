@@ -227,6 +227,103 @@ Si se edita la frecuencia: cambiar la última línea del `.cron` y
 
 ---
 
+## 7c. Cron de limpieza de historial (módulo de Configuración)
+
+> **Pasa por alto con un despliegue normal, y sin este paso la pantalla de retención no tiene efecto.**
+
+Desde el módulo de Configuración, `limpiar_historial` lee la retención de
+`/administracion/datos/` cuando se lo llama **sin** `--dias` ni `--media-dias`
+(un argumento explícito sigue ganando, para poder forzar a mano). Por eso
+`deploy/instalar_cron_limpieza.sh` dejó de pasarlos.
+
+Pero el archivo del cron vive en **`/etc/cron.d/sysadmin-limpiar-historial` del
+host**, fuera del contenedor. Copiar el código y reconstruir la imagen (§8b)
+**no lo toca**: el cron viejo sigue ejecutando `limpiar_historial --dias 365
+--media-dias 30`, la limpieza semanal ignora lo que el administrador ponga en la
+pantalla y nadie se entera. Una opción de configuración que el proceso real
+ignora es peor que no tenerla.
+
+Después de desplegar el código (el orden no importa: el comando sin argumentos
+usa los mismos 365 y 30 de fábrica), en el servidor:
+
+```bash
+sudo bash /opt/sysadmin/app/deploy/instalar_cron_limpieza.sh
+sudo systemctl reload cron
+sudo cat /etc/cron.d/sysadmin-limpiar-historial
+```
+
+Espera `0 4 * * 0 root cd /opt/sysadmin/app && docker exec sysadmin_django python
+manage.py limpiar_historial >> /var/log/sysadmin-limpiar-historial.log 2>&1`:
+domingos 04:00 y **sin** `--dias` ni `--media-dias`. Si todavía aparecen,
+el script del servidor es el viejo: `tar xzf` de nuevo y repetir.
+
+Comprobar que la configuración llega al comando (sin borrar nada):
+
+```bash
+sudo docker exec sysadmin_django python manage.py limpiar_historial --dry-run
+```
+
+Cambiar la retención en la pantalla Datos (p. ej. a 90) y repetir: el corte que informa debe moverse con ella.
+
+Y lo que hay que saber al leer ese log: **si el comando no puede leer la retención** (base a medio migrar, tabla de configuración ausente) **no borra nada** y escribe `NO SE BORRÓ NADA`. No es que no hubiera qué borrar: es que sin la política borraría más de lo que el administrador eligió conservar, y lo borrado no se recupera. Se arregla la base y se vuelve a correr, o se pasan `--dias` y `--media-dias` explícitos si hace falta purgar ya.
+
+---
+
+## 7d. Caché tras una migración de datos
+
+El módulo de Configuración cachea el catálogo de módulos y la matriz de permisos
+**300 segundos** (`SEGUNDOS_CACHE` en `administracion/registro.py`). Las señales
+(`post_save`/`post_delete`) la invalidan al guardar por instancia, pero una
+**migración de datos escrita con `queryset.update()`** (la `0009`, que cambia el
+enlace «Configuración» del menú, lo hace) no dispara señales.
+
+**En un despliegue normal NO hace falta limpiar la caché.** Se verificó en el
+código, no se supuso:
+
+- En producción la caché es `FileBasedCache` en `/tmp/sysadmin_django_cache`
+  (`settings/production.py`; `DJANGO_CACHE_DIR` no está definida en
+  `docker-compose.yml` ni en `.env.example`), o sea **dentro del contenedor**.
+- `docker-compose.yml` monta en `django` solo `static_volume:/app/staticfiles` y
+  `./backend/media:/app/media`. **No hay volumen en `/tmp`.**
+- El despliegue es `docker compose build django nginx` + `up -d django nginx`
+  (§8b): el contenedor se **recrea** y arranca con la caché vacía.
+- `backend/entrypoint.sh` corre `migrate --noinput` (línea 5) **antes** de
+  `exec gunicorn` (línea 8): la migración se aplica antes de que ningún worker
+  pueda servir una petición, y el código anterior nunca escribió esas claves.
+
+Así que no hay ventana de enlace viejo. (Varias lecturas se equivocaron
+aquí: decían que la caché «vive en disco» y sobrevive al reinicio. Vive en el
+disco **del contenedor**, no del host.) Matiz: `up -d` solo recrea si la imagen
+cambió; una migración nueva implica código nuevo, así que la imagen cambia.
+
+**Cuándo sí.** Si una migración de datos se lanza **a mano** con `docker exec`
+sobre un contenedor **ya corriendo**, no se reinicia nada: la caché sobrevive y un
+valor viejo puede servirse hasta 300 s. Un `docker restart` simple tampoco ayuda
+(conserva la capa de escritura del contenedor, incluido `/tmp`); solo recrear lo
+hace. En ese caso, limpiarla justo después:
+
+```bash
+docker exec sysadmin_django python manage.py migrate --noinput
+docker exec sysadmin_django python manage.py shell -c "from django.core.cache import cache; cache.clear()"
+```
+
+Vale para cualquier migración de datos futura sobre `Modulo`, `Rol`,
+`PermisoRol` o `ConfiguracionSistema`. (`ConfiguracionSistema` no se cachea: se lee
+en vivo; la caché afecta a módulos y permisos.)
+
+Tras el `migrate` del primer despliegue del módulo, confirmar que las tablas
+quedaron sembradas:
+
+```bash
+docker exec sysadmin_django python manage.py shell -c "
+from administracion.models import Modulo, Rol, PermisoRol
+print(Modulo.objects.count(), Rol.objects.count(), PermisoRol.objects.count())"
+```
+
+Esperado: `10 4 40`.
+
+---
+
 ## 8. Backup → NAS
 
 Configurar `/opt/sysadmin/backups/backup.sh` (creado por setup_server.sh) con IP, ruta y
@@ -261,6 +358,8 @@ docker compose build django nginx
 docker compose up -d django nginx
 docker ps --filter name=sysadmin_   # django debe quedar (healthy)
 ```
+
+**Antes de dar por cerrado un despliegue, mirar si cambió algo bajo `deploy/`**: lo que se instala en el host (`/etc/cron.d/`) no viaja con la imagen. Hoy son los crons de §7b y §7c; el de limpieza (§7c) hay que reinstalarlo en el módulo de Configuración o la retención configurable no tiene efecto.
 
 Desde 2026-10-19 el contenedor de Django corre como usuario `app` (UID 1000 =
 `sistemas`) y el código va **dentro de la imagen**: un cambio de código no se

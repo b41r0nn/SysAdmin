@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Datos — SysAdmin{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}" class="text-decoration-none">Inicio</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'administracion:inicio' %}" class="text-decoration-none">Configuración</a></li>
+    <li class="breadcrumb-item active">Datos</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-8">
+    <div class="sa-card p-4">
+      <div class="d-flex align-items-center gap-3 mb-4 pb-3"
+           style="border-bottom:1px solid var(--sa-border,#e2e8f0);">
+        <div class="sa-stat-icon bg-primary bg-opacity-10 text-primary" style="width:44px;height:44px;">
+          <i class="bi bi-database"></i>
+        </div>
+        <div>
+          <h5 class="fw-bold mb-0">Datos</h5>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Cuánto historial se conserva y qué borra la limpieza semanal.
+          </p>
+        </div>
+      </div>
+
+      <div class="alert alert-warning d-flex gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div style="font-size:.85rem;">
+          La limpieza corre <strong>todos los domingos a las 4:00</strong> y lo que borra
+          <strong>no se puede recuperar</strong>. Antes de bajar un plazo, usa
+          «Simular limpieza» para ver cuántos registros se irían.
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <fieldset class="sa-fieldset">
+          <legend>Historial en la base de datos</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.retencion_dias.id_for_label }}">
+                {{ form.retencion_dias.label }}
+              </label>
+              {{ form.retencion_dias }}
+              <div class="form-text">{{ form.retencion_dias.help_text }}</div>
+              {% if form.retencion_dias.errors %}
+                <div class="invalid-feedback d-block">{{ form.retencion_dias.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <p class="text-muted mb-0 mt-3" style="font-size:.8rem;">
+            Alcanza a la auditoría del sistema, los accesos a la bóveda de contraseñas,
+            las sincronizaciones de Yule, el historial del administrador de Django, las
+            notificaciones ya leídas, los correos ya enviados y los intentos de acceso
+            que registra el control de bloqueo.
+          </p>
+        </fieldset>
+
+        <fieldset class="sa-fieldset mt-4">
+          <legend>Archivos huérfanos en el disco</legend>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="{{ form.retencion_media_dias.id_for_label }}">
+                {{ form.retencion_media_dias.label }}
+              </label>
+              {{ form.retencion_media_dias }}
+              <div class="form-text">{{ form.retencion_media_dias.help_text }}</div>
+              {% if form.retencion_media_dias.errors %}
+                <div class="invalid-feedback d-block">{{ form.retencion_media_dias.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <p class="text-muted mb-0 mt-3" style="font-size:.8rem;">
+            Un archivo deja de estar referenciado cuando se borra el activo, el movimiento
+            o el acta que lo subió. Mientras siga referenciado no se toca, por viejo que sea.
+          </p>
+        </fieldset>
+
+        <div class="d-flex gap-2 justify-content-end pt-3 mt-4"
+             style="border-top:1px solid var(--sa-border,#e2e8f0);">
+          <a href="{% url 'administracion:inicio' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check2-circle me-2"></i>Guardar cambios
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="sa-card p-4 mt-4">
+      <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div>
+          <h6 class="fw-bold mb-1">Simular limpieza</h6>
+          <p class="text-muted mb-0" style="font-size:.8rem;">
+            Cuenta lo que borraría la limpieza con los plazos guardados, <strong>sin borrar
+            nada</strong>. No revisa el disco de archivos: ese barrido lo hace la tarea
+            programada, porque recorrerlo entero desde esta página puede tardar demasiado.
+          </p>
+        </div>
+        <form method="post" action="{% url 'administracion:simular_limpieza' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary">
+            <i class="bi bi-play-circle me-2"></i>Simular limpieza
+          </button>
+        </form>
+      </div>
+
+      {% if simulacion %}
+        <div class="mt-3">
+          <p class="fw-semibold mb-2" style="font-size:.85rem;">Resultado de la simulación</p>
+          <pre class="bg-light border rounded p-3 mb-0"
+               style="font-size:.8rem; white-space:pre-wrap;">{{ simulacion }}</pre>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
