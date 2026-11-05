@@ -10,13 +10,29 @@ Cuatro cosas de este comando no son de estilo y conviene no deshacerlas:
    la pantalla de retención quedaría de decorado y el programado —el único que
    corre de verdad— seguiría usando los 365 días de siempre.
 
-2. **La lectura de la configuración tolera que la base no responda** y cae a
-   los respaldos de abajo, que son los números que el cron pasaba a mano antes
-   de este cambio. Un comando de cron que revienta no deja rastro más que en su
-   log. El aviso va a ``stderr`` para que se vea en ese log. Y por el mismo
-   motivo **los dos plazos se acotan al resolverlos** (``_plazos()``): el
-   comando no se fía de la columna, porque un ``queryset.update()`` se salta los
-   validadores del modelo.
+2. **Si la retención no se puede leer, NO se borra.** El comando tolera que la
+   base no responda —uno de cron que revienta no deja rastro más que en su log—
+   pero termina sin tocar nada y lo dice (``AVISO_SIN_RETENCION``, por
+   ``stderr`` para que se vea en ese log).
+
+   La asimetría es el argumento: un respaldo que borra **de menos** es
+   inofensivo, porque los datos se acumulan una semana y el cron vuelve el
+   domingo siguiente; uno que borra **de más** es irreversible y destruye justo
+   lo que el administrador eligió conservar. Ante una operación destructiva y
+   con duda, no se borra.
+
+   **Esto va contra el instinto del resto del módulo y es deliberado.** En esta
+   rama el criterio general es *fallar abierto* cuando la configuración no se
+   puede leer: ``administracion.registro.modulos_activos()`` da todos los
+   módulos por activos para que la aplicación no se esconda, y el resolvedor de
+   permisos cae a la matriz del código. Aquí el mismo instinto se invierte,
+   porque en una limpieza «fallar abierto» significa **destruir**. Quien venga
+   detrás verá el patrón del resto del módulo: esto no es una excepción por
+   descuido.
+
+   Por el mismo motivo **los dos plazos se acotan al resolverlos**
+   (``_plazos()``): el comando no se fía de la columna, porque un
+   ``queryset.update()`` se salta los validadores del modelo.
 
 3. **``--sin-media`` existe para la pantalla**, no para el cron.
    ``_limpiar_media_huerfana()`` hace un ``os.walk`` sobre ``MEDIA_ROOT`` y un
@@ -41,12 +57,17 @@ from django.utils import timezone
 
 from core.utils import acotado
 
-# Respaldos para cuando `ConfiguracionSistema` no se puede leer. Son los mismos
-# números que los `default` de los campos del modelo y hay una prueba que lo
-# exige (`test_los_respaldos_coinciden_con_los_defaults_del_modelo`): si se
-# separan, una base que no responde cambiaría la política de retención.
-RETENCION_DIAS_POR_DEFECTO = 365
-RETENCION_MEDIA_DIAS_POR_DEFECTO = 30
+# NO hay respaldo para cuando `ConfiguracionSistema` no se puede leer: si la
+# política no se conoce, no se borra. Ver la regla 2 del docstring de arriba y
+# `AVISO_SIN_RETENCION`. Hasta esta versión había uno de 365/30 (los números que
+# el cron pasaba a mano) y borraba con él, que es el fallo que esto cierra.
+AVISO_SIN_RETENCION = (
+    "NO SE BORRÓ NADA: no se pudo leer la retención de la configuración, y una "
+    "limpieza sin su política borraría más de lo que el administrador eligió "
+    "conservar. Lo que se borra no se puede recuperar, así que ante la duda no "
+    "se borra. Revisa la base de datos y vuelve a correr la limpieza, o pasa "
+    "--dias y --media-dias explícitos si hace falta correrla ya."
+)
 
 
 class Command(BaseCommand):
@@ -92,7 +113,20 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Los plazos se resuelven ANTES de construir los cortes: con
         # `default=None` un `timedelta(days=None)` sería un TypeError.
-        dias, media_dias = self._plazos(options)
+        plazos = self._plazos(options)
+        if plazos is None:
+            # Regla 2 del docstring: si la política no se conoce, no se borra.
+            # Se sale ANTES de contar cualquier cosa, para que ni el log del
+            # cron ni la simulación de la pantalla muestren un informe de una
+            # limpieza que no ocurrió.
+            #
+            # El aviso va por `stderr` y no por un logger porque el cron recoge
+            # las dos salidas en el mismo archivo y un `logger.warning` lo
+            # dejaría dos veces, como si hubiera fallado dos veces. Por
+            # `stderr` lo ve ese log y también la simulación de la pantalla.
+            self.stderr.write(AVISO_SIN_RETENCION)
+            return
+        dias, media_dias = plazos
         dry_run = options["dry_run"]
         sin_media = options["sin_media"]
 
@@ -210,14 +244,20 @@ class Command(BaseCommand):
         dias = options["dias"]
         media_dias = options["media_dias"]
         if dias is None or media_dias is None:
-            dias_config, media_config = self._retencion_configurada()
+            configurada = self._retencion_configurada()
+            if configurada is None:
+                # Falta al menos un plazo y la configuración no se puede leer:
+                # no hay política que aplicar. Avisa `handle()`, que es quien
+                # sabe que esto aborta la limpieza entera.
+                return None
+            dias_config, media_config = configurada
             if dias is None:
                 dias = dias_config
             if media_dias is None:
                 media_dias = media_config
-        # El aviso va por `stderr` y no por un logger, por lo mismo que el de
-        # `_retencion_configurada()`: el cron recoge las dos salidas en el mismo
-        # archivo y un logger dejaría el aviso dos veces.
+        # El aviso de los topes va por `stderr` y no por un logger, por lo mismo
+        # que el de `AVISO_SIN_RETENCION`: el cron recoge las dos salidas en el
+        # mismo archivo y un logger dejaría el aviso dos veces.
         return (
             acotado(
                 dias, RETENCION_DIAS_MINIMO, RETENCION_DIAS_MAXIMO,
@@ -230,29 +270,24 @@ class Command(BaseCommand):
         )
 
     def _retencion_configurada(self):
-        """Los dos plazos de ``ConfiguracionSistema``, con respaldo si falla.
+        """Los dos plazos de ``ConfiguracionSistema``, o ``None`` si no se leen.
 
         El import va aquí dentro para no cargar `administracion` al importar el
         módulo del comando. El ``except`` cubre la base a medio migrar o la
-        tabla de configuración ausente: en esos casos el comando sigue con los
-        respaldos históricos en vez de abortar la limpieza entera.
+        tabla de configuración ausente: el comando no revienta, pero **tampoco
+        inventa un plazo**. Hasta esta versión devolvía unos respaldos de 365 y
+        30 días y borraba con ellos, que es el fallo que esto cierra: ante una
+        instalación con retención mayor, esos respaldos borraban de más y lo
+        borrado no se recupera. Quien decide qué hacer con el ``None`` es
+        ``handle()``.
         """
         from administracion.models import ConfiguracionSistema
 
         try:
             config = ConfiguracionSistema.get_config()
-            return config.retencion_dias, config.retencion_media_dias
         except DatabaseError:
-            # Va a `stderr` y no al logger: el cron redirige las dos salidas al
-            # mismo archivo, así que un `logger.warning` además dejaría el aviso
-            # dos veces y parecería que falló dos veces. Por stderr lo ve el log
-            # del cron y también la simulación de la pantalla.
-            self.stderr.write(
-                "No se pudo leer la retención de la configuración; se usan los "
-                f"respaldos de {RETENCION_DIAS_POR_DEFECTO} y "
-                f"{RETENCION_MEDIA_DIAS_POR_DEFECTO} días."
-            )
-            return RETENCION_DIAS_POR_DEFECTO, RETENCION_MEDIA_DIAS_POR_DEFECTO
+            return None
+        return config.retencion_dias, config.retencion_media_dias
 
     def _modelos_a_limpiar(self):
         """Tablas que se recortan por antigüedad, con su campo de fecha.
