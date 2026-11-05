@@ -31,10 +31,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.management.commands.limpiar_historial import (
-    RETENCION_DIAS_POR_DEFECTO,
-    RETENCION_MEDIA_DIAS_POR_DEFECTO,
-)
+from core.management.commands.limpiar_historial import AVISO_SIN_RETENCION
 
 from .models import (
     RETENCION_DIAS_MAXIMO,
@@ -146,29 +143,28 @@ class RetencionDelComandoTests(TestCase):
             self.assertFalse(huerfano.exists())
 
     def test_si_la_configuracion_no_responde_el_comando_no_revienta(self):
-        """Un comando de cron que revienta no deja rastro más que en su log."""
-        registro = _auditoria_de(400)
+        """Un comando de cron que revienta no deja rastro más que en su log.
 
+        Lo que hace en ese caso lo fija ``SinRetencionNoSeBorraTests``: termina
+        limpio y **sin borrar**. Aquí solo se afirma que no revienta.
+        """
         with patch.object(
             ConfiguracionSistema, "get_config", side_effect=DatabaseError("sin tabla"),
         ):
             salida = _limpiar()
 
-        # Cae al respaldo histórico (365 días), que es lo que el cron pasaba
-        # antes de este cambio: el de 400 días sí se va.
-        self.assertFalse(RegistroAuditoria.objects.filter(pk=registro.pk).exists())
-        self.assertIn("respaldo", salida)
+        self.assertTrue(salida)
 
-    def test_los_respaldos_coinciden_con_los_defaults_del_modelo(self):
-        """Si se separan, una base que no responde cambiaría la política."""
+    def test_los_defaults_del_modelo_son_los_del_cron_de_siempre(self):
+        """Mover el plazo a la base no puede cambiar lo que ya se venía borrando.
+
+        Son los argumentos que el cron pasaba a mano antes de la Tarea 11
+        (``--dias 365 --media-dias 30``). Van como literales: si alguien mueve un
+        default, esto tiene que fallar y obligar a pensarlo.
+        """
         campos = ConfiguracionSistema._meta
-        self.assertEqual(
-            campos.get_field("retencion_dias").default, RETENCION_DIAS_POR_DEFECTO,
-        )
-        self.assertEqual(
-            campos.get_field("retencion_media_dias").default,
-            RETENCION_MEDIA_DIAS_POR_DEFECTO,
-        )
+        self.assertEqual(campos.get_field("retencion_dias").default, 365)
+        self.assertEqual(campos.get_field("retencion_media_dias").default, 30)
 
 
 class RetencionDeAxesTests(TestCase):
@@ -600,6 +596,113 @@ class TopesDeLaRetencionTests(TestCase):
         config = ConfiguracionSistema.objects.get(pk=1)
         self.assertEqual(config.retencion_dias, 365)
         self.assertEqual(config.retencion_media_dias, 30)
+
+
+class SinRetencionNoSeBorraTests(TestCase):
+    """Si no se puede leer la retención, la limpieza NO borra.
+
+    La asimetría es el argumento: un respaldo que borra de menos es inofensivo
+    —los datos se acumulan una semana y el cron vuelve el domingo—, mientras uno
+    que borra de más es **irreversible** y destruye justo lo que el
+    administrador eligió conservar. Ante una operación destructiva y con duda,
+    no se borra.
+
+    Y va contra el instinto del resto del módulo a propósito: aquí se **falla
+    cerrado**, mientras ``modulos_activos()`` y el resolvedor de permisos fallan
+    abiertos para no esconder la aplicación. En una limpieza, «fallar abierto»
+    significa destruir.
+    """
+
+    def _sin_configuracion(self):
+        return patch.object(
+            ConfiguracionSistema, "get_config", side_effect=DatabaseError("sin tabla"),
+        )
+
+    def test_las_filas_viejas_siguen_ahi(self):
+        """La prueba que mide el efecto, y es la del ruling."""
+        registro = _auditoria_de(400)
+
+        with self._sin_configuracion():
+            _limpiar()
+
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=registro.pk).exists())
+
+    def test_el_aviso_dice_que_no_se_borro_nada(self):
+        """Un operador que lea el log del cron no puede confundir «no corrió»
+        con «no había nada que borrar»."""
+        _auditoria_de(400)
+
+        with self._sin_configuracion():
+            salida = _limpiar()
+
+        self.assertIn(AVISO_SIN_RETENCION, salida)
+        self.assertIn("NO SE BORRÓ NADA", salida)
+        # Y no puede quedar el renglón que hace creer que la limpieza corrió.
+        self.assertNotIn("Total registros afectados", salida)
+        self.assertNotIn("Retención en uso", salida)
+
+    def test_la_simulacion_tampoco_inventa_un_conteo(self):
+        """``--dry-run`` existe para decir qué haría la corrida de verdad.
+
+        Con la retención ilegible, la corrida de verdad no borraría nada, así
+        que un conteo calculado con un respaldo sería un informe **falso** —y es
+        el que la pantalla de Datos le muestra al administrador—.
+        """
+        _auditoria_de(400)
+
+        with self._sin_configuracion():
+            salida = _limpiar(dry_run=True)
+
+        self.assertIn(AVISO_SIN_RETENCION, salida)
+        self.assertNotIn("Auditoría del sistema:", salida)
+
+    def test_con_una_sola_bandera_explicita_tampoco_se_borra(self):
+        """El otro plazo venía de la configuración, así que sigue sin saberse."""
+        registro = _auditoria_de(400)
+
+        with self._sin_configuracion():
+            salida = _limpiar(dias=365)
+
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=registro.pk).exists())
+        self.assertIn(AVISO_SIN_RETENCION, salida)
+
+    def test_con_las_dos_banderas_explicitas_borra_igual(self):
+        """Contraprueba: con los dos plazos dados, la base no hace falta.
+
+        Es la vía del humano depurando y la que impide que el ruling se
+        convierta en «el comando ya no borra nunca».
+        """
+        registro = _auditoria_de(400)
+        reciente = _auditoria_de(10)
+
+        with self._sin_configuracion():
+            salida = _limpiar(dias=365, media_dias=30)
+
+        self.assertFalse(RegistroAuditoria.objects.filter(pk=registro.pk).exists())
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=reciente.pk).exists())
+        self.assertNotIn(AVISO_SIN_RETENCION, salida)
+        self.assertIn("Retención en uso: 365 días de historial", salida)
+
+    def test_con_la_configuracion_legible_sigue_borrando_como_hoy(self):
+        """La otra contraprueba: el camino normal no se toca."""
+        _configurar_retencion(dias=90, media_dias=15)
+        registro = _auditoria_de(400)
+        reciente = _auditoria_de(10)
+
+        salida = _limpiar()
+
+        self.assertFalse(RegistroAuditoria.objects.filter(pk=registro.pk).exists())
+        self.assertTrue(RegistroAuditoria.objects.filter(pk=reciente.pk).exists())
+        self.assertNotIn(AVISO_SIN_RETENCION, salida)
+        self.assertIn("Retención en uso: 90 días de historial · 15 días", salida)
+
+    # NO hay prueba de la pantalla de Datos para este caso, y es a propósito:
+    # `simular_limpieza` llama a `ConfiguracionSistema.get_config()` por su
+    # cuenta antes del comando (necesita `config` para el formulario), así que
+    # con la base sin responder la pantalla entera no se puede pintar — igual
+    # que cualquier otra pantalla de configuración. Lo que sí se verifica es que
+    # el aviso va a `stdout`/`stderr`, que es lo que la vista recoge en
+    # `simulacion` y pinta: lo prueba `test_el_aviso_dice_que_no_se_borro_nada`.
 
 
 class MensajesDeErrorTests(TestCase):
