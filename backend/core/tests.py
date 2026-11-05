@@ -200,10 +200,19 @@ class MediaProtegidoTests(TestCase):
         return reverse("media", kwargs={"ruta": ruta})
 
     def _override_media(self, accel=False):
-        kw = {"MEDIA_ROOT": str(self.media_root)}
-        if accel:
-            kw["MEDIA_ACCEL_REDIRECT"] = True
-        return override_settings(**kw)
+        """Fija **las dos** opciones, nunca hereda `MEDIA_ACCEL_REDIRECT`.
+
+        Es `False` en `settings/base.py` y `True` en `settings/production.py`,
+        así que heredarla hacía que estas pruebas midieran un camino distinto
+        según el módulo de settings: con los de producción —que es como se corre
+        la suite dentro del contenedor— las tres que llaman a `_cerrar_archivo`
+        caían en la rama de `X-Accel-Redirect`, donde no hay `streaming_content`,
+        y reventaban con `AttributeError`. Una prueba que cambia de sujeto según
+        el entorno no prueba nada: el camino se elige aquí.
+        """
+        return override_settings(
+            MEDIA_ROOT=str(self.media_root), MEDIA_ACCEL_REDIRECT=accel,
+        )
 
     def test_anonimo_redirige_a_login(self):
         with self._override_media():
