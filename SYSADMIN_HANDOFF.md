@@ -1,6 +1,6 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración) · 1013 tests OK · **pendiente de despliegue**
-> Producción sigue en **v1.13.1** (desplegada el 2026-10-28) hasta que v1.14 salga. El módulo de Configuración está terminado en la rama `feat/modulo-configuracion`: ver la sección «MÓDULO DE CONFIGURACIÓN», con su deuda conocida y, al final, **el paso del cron que un despliegue normal se salta**.
+> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración) · 1013 tests OK · **desplegado en producción el 2026-11-05**
+> Queda **un paso pendiente que pide `sudo` en el host**: reinstalar el cron de limpieza (§7c de la guía). Hasta que se haga, la pantalla de retención no tiene efecto sobre la limpieza semanal. Detalle en «MÓDULO DE CONFIGURACIÓN» → «Despliegue de v1.14».
 
 ---
 
@@ -1772,7 +1772,7 @@ Ramas `fix/auditoria-2026-10-19` y `fix/auditoria-pendientes-2026-10-19` (merge 
 
 Diseño: `docs/superpowers/specs/2026-10-29-configuracion-y-mesa-de-ayuda-design.md` (Fase A). Plan: `docs/superpowers/plans/2026-10-29-modulo-configuracion.md`. Ledger tarea por tarea, revisión final y auditoría de la deuda: `.superpowers/sdd/2026-10-29-modulo-configuracion/` (`progress.md`, `revision-final.md`, `auditoria-minores.md`).
 
-> **Estado al escribir esto (2026-11-05)**: las **12 tareas están hechas y verificadas** — **1013 pruebas, 0 fallos** (6 omitidas en Windows), `ruff` limpio, `makemigrations --check` sin cambios. Falta el despliegue; producción sigue en v1.13.1. Todo lo de abajo está confirmado contra el código, no contra el plan.
+> **Estado (2026-11-05)**: las **12 tareas hechas, fusionadas en `master` (PR #4) y desplegadas**. **1013 pruebas, 0 fallos** (6 omitidas en Windows; en el CI ninguna), `ruff` limpio, `makemigrations --check` sin cambios. Todo lo de abajo está confirmado contra el código, no contra el plan. **Pendiente: el cron de §7c.**
 
 ### Qué existe ahora
 
@@ -1859,7 +1859,24 @@ Ordenada de más a menos probable de morder. Todo lo de abajo es deliberado y es
 
 Cerrado y por tanto **no es deuda**: el 400/302 invisible de HTMX (`3c23f43`), el candado del módulo esencial por `update()` (`c0fd855`, `c4d4f64`), la contraseña SMTP en dos pantallas, el remitente que nunca llegaba a la cola real, la validación de `Rol`/`PermisoRol` al guardar y la matriz de fábrica congelada en la migración.
 
-### Despliegue de v1.14 (el paso que un despliegue normal se salta)
+### Despliegue de v1.14 — hecho el 2026-11-05
+
+| Qué | Dato |
+| --- | --- |
+| Commit en `master` | `9a5bfc3` (merge del PR #4) + `d783f8c` (arreglo de pruebas, sin código de la app) |
+| Backup previo | `backups/2026-11-05-0722/db.dump` (191 621 bytes) |
+| Migraciones aplicadas | `administracion` `0005`–`0014`, `accounts` `0004` (las aplicó el `entrypoint.sh` al arrancar) |
+| Siembra verificada | `10 4 40` · activos los 8, `licencias` y `prestamos` apagados a propósito |
+| Verificación | humo con el test client dentro del contenedor (portada, las 5 pantallas de configuración y las 8 URL del catálogo resueltas por `reverse`, más 404 en los dos módulos apagados), `curl -sk` al 6060, 0 *tracebacks* y 0 respuestas 5xx en el log, `nginx -t` correcto, y **363 pruebas de `administracion`+`accounts`+`core` dentro del contenedor de producción, 0 fallos** |
+| **Pendiente** | **el cron de §7c** (pide `sudo` en el host) |
+
+Tres cosas que el despliegue dejó aprendidas y conviene no repetir:
+
+- **El `scp` tiene que ir por el alias `sysadmin-prod`**, no por `sistemas@192.168.1.250`: por el host directo pide contraseña y falla con *publickey*. La llave está en el alias.
+- **`git archive` no borra lo que git renombró.** Esta versión convirtió `administracion/views.py` en el paquete `views/`, así que hubo que borrar el `views.py` viejo del host a mano después del `tar xzf`. Comprobar siempre con `git diff --diff-filter=RD --name-status <desplegado>..master`.
+- Correr la suite dentro del contenedor destapó **3 errores que ni el CI ni la suite local podían ver**, porque `MEDIA_ACCEL_REDIRECT` es `False` en `base.py` y `True` en `production.py` y `MediaProtegidoTests` la heredaba del entorno (arreglado en `d783f8c`). Es un argumento para seguir corriendo la suite en el contenedor como parte de la verificación: es el único sitio donde la suite ve los settings de producción.
+
+### El paso que un despliegue normal se salta
 
 Receta general en `GUIA_DEPLOY_PASO_A_PASO.md` §8b (`git archive` con LF → `docker compose build` → `up -d` → `migrate`), con respaldo `.dump` fechado antes. Lo propio de esta versión:
 
