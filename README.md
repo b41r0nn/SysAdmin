@@ -62,7 +62,7 @@
 
 **Producción** (2026-10-28, v1.13.1): 26 activos · Django 5.2 LTS · contenedor sin root · **723 tests en verde** (SQLite y PostgreSQL, en CI). Incluye mantenimiento v2, la importación de contraseñas desde Excel y los arreglos de robustez del 28-oct. Auditoría 2026-10-19 aplicada completa (ver Changelog v1.12.0 y v1.12.1).
 
-**v1.14 — módulo de Configuración: terminado y pendiente de despliegue** (1013 tests en verde). Ver el Changelog; al desplegar hay que **reinstalar el cron de limpieza en el host** (`GUIA_DEPLOY_PASO_A_PASO.md` §7c), que es el único paso que un despliegue normal se salta.
+**Producción** (2026-11-05, v1.14): módulo de Configuración desplegado · **1013 tests en verde** (CI y contenedor de producción). Queda **un paso pendiente que pide `sudo`**: reinstalar el cron de limpieza en el host (`GUIA_DEPLOY_PASO_A_PASO.md` §7c); hasta entonces la pantalla de retención no manda sobre la limpieza semanal.
 
 ---
 
@@ -590,7 +590,7 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
-### 2026-11-05 — v1.14 · Módulo de Configuración (rama `feat/modulo-configuracion`, pendiente de despliegue)
+### 2026-11-05 — v1.14 · Módulo de Configuración (en producción desde el 2026-11-05)
 
 **Lo que antes era una constante en el código o una variable del `.env` ahora se cambia desde `/administracion/` y surte efecto en la petición siguiente, sin reiniciar el contenedor.**
 
@@ -602,7 +602,7 @@ BD: PostgreSQL 15 en contenedor
 - **Auditoría de la configuración**: todo cambio deja renglón, y **ningún secreto llega nunca a la auditoría** (se registra `(cambiada)`).
 - **Ningún valor de la pantalla puede tumbar la aplicación**: los seis campos numéricos tienen tope arriba y abajo, y los lectores los acotan además al leerlos, porque un `UPDATE` directo se salta los validadores del modelo. Sin eso, un `999999999` en «minutos de sesión» daba **500 en cada petición autenticada** y uno en «retención» reventaba el cron de limpieza sin que nadie lo viera.
 
-**Al desplegar hay un paso que no es automático**: el cron de limpieza vive en `/etc/cron.d` del host y hay que reinstalarlo (`GUIA_DEPLOY_PASO_A_PASO.md` §7c). Sin él la pantalla de retención no tiene efecto.
+**Un paso del despliegue no es automático y sigue pendiente**: el cron de limpieza vive en `/etc/cron.d` del host y hay que reinstalarlo con `sudo` (`GUIA_DEPLOY_PASO_A_PASO.md` §7c). Sin él la pantalla de retención no tiene efecto sobre la limpieza semanal.
 
 **Pruebas**: 1013 OK (6 omitidas en Windows).
 
