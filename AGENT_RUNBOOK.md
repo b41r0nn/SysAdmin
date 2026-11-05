@@ -186,7 +186,7 @@ Corre en el host, no dentro del contenedor: Django no tiene planificador propio 
 | Log | `/var/log/sysadmin-software-sync.log` (legible sin sudo) |
 | Comando | `docker exec sysadmin_django python manage.py sincronizar_software --verbose --pausa 2` |
 | Reinstalar | `sudo bash /opt/sysadmin/app/deploy/instalar_cron_software.sh` |
-| Cambiar horario | editar la última línea y `sudo systemctl reload cron` |
+| Cambiar horario | editar la última línea (cron relee `/etc/cron.d` solo; para forzar, `sudo service cron reload` — `systemctl reload cron` falla en este host) |
 | Quitar | `sudo rm /etc/cron.d/sysadmin-sincronizar-software` |
 
 Salida de una vuelta sin cambios:

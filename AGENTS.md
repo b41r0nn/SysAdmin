@@ -119,7 +119,7 @@ Qué hay y por qué: `SYSADMIN_HANDOFF.md` → «MÓDULO DE CONFIGURACIÓN». Es
 - **Pendiente**: solo **1 de 24 activos** tiene equipo OCS vinculado (W11F35F), y es el único con software guardado. El resto se vincula desde Yule › equipos sin match.
 
 - **Manual del agente**: `MANUAL_AGENTE_OCS.md` es el procedimiento oficial para instalar y configurar el agente OCS en los equipos cliente (instalación gráfica y silenciosa, verificación, `ocsinventory.ini`, tabla de errores y desinstalación). Es el documento que se entrega a Sistemas para el despliegue masivo.
-- **Pendientes operativos**: backup a NAS (falta IP/usuario/ruta) · `sudo systemctl reload cron` tras editar cualquier cron.
+- **Pendientes operativos**: backup a NAS (falta IP/usuario/ruta). · Tras editar un cron de `/etc/cron.d`, **no hace falta recargar nada**: cron relee la carpeta solo (deja `(*system*<archivo>) RELOAD` en `journalctl -u cron`). Si se quiere forzar, el comando aquí es `sudo service cron reload`; `systemctl reload cron` **falla** en este host.
 
 ---
 
