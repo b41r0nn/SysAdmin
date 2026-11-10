@@ -877,6 +877,44 @@ class AislamientoDeLaSuiteTests(SimpleTestCase):
             "que aísla MEDIA_ROOT (settings.TEST_RUNNER).",
         )
 
+    def test_el_runner_tambien_apaga_el_accel_redirect(self):
+        """La otra mitad del aislamiento, y viene de un rojo real.
+
+        `MEDIA_ACCEL_REDIRECT` es `False` en `settings/base.py` y `True` en
+        `settings/production.py`. Con `True`, `core.views.media_protegido`
+        devuelve un `HttpResponse` vacío con `X-Accel-Redirect` —lo sirve nginx—
+        en vez de un `FileResponse`, así que cualquier prueba que lea
+        `streaming_content` revienta con `AttributeError`.
+
+        Pasó dos veces: el 5-nov con `MediaProtegidoTests` y el 10-nov con
+        `mantenimiento.test_acta_firmada` (:87), las dos **solo dentro del
+        contenedor de producción**, que es el único entorno donde se ven esos
+        settings. La primera se parcheó prueba por prueba; la segunda demostró
+        que eso no escala. Fijarlo en el runner mata la clase entera: una prueba
+        que quiera el camino de nginx lo pide explícitamente, como hace
+        `test_x_accel_redirect_en_produccion`.
+        """
+        from core.test_runner import RunnerAislado
+
+        runner = RunnerAislado()
+        settings.MEDIA_ACCEL_REDIRECT = True  # simula los settings de producción
+        try:
+            runner._aislar_settings()
+            self.assertIs(
+                settings.MEDIA_ACCEL_REDIRECT, False,
+                "el runner no apagó MEDIA_ACCEL_REDIRECT: las pruebas que leen "
+                "streaming_content fallarán en producción",
+            )
+            self.assertNotEqual(
+                Path(settings.MEDIA_ROOT).resolve(),
+                (Path(settings.BASE_DIR) / "media").resolve(),
+            )
+            # Y tiene que devolver lo que había, no imponer False para siempre.
+            runner._restaurar_settings()
+            self.assertIs(settings.MEDIA_ACCEL_REDIRECT, True)
+        finally:
+            settings.MEDIA_ACCEL_REDIRECT = False
+
     def test_el_media_de_las_pruebas_existe_y_se_puede_escribir(self):
         """Si el runner lo aísla, tiene que dejarlo usable: si no, las pruebas
         que suben archivos fallarían por otra razón y se taparía el problema."""
