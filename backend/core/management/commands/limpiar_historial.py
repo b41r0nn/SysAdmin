@@ -1,6 +1,6 @@
 """Limpieza del historial: la tarea semanal que recorta lo que ya no se mira.
 
-Cinco cosas de este comando no son de estilo y conviene no deshacerlas:
+Seis cosas de este comando no son de estilo y conviene no deshacerlas:
 
 1. **Los dos plazos salen de ``ConfiguracionSistema``**, no de un valor fijo.
    Los argumentos ``--dias`` y ``--media-dias`` nacen en ``None`` y solo se
@@ -34,18 +34,23 @@ Cinco cosas de este comando no son de estilo y conviene no deshacerlas:
    (``_plazos()``): el comando no se fía de la columna, porque un
    ``queryset.update()`` se salta los validadores del modelo.
 
-3. **``--sin-media`` existe para la pantalla**, no para el cron.
+3. **El barrido de media informa; no borra** salvo que se le pase
+   ``--borrar-media-huerfana``. Ver el docstring de
+   ``_limpiar_media_huerfana()``: había actas firmadas reales sin fila que las
+   referenciara, y un barrido automático no puede juzgar eso.
+
+4. **``--sin-media`` existe para la pantalla**, no para el cron.
    ``_limpiar_media_huerfana()`` hace un ``os.walk`` sobre ``MEDIA_ROOT`` y un
    ``getmtime`` por archivo también en ``--dry-run``, sin cota: dentro de una
    petición HTTP eso es el disco de media entero. La simulación de la pantalla
    se queda en las tablas; el cron sí barre el disco.
 
-4. **La cola de correo se purga por los dos lados.** No solo los enviados:
+5. **La cola de correo se purga por los dos lados.** No solo los enviados:
    también los que nunca salieron, que eran inmortales porque una fila con
    error es ``enviado=False`` por definición. En esa columna va la respuesta
    del servidor, que puede repetir la credencial que le mandamos.
 
-5. **Los modelos con archivos se descubren con ``apps.get_models()``**, nunca
+6. **Los modelos con archivos se descubren con ``apps.get_models()``**, nunca
    con una lista escrita a mano (``_modelos_con_archivos()``), y si la lectura
    de referencias falla, el barrido de ``media`` también falla cerrado sin
    borrar nada. Una lista a mano dejó fuera 5 de los 8 campos ``FileField`` del
@@ -67,6 +72,10 @@ from core.utils import acotado
 # política no se conoce, no se borra. Ver la regla 2 del docstring de arriba y
 # `AVISO_SIN_RETENCION`. Hasta esta versión había uno de 365/30 (los números que
 # el cron pasaba a mano) y borraba con él, que es el fallo que esto cierra.
+# Cuántos huérfanos se listan en el informe antes de resumir: el log del cron
+# lo lee una persona, y cien rutas seguidas no se leen.
+TOPE_LISTADO_HUERFANOS = 20
+
 AVISO_SIN_RETENCION = (
     "NO SE BORRÓ NADA: no se pudo leer la retención de la configuración, y una "
     "limpieza sin su política borraría más de lo que el administrador eligió "
@@ -106,6 +115,16 @@ class Command(BaseCommand):
             "--dry-run",
             action="store_true",
             help="Muestra lo que borraría sin eliminar nada.",
+        )
+        parser.add_argument(
+            "--borrar-media-huerfana",
+            action="store_true",
+            help=(
+                "Borrar de verdad los archivos de media no referenciados. Sin "
+                "esto el comando solo INFORMA cuáles son, que es lo que hace la "
+                "tarea programada: un archivo sin fila que lo referencie puede "
+                "seguir siendo un documento legal."
+            ),
         )
         parser.add_argument(
             "--sin-media",
@@ -214,7 +233,9 @@ class Command(BaseCommand):
                 "El barrido del disco lo hace la tarea programada."
             )
         else:
-            huerfanos = self._limpiar_media_huerfana(corte_media, dry_run)
+            huerfanos = self._limpiar_media_huerfana(
+                corte_media, dry_run, options["borrar_media_huerfana"],
+            )
             if huerfanos is not None:
                 self.stdout.write(f"Archivos huérfanos de media: {huerfanos}")
 
@@ -365,8 +386,18 @@ class Command(BaseCommand):
                             referenciados.add(valor.replace("\\", "/"))
         return referenciados
 
-    def _limpiar_media_huerfana(self, corte, dry_run):
-        """Elimina archivos en MEDIA_ROOT no referenciados por ningún modelo.
+    def _limpiar_media_huerfana(self, corte, dry_run, borrar):
+        """Informa —y solo con ``borrar`` elimina— los archivos de MEDIA_ROOT
+        que ningún modelo referencia.
+
+        **Por defecto no borra, y eso es lo importante de esta función.** El
+        2026-11-10 se encontraron en producción 7 actas firmadas escaneadas
+        reales sin fila que las referenciara; para este barrido eran huérfanas y
+        las habría borrado al cumplir 30 días. «Sin referencia» no significa
+        «sin valor»: un acta firmada cuya fila se borró sigue siendo un
+        documento legal, y unos megas de disco no compensan destruir algo
+        irreemplazable. Así que la tarea programada informa, y borrar hay que
+        pedirlo con ``--borrar-media-huerfana``.
 
         Recorre el disco entero y hace un ``getmtime`` por archivo **también en
         ``--dry-run``**: lo único que se salta es el ``os.remove``. Por eso la
@@ -390,20 +421,37 @@ class Command(BaseCommand):
         if not media_root or not os.path.isdir(media_root):
             return 0
 
-        borrados = 0
+        candidatos = []
         for root, _dirs, files in os.walk(media_root):
             for nombre in files:
                 ruta_abs = os.path.join(root, nombre)
-                ruta_rel = os.path.relpath(ruta_abs, media_root)
-                # Normalizar separadores
-                ruta_rel = ruta_rel.replace(os.sep, "/")
+                # Normalizar separadores para comparar con lo guardado en la BD.
+                ruta_rel = os.path.relpath(ruta_abs, media_root).replace(os.sep, "/")
                 if ruta_rel in referenciados:
                     continue
                 if os.path.getmtime(ruta_abs) < corte.timestamp():
-                    borrados += 1
-                    if not dry_run:
-                        try:
-                            os.remove(ruta_abs)
-                        except OSError:
-                            pass
+                    candidatos.append((ruta_rel, ruta_abs))
+
+        if not borrar:
+            # Devuelve None porque ya informó: `handle()` no debe imprimir otro
+            # renglón con el conteo.
+            self.stdout.write(
+                f"Archivos huérfanos de media: {len(candidatos)} encontrados, "
+                "no se borraron (hace falta --borrar-media-huerfana)."
+            )
+            for ruta_rel, _ in candidatos[:TOPE_LISTADO_HUERFANOS]:
+                self.stdout.write(f"   {ruta_rel}")
+            sobran = len(candidatos) - TOPE_LISTADO_HUERFANOS
+            if sobran > 0:
+                self.stdout.write(f"   … y {sobran} más.")
+            return None
+
+        borrados = 0
+        for _ruta_rel, ruta_abs in candidatos:
+            borrados += 1
+            if not dry_run:
+                try:
+                    os.remove(ruta_abs)
+                except OSError:
+                    pass
         return borrados
