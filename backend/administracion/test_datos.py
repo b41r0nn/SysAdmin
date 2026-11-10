@@ -129,6 +129,12 @@ class RetencionDelComandoTests(TestCase):
 
         Con los 30 días por defecto el archivo de 10 días sobreviviría; con los
         7 que dice la configuración, no.
+
+        Pasa `borrar_media_huerfana` porque desde el 2026-11-10 el barrido solo
+        informa por defecto (ver
+        `core.tests.LimpiarHistorialCommandTests.test_por_defecto_informa_los_huerfanos_pero_no_los_borra`).
+        Sin la bandera el archivo sobrevive por el cambio de default y no por el
+        plazo, que es justo lo que esta prueba quiere distinguir.
         """
         _configurar_retencion(media_dias=7)
         with tempfile.TemporaryDirectory() as tmp:
@@ -138,7 +144,7 @@ class RetencionDelComandoTests(TestCase):
             os.utime(huerfano, (antiguo, antiguo))
 
             with override_settings(MEDIA_ROOT=tmp):
-                _limpiar(sin_media=False)
+                _limpiar(sin_media=False, borrar_media_huerfana=True)
 
             self.assertFalse(huerfano.exists())
 

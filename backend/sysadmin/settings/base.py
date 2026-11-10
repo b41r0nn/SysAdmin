@@ -190,6 +190,13 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# La suite sube archivos de verdad y sin esto los escribe en el MEDIA_ROOT
+# de arriba: en produccion quedaron 94 archivos basura, uno por ejecucion,
+# porque la verificacion del despliegue corre la suite dentro del contenedor.
+# El runner le da un MEDIA_ROOT temporal a toda la suite. Ver
+# core/test_runner.py y core.tests.AislamientoDeLaSuiteTests.
+TEST_RUNNER = 'core.test_runner.RunnerAislado'
 MEDIA_ACCEL_REDIRECT = False
 
 OCS_BASE_URL = os.environ.get('OCS_BASE_URL', '').rstrip('/')
