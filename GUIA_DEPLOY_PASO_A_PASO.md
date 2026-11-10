@@ -267,6 +267,8 @@ sudo docker exec sysadmin_django python manage.py limpiar_historial --dry-run
 
 Cambiar la retención en la pantalla Datos (p. ej. a 90) y repetir: el corte que informa debe moverse con ella.
 
+Lo segundo que hay que saber al leer ese log: **el barrido de `media` solo informa**. Lista los archivos que ningún registro referencia y termina con «no se borraron». Para borrarlos de verdad hay que correrlo a mano con `--borrar-media-huerfana`, y conviene mirar la lista antes: el 2026-11-10 esa lista incluía **7 actas firmadas escaneadas reales** cuya fila ya no existía. Un archivo sin referencia puede seguir siendo un documento legal.
+
 Y lo que hay que saber al leer ese log: **si el comando no puede leer la retención** (base a medio migrar, tabla de configuración ausente) **no borra nada** y escribe `NO SE BORRÓ NADA`. No es que no hubiera qué borrar: es que sin la política borraría más de lo que el administrador eligió conservar, y lo borrado no se recupera. Se arregla la base y se vuelve a correr, o se pasan `--dias` y `--media-dias` explícitos si hace falta purgar ya.
 
 ---

@@ -449,6 +449,12 @@ class LimpiarHistorialCommandTests(TestCase):
         self.assertTrue(NotificacionEmail.objects.filter(pk=pendiente_nueva.pk).exists())
 
     def test_borra_media_huerfana_y_respeta_referenciada(self):
+        """Pasa `borrar_media_huerfana` porque **el borrado ya no es el
+        comportamiento por defecto** (cambio deliberado del 2026-11-10, ver
+        `test_por_defecto_informa_los_huerfanos_pero_no_los_borra`). Lo que esta
+        prueba sigue midiendo, y es su razón de ser, es que al borrar se respeta
+        lo que sí está referenciado.
+        """
         from inventario.tests import crear_activo
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -466,7 +472,10 @@ class LimpiarHistorialCommandTests(TestCase):
             crear_activo("SN-MEDIA-1", foto_activo="inventario/fotos/keep.jpg")
 
             with override_settings(MEDIA_ROOT=tmp):
-                call_command("limpiar_historial", dias=365, media_dias=30, stdout=StringIO())
+                call_command(
+                    "limpiar_historial", dias=365, media_dias=30,
+                    borrar_media_huerfana=True, stdout=StringIO(),
+                )
 
             self.assertTrue(referenciada.exists())
             self.assertFalse(huerfana.exists())
@@ -552,6 +561,50 @@ class LimpiarHistorialCommandTests(TestCase):
         # prueba ya no mide nada.
         self.assertTrue(con_archivos)
         self.assertEqual(set(Command()._modelos_con_archivos()), con_archivos)
+
+    def test_por_defecto_informa_los_huerfanos_pero_no_los_borra(self):
+        """Un barrido automático no puede destruir lo que no puede juzgar.
+
+        Salió de la auditoría del 2026-11-10: en `media` de producción había 7
+        **actas firmadas escaneadas reales** sin fila que las referenciara
+        (`Joan Sebastian Diaz.pdf`, `doc00054920260413141601.pdf` de 2,9 MB…).
+        Para el barrido son huérfanas por definición y las habría borrado al
+        cumplir 30 días.
+
+        El punto es que **«sin referencia» no significa «sin valor»**: un acta
+        firmada cuya fila se borró sigue siendo un documento legal. Recuperar
+        unos megas de disco no compensa destruir lo irreemplazable, así que por
+        defecto el comando informa y no borra. Borrar sigue siendo posible, pero
+        hay que pedirlo.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            huerfano = self._con_archivo_antiguo(tmp, "inventario/actas/viejo.pdf")
+            salida = StringIO()
+
+            with override_settings(MEDIA_ROOT=tmp):
+                call_command(
+                    "limpiar_historial", dias=365, media_dias=30,
+                    stdout=salida, stderr=salida,
+                )
+
+            self.assertTrue(huerfano.exists(), "borró un huérfano sin que se lo pidieran")
+            texto = salida.getvalue()
+            self.assertIn("no se borraron", texto)
+            # Y tiene que decir CUALES, o el informe no sirve para actuar.
+            self.assertIn("inventario/actas/viejo.pdf", texto)
+
+    def test_con_la_bandera_explicita_si_borra_los_huerfanos(self):
+        """La capacidad no se pierde: se vuelve deliberada."""
+        with tempfile.TemporaryDirectory() as tmp:
+            huerfano = self._con_archivo_antiguo(tmp, "inventario/actas/viejo.pdf")
+
+            with override_settings(MEDIA_ROOT=tmp):
+                call_command(
+                    "limpiar_historial", dias=365, media_dias=30,
+                    borrar_media_huerfana=True, stdout=StringIO(),
+                )
+
+            self.assertFalse(huerfano.exists())
 
     def test_si_no_se_pueden_leer_las_referencias_no_borra_nada(self):
         """Fallar cerrado, por la misma razón que la retención.
@@ -788,3 +841,50 @@ class CamposFechaFormatoISOTests(TestCase):
                             with self.subTest(form=f"{app.name}.{nombre_form}", campo=nombre):
                                 self.assertEqual(widget.format_value(date(2025, 3, 14)), "2025-03-14")
         self.assertGreater(revisados, 0)
+
+
+class AislamientoDeLaSuiteTests(SimpleTestCase):
+    """La suite no puede escribir en el `media` de la instalación donde corre.
+
+    Salió de una auditoría del 2026-11-10: en el `media` de **producción**
+    había 87 archivos `manual.pdf`, `manual_1PtyvqN.pdf`, `manual_1U0infs.pdf`…
+    —los nombres con sufijo que Django inventa cuando el archivo ya existe— más
+    7 en `inventario/actas/firmadas`. Son de `documentos/tests.py`,
+    `mantenimiento/tests.py` y `mantenimiento/test_robustez.py`, que suben
+    archivos de verdad **sin** redefinir `MEDIA_ROOT`: una copia por cada
+    ejecución de la suite.
+
+    Importa más de lo que parece porque la receta de verificación que quedó
+    documentada en `GUIA_DEPLOY_PASO_A_PASO.md` manda correr la suite **dentro
+    del contenedor de producción**, que es el único sitio donde se ven los
+    settings de producción. O sea que el propio paso de verificación ensuciaba
+    los datos que iba a verificar.
+
+    Pedirle a cada prueba que recuerde un `override_settings` es la misma clase
+    de disciplina a mano que falló con la lista de modelos de
+    `limpiar_historial`: tres archivos ya se olvidaron. Así que el aislamiento
+    lo pone el *runner* (`TEST_RUNNER`) para toda la suite y esto solo vigila
+    que siga puesto.
+    """
+
+    def test_media_root_no_es_el_de_la_instalacion(self):
+        real = Path(settings.BASE_DIR) / "media"
+        self.assertNotEqual(
+            Path(settings.MEDIA_ROOT).resolve(),
+            real.resolve(),
+            "La suite está apuntando al MEDIA_ROOT real: cualquier prueba que "
+            "suba un archivo deja basura en la instalación. Falta el TEST_RUNNER "
+            "que aísla MEDIA_ROOT (settings.TEST_RUNNER).",
+        )
+
+    def test_el_media_de_las_pruebas_existe_y_se_puede_escribir(self):
+        """Si el runner lo aísla, tiene que dejarlo usable: si no, las pruebas
+        que suben archivos fallarían por otra razón y se taparía el problema."""
+        raiz = Path(settings.MEDIA_ROOT)
+        self.assertTrue(raiz.is_dir(), f"{raiz} no existe")
+        sonda = raiz / "sonda_de_escritura.tmp"
+        try:
+            sonda.write_bytes(b"ok")
+            self.assertEqual(sonda.read_bytes(), b"ok")
+        finally:
+            sonda.unlink(missing_ok=True)
