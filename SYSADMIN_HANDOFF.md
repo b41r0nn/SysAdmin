@@ -1,6 +1,7 @@
 # SysAdmin · HANDOFF DOCUMENT
-> Documento actualizado: 2026-11-05 · v1.14 (módulo de Configuración + fix `limpiar_historial` media) · 1017 tests OK · **desplegado en producción el 2026-11-05 (`8a88b46`)**
-> Despliegue **completo, incluido el cron de §7c** y el parche `8a88b46` que descubre todos los modelos con `FileField` en `limpiar_historial` y falla cerrado ante errores de BD (más la restauración de los documentos y actas de `media/` desde el snapshot `b3f81371` de `restic`). Detalle en «MÓDULO DE CONFIGURACIÓN» → «Despliegue de v1.14».
+> Documento actualizado: 2026-11-10 · **v1.14.1** · 1022 tests OK · **desplegado en producción el 2026-11-10** (`0fe6f5f`)
+> v1.14 (módulo de Configuración) salió el 2026-11-05 con el cron de §7c y el parche `8a88b46`, que descubre todos los modelos con `FileField` en `limpiar_historial` y falla cerrado ante errores de BD, más la restauración de `media/` desde el snapshot `b3f81371` de `restic`.
+> **v1.14.1** (2026-11-10, dos rondas el mismo día: `ddbaa36` y `0fe6f5f`) cierra las dos secuelas de aquello: el barrido de `media` **informa en vez de borrar** —había 7 actas firmadas reales sin fila que las referenciara— y la suite deja de escribir en el `media` de la instalación donde corre. Detalle en «MÓDULO DE CONFIGURACIÓN» → «Auditoría del 2026-11-10».
 
 ---
 
@@ -1911,7 +1912,7 @@ Arreglado con un `TEST_RUNNER` (`backend/core/test_runner.py` + `TEST_RUNNER` en
 
 El problema de fondo: **«sin referencia» no significa «sin valor»**. Un acta firmada cuya fila se borró sigue siendo un documento legal. Así que `_limpiar_media_huerfana()` **ahora informa y no borra**: lista los huérfanos y termina con «no se borraron». Borrar exige `--borrar-media-huerfana` a mano, mirando antes la lista. Es la tercera vez que en este módulo se elige la misma asimetría: recuperar disco no compensa destruir lo irreemplazable.
 
-Con eso el `--sin-media` del cron **deja de ser necesario**: el barrido ya no borra, así que la bandera sobra. **Hay que quitarla al desplegar este cambio** (pide `sudo` en el host), y entonces la línea del host vuelve a coincidir con la que genera `deploy/instalar_cron_limpieza.sh`. Hoy divergen y la diferencia es invisible: una reinstalación del cron habría reactivado el borrado en silencio, que es justo lo que este cambio vuelve inofensivo.
+Con eso el `--sin-media` del cron dejó de ser necesario —el barrido ya no borra— y **se quitó al desplegar** (2026-11-10 09:56, con `RELOAD` confirmado en `journalctl -u cron`). La línea del host vuelve a coincidir con la que genera `deploy/instalar_cron_limpieza.sh`; antes divergían y la diferencia era invisible: una reinstalación del cron habría reactivado el borrado en silencio.
 
 **Hallazgo 3 — y lo encontró la propia verificación, ya desplegado v1.14.1.** Al correr la suite dentro del contenedor de producción (ahora que es inofensivo) salió **1 error que ni el local ni el CI pueden ver**: `mantenimiento/test_acta_firmada.py:87` leía `r.streaming_content`, y con `MEDIA_ACCEL_REDIRECT=True` —que es lo que vale en `production.py`— `media_protegido` devuelve un `HttpResponse` vacío con `X-Accel-Redirect`, porque el archivo lo sirve nginx. **Preexistente y solo de pruebas**: producción sirve ese archivo bien.
 
