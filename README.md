@@ -590,7 +590,7 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
-### 2026-11-10 — v1.14.1 · La limpieza de archivos ya no borra lo que no puede juzgar (pendiente de despliegue)
+### 2026-11-10 — v1.14.1 · La limpieza de archivos ya no borra lo que no puede juzgar (en producción desde el 2026-11-10)
 
 Secuela del incidente del 1-nov, en el que la limpieza semanal borró archivos que **sí** estaban en uso (arreglado el 5-nov) y se restauraron desde respaldo.
 
