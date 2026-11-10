@@ -1888,7 +1888,34 @@ Tres cosas que el despliegue dejó aprendidas y conviene no repetir:
   - **4 pruebas nuevas** en `core.tests.LimpiarHistorialCommandTests` (`test_no_borra_el_archivo_de_un_documento`, `test_no_borra_la_foto_de_un_empleado`, `test_la_limpieza_mira_todos_los_modelos_con_archivos`, `test_si_no_se_pueden_leer_las_referencias_no_borra_nada`). Total suite: **1017 pruebas OK** (6 omitidas en Windows; 42/42 de `core` verificadas dentro del contenedor de producción).
 - **Restauración de archivos en producción**:
   - Desde el snapshot de `restic` `b3f81371` (`2026-10-31 02:33`, anterior al barrido del 1-nov) se extrajo únicamente `/opt/sysadmin/app/backend/media` a `/tmp/media-restore`, se copiaron sin sobrescribir (`cp -rn`) los archivos a `/opt/sysadmin/app/backend/media/` y se eliminó `/tmp/media-restore`.
-  - Quedaron restaurados en disco los 5 documentos de septiembre/octubre y las 2 actas firmadas (`doc01769020260925155811.pdf` y `doc01835820261001165616.pdf`). Nota: al copiar `documentos/2026/09/` con `cp -rn` también entraron los archivos huérfanos de prueba de 8–9 bytes (`test_*.txt`, `manual_*.pdf`) con `mtime` del 2026-11-05; el cron los purgará al cumplir 30 días (o se pueden borrar con `rm`).
+  - Quedaron restaurados en disco los 5 documentos de septiembre/octubre y las 2 actas firmadas (`doc01769020260925155811.pdf` y `doc01835820261001165616.pdf`). Nota: al copiar `documentos/2026/09/` con `cp -rn` también entraron los archivos huérfanos de prueba de 8–9 bytes (`test_*.txt`, `manual_*.pdf`) con `mtime` del 2026-11-05; **esa frase decía que el cron los purgaría al cumplir 30 días y era falsa**: el cron llevaba `--sin-media` desde el 5-nov y no barría nada, y desde el 2026-11-10 el barrido además solo informa. Ver la auditoría de abajo.
+
+### Auditoría del 2026-11-10 — qué quedó mal de la semana anterior
+
+Revisión del trabajo del 5-nov contra los respaldos, el árbol desplegado y la base. **Integridad: correcta.** Lo que apareció fue una secuela del incidente y un defecto de las pruebas.
+
+| Qué se comparó | Resultado |
+| --- | --- |
+| Los 426 archivos que el despliegue instala, `master` vs host | **426/426 iguales** (md5), 0 faltantes |
+| Sobrantes en el host | 1: `backend/db.sqlite3`, inerte del 14-oct (no entra en la imagen, `.dockerignore` lo excluye; producción usa PostgreSQL) |
+| Esquema de la base vs `backups/2026-11-05-1650/db.dump` | **47 tablas y 448 columnas idénticas**, nada añadido ni perdido |
+| Filas vs ese respaldo | Ninguna tabla perdió filas salvo `django_session` (−4), explicado por el log del cron del 8-nov («Sesiones vencidas: 3») más expiración normal. El resto solo creció: auditoría +6, accesos +5, asignaciones/actas/movimientos +7 cada una |
+| Referencias de archivo vs disco | **48 de 48 presentes, 0 referencias rotas**: la restauración del 5-nov quedó completa |
+| Corrida del cron del 8-nov | Respetó el `--sin-media`: «Archivos huérfanos de media: no revisado». Sin pérdida nueva |
+
+**Hallazgo 1 — la suite escribía en el `media` de la instalación.** En `media` de producción había **94 archivos sin referenciar**: 87 son basura de las pruebas (**15 de 8 bytes** = `b"%PDF-1.4"` y **72 de 9 bytes** = `b"contenido"`, los literales de `documentos/tests.py:27` y `:58`), una copia por cada ejecución de la suite. `documentos/tests.py`, `mantenimiento/tests.py` y `mantenimiento/test_robustez.py` suben archivos reales sin redefinir `MEDIA_ROOT`. No es un detalle de desarrollo: la receta de verificación de §8b manda correr la suite **dentro del contenedor de producción**, así que el propio paso de verificación ensuciaba los datos que iba a verificar.
+
+Arreglado con un `TEST_RUNNER` (`backend/core/test_runner.py` + `TEST_RUNNER` en `settings/base.py`) que le da a toda la suite un `MEDIA_ROOT` temporal y lo borra al terminar, vigilado por `core.tests.AislamientoDeLaSuiteTests`. **No** se hizo con un `override_settings` por prueba: es la misma disciplina a mano que falló con la lista de modelos, y tres archivos ya se la habían olvidado.
+
+**Hallazgo 2 — los otros 7 no eran basura, y por eso el barrido cambió de comportamiento.** Los 7 restantes son **actas firmadas escaneadas reales** sin fila que las referencie: `Joan Sebastian Diaz.pdf`, `doc00054920260413141601.pdf` (2,9 MB), `doc15953020251023083935_004.pdf`, `doc16761720260106161238.pdf` y `doc16761820260106161403_001..003.pdf`. ~3,7 MB. Para el barrido son huérfanas por definición, y el plan de «dejar que el cron las purgue» las habría destruido en diciembre.
+
+El problema de fondo: **«sin referencia» no significa «sin valor»**. Un acta firmada cuya fila se borró sigue siendo un documento legal. Así que `_limpiar_media_huerfana()` **ahora informa y no borra**: lista los huérfanos y termina con «no se borraron». Borrar exige `--borrar-media-huerfana` a mano, mirando antes la lista. Es la tercera vez que en este módulo se elige la misma asimetría: recuperar disco no compensa destruir lo irreemplazable.
+
+Con eso el `--sin-media` del cron **deja de ser necesario**: el barrido ya no borra, así que la bandera sobra. **Hay que quitarla al desplegar este cambio** (pide `sudo` en el host), y entonces la línea del host vuelve a coincidir con la que genera `deploy/instalar_cron_limpieza.sh`. Hoy divergen y la diferencia es invisible: una reinstalación del cron habría reactivado el borrado en silencio, que es justo lo que este cambio vuelve inofensivo.
+
+**Pendiente, decisión del usuario**: borrar los 87 archivos de 8 y 9 bytes de `media/documentos/2026/09/` (pesan ~700 bytes entre todos, están probados como basura de pruebas). No se tocaron por iniciativa propia.
+
+**No se corrigió a propósito**: el commit `47a9135` tiene el mensaje en inglés, contra la convención; ya está pusheado y reescribir historia es peor que el problema. Se verificó que solo cambia el formato de las tablas del handoff: comparado sin las filas separadoras, el contenido es idéntico.
 
 ### El paso que un despliegue normal se salta
 

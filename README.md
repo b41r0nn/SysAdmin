@@ -590,6 +590,16 @@ BD: PostgreSQL 15 en contenedor
 
 ## 📅 Changelog
 
+### 2026-11-10 — v1.14.1 · La limpieza de archivos ya no borra lo que no puede juzgar (pendiente de despliegue)
+
+Secuela del incidente del 1-nov, en el que la limpieza semanal borró archivos que **sí** estaban en uso (arreglado el 5-nov) y se restauraron desde respaldo.
+
+- **El barrido de archivos de media informa, no borra.** Listaba como «huérfano» todo archivo sin una fila que lo referenciara y lo borraba a los 30 días. En producción eso incluía **7 actas firmadas escaneadas reales** cuya fila ya no existía: ~3,7 MB de documentos que se habrían destruido en diciembre. Ahora el cron semanal **dice cuáles son** y termina con «no se borraron»; borrarlos exige `--borrar-media-huerfana` a mano, mirando antes la lista. Un archivo sin referencia puede seguir siendo un documento legal.
+- **Las pruebas ya no escriben en el `media` de la instalación.** Varias subían archivos de verdad sin aislar `MEDIA_ROOT`, y como la verificación del despliegue manda correr la suite *dentro del contenedor de producción*, cada ejecución dejaba una copia: había **87 archivos basura** acumulados (de 8 y 9 bytes). Ahora el *runner* de pruebas le da a toda la suite un `MEDIA_ROOT` temporal.
+- **Auditoría de integridad** (detalle en `SYSADMIN_HANDOFF.md`): los 426 archivos del despliegue coinciden byte a byte con `master`, la base tiene el mismo esquema que el respaldo (47 tablas, 448 columnas), ninguna tabla perdió filas y las 48 referencias de archivo tienen su archivo en disco.
+
+**Pruebas**: 1021 OK (6 omitidas en Windows).
+
 ### 2026-11-05 — v1.14 · Módulo de Configuración (en producción desde el 2026-11-05)
 
 **Lo que antes era una constante en el código o una variable del `.env` ahora se cambia desde `/administracion/` y surte efecto en la petición siguiente, sin reiniciar el contenedor.**
