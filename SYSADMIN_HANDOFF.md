@@ -1913,6 +1913,14 @@ El problema de fondo: **«sin referencia» no significa «sin valor»**. Un acta
 
 Con eso el `--sin-media` del cron **deja de ser necesario**: el barrido ya no borra, así que la bandera sobra. **Hay que quitarla al desplegar este cambio** (pide `sudo` en el host), y entonces la línea del host vuelve a coincidir con la que genera `deploy/instalar_cron_limpieza.sh`. Hoy divergen y la diferencia es invisible: una reinstalación del cron habría reactivado el borrado en silencio, que es justo lo que este cambio vuelve inofensivo.
 
+**Hallazgo 3 — y lo encontró la propia verificación, ya desplegado v1.14.1.** Al correr la suite dentro del contenedor de producción (ahora que es inofensivo) salió **1 error que ni el local ni el CI pueden ver**: `mantenimiento/test_acta_firmada.py:87` leía `r.streaming_content`, y con `MEDIA_ACCEL_REDIRECT=True` —que es lo que vale en `production.py`— `media_protegido` devuelve un `HttpResponse` vacío con `X-Accel-Redirect`, porque el archivo lo sirve nginx. **Preexistente y solo de pruebas**: producción sirve ese archivo bien.
+
+Es **la segunda vez** que muerde el mismo mecanismo: el 5-nov fue `core.tests.MediaProtegidoTests` y se parcheó prueba por prueba; esta vez demostró que eso no escala. No se vio el 5-nov porque entonces la verificación corrió `administracion accounts core`, sin `mantenimiento`.
+
+Arreglado en el mismo sitio que el `MEDIA_ROOT`: el runner **también fija `MEDIA_ACCEL_REDIRECT = False`** para toda la suite, así que ninguna prueba puede volver a depender del valor del entorno. La que quiere el camino de nginx lo pide explícitamente (`test_x_accel_redirect_en_produccion`). El aislamiento vive en `_aislar_settings()` / `_restaurar_settings()`, separados del setup de Django para poder probarlos sin montar el entorno entero.
+
+**Lección para la receta de verificación**: correr la suite en el contenedor **con todas las etiquetas**, no solo las del módulo tocado. Dos defectos de esta clase aparecieron ahí y ninguno de los dos podía verse en Windows ni en el CI.
+
 **Pendiente, decisión del usuario**: borrar los 87 archivos de 8 y 9 bytes de `media/documentos/2026/09/` (pesan ~700 bytes entre todos, están probados como basura de pruebas). No se tocaron por iniciativa propia.
 
 **No se corrigió a propósito**: el commit `47a9135` tiene el mensaje en inglés, contra la convención; ya está pusheado y reescribir historia es peor que el problema. Se verificó que solo cambia el formato de las tablas del handoff: comparado sin las filas separadoras, el contenido es idéntico.
